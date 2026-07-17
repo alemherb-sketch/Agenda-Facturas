@@ -149,6 +149,8 @@ a { color: inherit; }
   box-shadow: var(--shadow);
   backdrop-filter: blur(8px);
   padding: 1rem;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .grid-stats {
