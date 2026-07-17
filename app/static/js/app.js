@@ -210,11 +210,68 @@
           </aside>
           <main class="content">${html}</main>
         </div>
-        <nav class="mobile-nav">${navButtons(true)}</nav>
+        <nav class="mobile-nav" aria-label="Navegación principal">
+          ${mobileNavHtml()}
+        </nav>
+        <div class="mobile-more" id="mobile-more" hidden>
+          <button type="button" class="mobile-more-backdrop" data-close-more aria-label="Cerrar"></button>
+          <div class="mobile-more-sheet" role="dialog" aria-label="Más opciones">
+            <div class="mobile-more-handle"></div>
+            <p class="mobile-more-title">Más</p>
+            ${mobileMoreHtml()}
+          </div>
+        </div>
       </div>`;
   }
 
+  function navIcon(name) {
+    const icons = {
+      home: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"/></svg>`,
+      docs: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm7 1.5V9h4.5L14 4.5ZM8 12h8v1.5H8V12Zm0 3.5h8V17H8v-1.5Z"/></svg>`,
+      plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5z"/></svg>`,
+      agenda: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h1.5V5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1.5V3.5H17V5h-1.5V3.5h-7V5H7V3.5Zm-1.5 6h13V19a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5V9.5Z"/></svg>`,
+      more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>`,
+      clients: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm6 1.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6ZM3.5 19.5c0-2.8 2.7-5 5.5-5s5.5 2.2 5.5 5V20H3.5v-.5Zm11.2-.5c0-1.5.6-2.8 1.6-3.7 1 .5 2.1.7 3.2.7 1.4 0 2.7-.4 3.8-1.1v4.1h-8.6V19Z"/></svg>`,
+      box: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.8 7.2 12 3l8.2 4.2v9.6L12 21l-8.2-4.2V7.2Zm8.2 1.1 6.2-3.2L12 4.4 5.8 7.6 12 8.3Zm-6.7.9v7.4L11 20v-8.2L5.3 9.2Zm13.4 0L13 11.8V20l5.7-2.9V9.2Z"/></svg>`,
+      bell: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.2 2.2 0 0 0 2.1-1.6H9.9A2.2 2.2 0 0 0 12 22Zm7-5.2V11a7 7 0 1 0-14 0v5.8L3 19v1h18v-1l-2-2.2Z"/></svg>`,
+    };
+    return icons[name] || "";
+  }
+
+  function mobileNavHtml() {
+    const moreActive = ["clientes", "productos", "recordatorios"].includes(state.route);
+    const items = [
+      ["dashboard", "home", "Inicio"],
+      ["comprobantes", "docs", "Docs"],
+      ["nuevo", "plus", "Nuevo", true],
+      ["agenda", "agenda", "Agenda"],
+    ];
+    const buttons = items
+      .map(([route, ico, label, primary]) => {
+        const active = state.route === route ? "active" : "";
+        const cls = primary ? `nav-primary ${active}` : active;
+        return `<button type="button" data-route="${route}" class="${cls}"><span class="mico">${navIcon(ico)}</span><span class="mlabel">${label}</span></button>`;
+      })
+      .join("");
+    return `${buttons}<button type="button" id="btn-mobile-more" class="${moreActive ? "active" : ""}"><span class="mico">${navIcon("more")}</span><span class="mlabel">Más</span></button>`;
+  }
+
+  function mobileMoreHtml() {
+    const items = [
+      ["clientes", "clients", "Clientes"],
+      ["productos", "box", "Productos"],
+      ["recordatorios", "bell", "Avisos"],
+    ];
+    return items
+      .map(
+        ([route, ico, label]) =>
+          `<button type="button" data-route="${route}" class="mobile-more-item ${state.route === route ? "active" : ""}"><span class="mico">${navIcon(ico)}</span><span>${label}</span></button>`
+      )
+      .join("");
+  }
+
   function navButtons(mobile = false) {
+    if (mobile) return mobileNavHtml();
     const items = [
       ["dashboard", "📊", "Dashboard"],
       ["comprobantes", "🧾", "Comprobantes"],
@@ -225,20 +282,29 @@
       ["recordatorios", "⏰", "Avisos"],
     ];
     return items
-      .map(([route, ico, label]) => {
-        if (mobile) {
-          return `<button data-route="${route}" class="${state.route === route ? "active" : ""}"><span class="mico">${ico}</span>${label}</button>`;
-        }
-        return `<button class="nav-btn ${state.route === route ? "active" : ""}" data-route="${route}">
+      .map(
+        ([route, ico, label]) => `<button class="nav-btn ${state.route === route ? "active" : ""}" data-route="${route}">
           <span class="nav-ico">${ico}</span>${label}
-        </button>`;
-      })
+        </button>`
+      )
       .join("");
   }
 
   function bindShell() {
     $$("[data-route]").forEach((btn) =>
-      btn.addEventListener("click", () => navigate(btn.dataset.route))
+      btn.addEventListener("click", () => {
+        $("#mobile-more")?.setAttribute("hidden", "");
+        navigate(btn.dataset.route);
+      })
+    );
+    $("#btn-mobile-more")?.addEventListener("click", () => {
+      const panel = $("#mobile-more");
+      if (!panel) return;
+      if (panel.hasAttribute("hidden")) panel.removeAttribute("hidden");
+      else panel.setAttribute("hidden", "");
+    });
+    $$("[data-close-more]").forEach((el) =>
+      el.addEventListener("click", () => $("#mobile-more")?.setAttribute("hidden", ""))
     );
     $("#btn-logout")?.addEventListener("click", () => {
       API.clearSession();
