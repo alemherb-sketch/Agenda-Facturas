@@ -954,12 +954,23 @@
         </div>
       </div>
       <div class="panel" style="margin-bottom:1rem">
-        <h3 style="margin:0 0 .4rem;font-family:var(--font-display)">Cómo funciona</h3>
+        <h3 style="margin:0 0 .4rem;font-family:var(--font-display)">Cómo deberían verse</h3>
+        <p style="margin:0;color:var(--muted);font-size:.92rem;line-height:1.5">
+          <strong>Celular:</strong> el aviso debe vibrar y aparecer como banner (no solo en el historial).
+          Si llega en silencio: Ajustes → Apps → Chrome (o Agenda Facturas) → Notificaciones →
+          activa <em>Alertas / Sonido</em> para este sitio (no «Silencioso»).
+          Instala la PWA (menú Chrome → «Instalar app» / «Agregar a inicio»).<br><br>
+          <strong>PC:</strong> hay que pulsar <em>Activar avisos</em> también en Chrome de la PC
+          (cada dispositivo tiene su propia suscripción). Desactiva «No molestar» / Focus Assist de Windows.
+          En Chrome: candado de la URL → Notificaciones → Permitir.
+        </p>
+      </div>
+      <div class="panel" style="margin-bottom:1rem">
+        <h3 style="margin:0 0 .4rem;font-family:var(--font-display)">Activación</h3>
         <p style="margin:0;color:var(--muted);font-size:.92rem;line-height:1.45">
           1) Pulsa <strong>Activar avisos en segundo plano</strong> y acepta el permiso.<br>
-          2) Verás un aviso de prueba (puedes minimizar o cambiar de pestaña).<br>
-          3) Los recordatorios de agenda y pagos se enviarán aunque no estés en la app.<br>
-          En el celular: agrega la app a la pantalla de inicio (PWA).
+          2) Debe decir <strong>Push OK</strong> y llegar una prueba con sonido/vibración.<br>
+          3) Repite este paso en cada celular y en la PC donde quieras recibir avisos.
         </p>
       </div>
       <div class="grid-stats">
@@ -1646,6 +1657,56 @@
     }
   }
 
+  function playAlertBeep() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const now = ctx.currentTime;
+      [0, 0.18, 0.36].forEach((offset, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = i === 2 ? 880 : 660;
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.22, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.16);
+      });
+      setTimeout(() => ctx.close().catch(() => undefined), 800);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function bindPushMessages() {
+    if (!("serviceWorker" in navigator) || bindPushMessages._done) return;
+    bindPushMessages._done = true;
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      const msg = event.data;
+      if (!msg || msg.type !== "AF_PUSH") return;
+      playAlertBeep();
+      toast(`${msg.title || "Aviso"}: ${msg.body || ""}`);
+      if (document.visibilityState === "visible" && Notification.permission === "granted") {
+        try {
+          new Notification(msg.title || "Agenda Facturas", {
+            body: msg.body || "",
+            icon: "/static/icons/icon-192.png",
+            requireInteraction: true,
+            silent: false,
+            tag: `af-local-${Date.now()}`,
+          });
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      pollNotificaciones(false);
+    });
+  }
+
   async function bootApp() {
     state.meta = await API.meta();
     try {
@@ -1653,9 +1714,9 @@
     } catch (_) {
       state.notifs = [];
     }
+    bindPushMessages();
     startNotifPolling();
     await renderApp();
-    // Si ya dio permiso antes, re-registrar push en segundo plano
     ensureBackgroundPush();
   }
 
@@ -1688,6 +1749,7 @@
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
+    bindPushMessages();
     window.addEventListener("hashchange", () => renderApp());
     window.addEventListener("resize", () => {
       if (state.user && state.route === "dashboard") renderApp();

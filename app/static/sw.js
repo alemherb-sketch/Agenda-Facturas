@@ -1,9 +1,9 @@
-const CACHE = "agenda-facturas-v11";
+const CACHE = "agenda-facturas-v12";
 const ASSETS = [
   "/",
-  "/static/css/app.css?v=11",
-  "/static/js/api.js?v=11",
-  "/static/js/app.js?v=11",
+  "/static/css/app.css?v=12",
+  "/static/js/api.js?v=12",
+  "/static/js/app.js?v=12",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
   "/manifest.webmanifest",
@@ -87,21 +87,42 @@ self.addEventListener("push", (event) => {
     }
   }
 
+  const tag = `af-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const title = data.title || "Agenda Facturas";
+  const body = data.body || "Tienes un recordatorio";
+  const url = data.url || "/#/recordatorios";
+
   event.waitUntil(
-    self.registration.showNotification(data.title || "Agenda Facturas", {
-      body: data.body || "Tienes un recordatorio",
-      icon: "/static/icons/icon-192.png",
-      badge: "/static/icons/icon-192.png",
-      tag: data.tag || `af-${Date.now()}`,
-      renotify: true,
-      requireInteraction: true,
-      vibrate: [200, 100, 200],
-      data: { url: data.url || "/#/recordatorios" },
-      actions: [
-        { action: "open", title: "Abrir" },
-        { action: "dismiss", title: "Cerrar" },
-      ],
-    })
+    (async () => {
+      // Avisa a pestañas abiertas (PC/móvil) para sonido + toast visible
+      const list = await clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of list) {
+        client.postMessage({
+          type: "AF_PUSH",
+          title,
+          body,
+          url,
+        });
+      }
+
+      await self.registration.showNotification(title, {
+        body,
+        icon: "/static/icons/icon-192.png",
+        badge: "/static/icons/icon-192.png",
+        image: undefined,
+        tag,
+        renotify: true,
+        silent: false,
+        requireInteraction: true,
+        vibrate: [300, 120, 300, 120, 500],
+        timestamp: Date.now(),
+        data: { url },
+        actions: [
+          { action: "open", title: "Abrir" },
+          { action: "dismiss", title: "Cerrar" },
+        ],
+      });
+    })()
   );
 });
 
