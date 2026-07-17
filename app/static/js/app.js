@@ -510,7 +510,19 @@
                   <td>${escapeHtml(d.cliente_nombre)}<br><span style="color:var(--muted);font-size:.8rem">${d.cliente_documento || ""}</span></td>
                   <td>${fmtDate(d.fecha_emision)}</td>
                   <td>${money(d.total)}</td>
-                  <td><span class="badge ${d.estado}">${estadoLabel(d.estado)}</span></td>
+                  <td>
+                    <label class="estado-quick-wrap" title="Cambiar estado">
+                      <span class="sr-only">Estado</span>
+                      <select class="estado-quick badge ${d.estado}" data-estado-id="${d.id}" aria-label="Cambiar estado">
+                        ${(state.meta?.estados || [])
+                          .map(
+                            (e) =>
+                              `<option value="${e.value}" ${d.estado === e.value ? "selected" : ""}>${e.label}</option>`
+                          )
+                          .join("")}
+                      </select>
+                    </label>
+                  </td>
                   <td class="actions">
                     <button type="button" class="btn btn-secondary btn-sm" data-edit="${d.id}">Editar</button>
                     <button type="button" class="btn btn-secondary btn-sm" data-pdf="${d.id}">PDF</button>
@@ -1176,6 +1188,27 @@
       $$("[data-wa]").forEach((b) =>
         b.addEventListener("click", () => openShareModal(b.dataset.wa, "wa"))
       );
+      $$("[data-estado-id]").forEach((sel) => {
+        sel.addEventListener("change", async () => {
+          const id = sel.getAttribute("data-estado-id");
+          const estado = sel.value;
+          const prev = [...sel.classList].find((c) =>
+            ["emitido", "pagado", "no_pagado", "anulado"].includes(c)
+          );
+          sel.disabled = true;
+          try {
+            await API.cambiarEstado(id, estado);
+            sel.classList.remove("emitido", "pagado", "no_pagado", "anulado");
+            sel.classList.add(estado);
+            toast(`Estado: ${estadoLabel(estado)}`);
+          } catch (ex) {
+            if (prev) sel.value = prev;
+            toast(ex.message || "No se pudo cambiar el estado");
+          } finally {
+            sel.disabled = false;
+          }
+        });
+      });
     }
 
     if (state.route === "nuevo") {

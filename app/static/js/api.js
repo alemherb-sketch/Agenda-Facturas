@@ -78,6 +78,11 @@ const API = {
   updateComprobante(id, body) {
     return this.request(`/api/comprobantes/${id}`, { method: "PUT", body: JSON.stringify(body) });
   },
+  cambiarEstado(id, estado) {
+    return this.request(`/api/comprobantes/${id}/estado?estado=${encodeURIComponent(estado)}`, {
+      method: "PATCH",
+    });
+  },
   deleteComprobante(id) {
     return this.request(`/api/comprobantes/${id}`, { method: "DELETE" });
   },

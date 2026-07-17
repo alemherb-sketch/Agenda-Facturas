@@ -149,6 +149,27 @@ def actualizar(
     return _get_owned(db, user, doc.id)
 
 
+@router.patch("/{comprobante_id}/estado", response_model=ComprobanteOut)
+def cambiar_estado(
+    comprobante_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    estado: str = Query(..., description="emitido|pagado|no_pagado|anulado"),
+):
+    """Cambio rápido de estado desde la lista de documentos."""
+    from app.models import EstadoComprobante
+
+    try:
+        nuevo = EstadoComprobante(estado)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Estado no válido") from exc
+
+    doc = _get_owned(db, user, comprobante_id)
+    doc.estado = nuevo
+    db.commit()
+    return _get_owned(db, user, doc.id)
+
+
 @router.delete("/{comprobante_id}")
 def eliminar(
     comprobante_id: int,
