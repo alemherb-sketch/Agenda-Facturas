@@ -584,13 +584,13 @@
           ${i === 0 ? "<label>Descripción</label>" : ""}
           <input data-k="descripcion" list="lista-productos" required value="${escapeHtml(it.descripcion || "")}" placeholder="Producto o servicio" />
         </div>
-        <div class="field">
+        <div class="field item-qty">
           ${i === 0 ? "<label>Cantidad</label>" : ""}
-          <input data-k="cantidad" type="number" min="0.001" step="0.001" required value="${it.cantidad ?? 1}" />
+          <input data-k="cantidad" type="number" min="0.001" step="0.001" inputmode="decimal" required value="${it.cantidad ?? 1}" />
         </div>
-        <div class="field">
+        <div class="field item-price">
           ${i === 0 ? "<label>P. unitario</label>" : ""}
-          <input data-k="precio_unitario" type="number" min="0" step="0.01" required value="${it.precio_unitario ?? 0}" />
+          <input data-k="precio_unitario" type="number" min="0" step="0.01" inputmode="decimal" required value="${it.precio_unitario ?? 0}" />
         </div>
         <button type="button" class="btn btn-danger btn-sm btn-remove-item" title="Quitar">✕</button>
       </div>`;

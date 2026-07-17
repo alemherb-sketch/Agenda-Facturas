@@ -1,9 +1,9 @@
-const CACHE = "agenda-facturas-v4";
+const CACHE = "agenda-facturas-v7";
 const ASSETS = [
   "/",
-  "/static/css/app.css",
-  "/static/js/api.js?v=4",
-  "/static/js/app.js?v=4",
+  "/static/css/app.css?v=7",
+  "/static/js/api.js?v=7",
+  "/static/js/app.js?v=7",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
   "/manifest.webmanifest",
@@ -27,8 +27,30 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   if (request.url.includes("/api/")) return;
-  // No cachear el service worker ni el HTML principal de forma agresiva
   if (request.url.includes("/sw.js")) return;
+
+  const url = new URL(request.url);
+  const isAppShell =
+    url.pathname === "/" ||
+    url.pathname.endsWith(".css") ||
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".html");
+
+  // CSS/JS/HTML: red primero para no quedar con estilos viejos en el móvil
+  if (isAppShell) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200 && request.url.startsWith(self.location.origin)) {
+            const clone = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then((cached) => {
