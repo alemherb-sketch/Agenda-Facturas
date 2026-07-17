@@ -21,8 +21,8 @@ class Settings(BaseSettings):
 
     vapid_private_key: str = ""
     vapid_public_key: str = ""
-    vapid_claim_email: str = "mailto:admin@ejemplo.com"
-
+    vapid_claim_email: str = "mailto:avisos@agenda-facturas.pe"
+    cron_secret: str = ""
     sunat_api_token: str = ""
 
     @property

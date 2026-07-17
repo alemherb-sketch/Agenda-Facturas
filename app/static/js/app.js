@@ -1411,7 +1411,7 @@
   async function enablePush() {
     if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
       throw new Error(
-        "Para avisos fuera de la página necesitas HTTPS o usar localhost. En el celular, instala la PWA desde una URL segura."
+        "Para avisos fuera de la página necesitas HTTPS. Abre la app desde Railway e instálala como PWA."
       );
     }
     if (!("Notification" in window)) {
@@ -1448,11 +1448,12 @@
     }
     await API.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
     localStorage.setItem("af_push_ok", "1");
+    localStorage.setItem("af_vapid_pub", publicKey);
 
     try {
       const prueba = await API.probarPush();
       if (prueba.ok && prueba.enviados > 0) {
-        toast("Push OK. Cierra esta pestaña: el aviso debe aparecer igual.");
+        toast("Push OK. Cierra la app: el aviso de prueba debe llegar igual.");
       } else {
         toast(prueba.mensaje || "No se envió el push. Reintenta activar avisos.");
         localStorage.removeItem("af_push_ok");
@@ -1514,26 +1515,30 @@
 
   async function ensureBackgroundPush() {
     if (!API.getToken()) return;
-    if (Notification.permission !== "granted") return;
-    if (localStorage.getItem("af_push_ok") === "1") {
-      // Renovar suscripción silenciosa si el SW está listo
-      try {
-        const { publicKey } = await API.vapidKey();
-        if (!publicKey || !("serviceWorker" in navigator)) return;
-        const reg = await navigator.serviceWorker.ready;
-        let sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-          sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicKey),
-          });
-        }
-        const json = sub.toJSON();
-        await API.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
-      } catch (_) {
-        /* ignore */
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    try {
+      const { publicKey } = await API.vapidKey();
+      if (!publicKey) return;
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+      const storedKey = localStorage.getItem("af_vapid_pub");
+      let sub = await reg.pushManager.getSubscription();
+      const keyChanged = storedKey && storedKey !== publicKey;
+      if (!sub || keyChanged) {
+        if (sub) await sub.unsubscribe().catch(() => undefined);
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
       }
-      return;
+      const json = sub.toJSON();
+      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+      await API.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
+      localStorage.setItem("af_push_ok", "1");
+      localStorage.setItem("af_vapid_pub", publicKey);
+    } catch (_) {
+      localStorage.removeItem("af_push_ok");
     }
   }
 

@@ -195,3 +195,13 @@ class Notificacion(Base):
     leida: Mapped[bool] = mapped_column(Boolean, default=False)
     enlace: Mapped[str | None] = mapped_column(String(250))
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SistemaConfig(Base):
+    """Claves y ajustes persistentes (sobreviven redeploys en Railway)."""
+
+    __tablename__ = "sistema_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    clave: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
+    valor: Mapped[str] = mapped_column(Text, nullable=False)

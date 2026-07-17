@@ -43,7 +43,17 @@ Abre http://localhost:8000
 uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-## Cuenta demo local
+## Avisos con la app cerrada (Web Push)
 
-- Email: `demo@agenda.pe`
-- Clave: `demo1234`
+1. En el celular abre la URL HTTPS de Railway e **instala la PWA**.
+2. Entra a **Más → Avisos** (o el botón de notificaciones) y pulsa **Activar avisos en segundo plano**.
+3. Acepta el permiso. Debe llegar una **prueba** aunque cierres la app.
+4. Las claves VAPID se guardan en Postgres (no se pierden al redesplegar).
+
+Para que los recordatorios se disparen aunque Railway esté dormido, configura un cron externo cada 1–5 min:
+
+```
+GET https://tu-app.up.railway.app/api/cron/recordatorios?secret=TU_CRON_SECRET
+```
+
+Variable de entorno opcional: `CRON_SECRET`.

@@ -10,11 +10,15 @@ from app.services.vapid_keys import ensure_vapid_keys
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-_VAPID_PRIVATE, _VAPID_PUBLIC = ensure_vapid_keys(settings)
+
+
+def _keys() -> tuple[str, str]:
+    return ensure_vapid_keys(settings)
 
 
 def get_vapid_public_key() -> str:
-    return _VAPID_PUBLIC or ""
+    _, public = _keys()
+    return public or ""
 
 
 def guardar_suscripcion(db: Session, usuario_id: int, endpoint: str, p256dh: str, auth: str) -> PushSubscription:
@@ -67,7 +71,8 @@ def crear_notificacion(
 
 
 def enviar_push(db: Session, usuario_id: int, titulo: str, mensaje: str, url: str = "/") -> int:
-    if not _VAPID_PRIVATE or not _VAPID_PUBLIC:
+    private_key, public_key = _keys()
+    if not private_key or not public_key:
         logger.warning("VAPID no disponible; no se puede enviar push en segundo plano")
         return 0
 
@@ -95,7 +100,7 @@ def enviar_push(db: Session, usuario_id: int, titulo: str, mensaje: str, url: st
                     "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
                 },
                 data=payload,
-                vapid_private_key=_VAPID_PRIVATE,
+                vapid_private_key=private_key,
                 vapid_claims=claims,
                 ttl=86400,
                 timeout=15,
@@ -124,5 +129,5 @@ def notificar_usuario(
 ) -> Notificacion:
     nota = crear_notificacion(db, usuario_id, titulo, mensaje, tipo, enlace)
     enviados = enviar_push(db, usuario_id, titulo, mensaje, enlace or "/")
-    logger.info("Notificación id=%s push_enviados=%s/%s", nota.id, enviados, "subs")
+    logger.info("Notificación id=%s push_enviados=%s", nota.id, enviados)
     return nota
