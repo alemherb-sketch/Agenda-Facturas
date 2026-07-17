@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.database import Base, engine, ensure_schema
 from app.routers import agenda, auth_router, clientes, comprobantes, consulta, dashboard, notificaciones, productos
 from app.services.reminders import procesar_recordatorios
+from app.services.seed import ensure_demo_user
 
 settings = get_settings()
 BASE_DIR = Path(__file__).resolve().parent
@@ -17,6 +18,7 @@ STATIC_DIR = BASE_DIR / "static"
 
 Base.metadata.create_all(bind=engine)
 ensure_schema()
+ensure_demo_user()
 
 scheduler = BackgroundScheduler()
 

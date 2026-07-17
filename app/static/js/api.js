@@ -30,7 +30,8 @@ const API = {
     if (token) headers.Authorization = `Bearer ${token}`;
 
     const res = await fetch(path, { ...options, headers });
-    if (res.status === 401) {
+    const isAuthEndpoint = path.startsWith("/api/auth/login") || path.startsWith("/api/auth/registro");
+    if (res.status === 401 && !isAuthEndpoint) {
       this.clearSession();
       throw new Error("Sesión expirada. Inicie sesión nuevamente.");
     }
