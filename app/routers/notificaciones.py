@@ -73,6 +73,7 @@ def push_subscribe(
         payload.endpoint,
         payload.keys.get("p256dh", ""),
         payload.keys.get("auth", ""),
+        reemplazar_todas=payload.reemplazar_todas,
     )
     return {"ok": True, "mensaje": "Dispositivo registrado para avisos en segundo plano"}
 

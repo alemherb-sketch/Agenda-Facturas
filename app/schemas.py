@@ -148,6 +148,7 @@ class AgendaOut(BaseModel):
 class PushSubscriptionIn(BaseModel):
     endpoint: str
     keys: dict[str, str]
+    reemplazar_todas: bool = True
 
 
 class NotificacionOut(BaseModel):

@@ -1458,6 +1458,8 @@
     if (permission !== "granted") throw new Error("Permiso de notificaciones denegado");
 
     localStorage.setItem("af_notif_local", "1");
+    localStorage.removeItem("af_push_ok");
+    localStorage.removeItem("af_vapid_pub");
 
     const { publicKey } = await API.vapidKey();
     if (!publicKey) {
@@ -1468,6 +1470,7 @@
     await navigator.serviceWorker.ready;
     if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
 
+    // Forzar suscripción nueva con la clave pública actual (evita 403 VAPID)
     const existing = await reg.pushManager.getSubscription();
     if (existing) await existing.unsubscribe().catch(() => undefined);
 
@@ -1479,14 +1482,18 @@
     if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
       throw new Error("No se pudo crear la suscripción push");
     }
-    await API.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
+    await API.pushSubscribe({
+      endpoint: json.endpoint,
+      keys: json.keys,
+      reemplazar_todas: true,
+    });
     localStorage.setItem("af_push_ok", "1");
     localStorage.setItem("af_vapid_pub", publicKey);
 
     try {
       const prueba = await API.probarPush();
       if (prueba.ok && prueba.enviados > 0) {
-        toast("Push OK. Cierra la app: el aviso de prueba debe llegar igual.");
+        toast("Push OK. Cierra la app por completo: debes ver la prueba.");
       } else {
         toast(prueba.mensaje || "No se envió el push. Reintenta activar avisos.");
         localStorage.removeItem("af_push_ok");
@@ -1557,17 +1564,28 @@
       await navigator.serviceWorker.ready;
       const storedKey = localStorage.getItem("af_vapid_pub");
       let sub = await reg.pushManager.getSubscription();
-      const keyChanged = storedKey && storedKey !== publicKey;
+      const keyChanged = !storedKey || storedKey !== publicKey;
       if (!sub || keyChanged) {
         if (sub) await sub.unsubscribe().catch(() => undefined);
         sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(publicKey),
         });
+        const json = sub.toJSON();
+        if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+        await API.pushSubscribe({
+          endpoint: json.endpoint,
+          keys: json.keys,
+          reemplazar_todas: true,
+        });
+      } else {
+        const json = sub.toJSON();
+        await API.pushSubscribe({
+          endpoint: json.endpoint,
+          keys: json.keys,
+          reemplazar_todas: false,
+        });
       }
-      const json = sub.toJSON();
-      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
-      await API.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
       localStorage.setItem("af_push_ok", "1");
       localStorage.setItem("af_vapid_pub", publicKey);
     } catch (_) {

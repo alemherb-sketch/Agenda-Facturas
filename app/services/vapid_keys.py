@@ -1,32 +1,35 @@
 """Genera y carga claves VAPID para notificaciones push.
 
-En Railway el disco es efímero: las claves se persisten en Postgres
-para que las suscripciones del celular sigan válidas tras cada deploy.
+Siempre deriva la clave pública desde la privada (PEM) para evitar el 403:
+"VAPID credentials do not correspond to the credentials used to create the subscriptions".
 """
 
 from __future__ import annotations
 
 import base64
-import json
 import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-VAPID_FILE = DATA_DIR / "vapid.json"
 VAPID_PRIVATE_PEM = DATA_DIR / "vapid_private.pem"
 
 KEY_PRIVATE = "vapid_private_pem"
-KEY_PUBLIC = "vapid_public_key"
 
 
 def _public_key_to_urlsafe(public_key) -> str:
-    """Convierte EC public key a formato applicationServerKey (base64url)."""
     numbers = public_key.public_numbers()
     x = numbers.x.to_bytes(32, "big")
     y = numbers.y.to_bytes(32, "big")
     raw = b"\x04" + x + y
     return base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
+
+
+def _public_from_pem(private_pem: str) -> str:
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+    key = load_pem_private_key(private_pem.encode("utf-8"), password=None)
+    return _public_key_to_urlsafe(key.public_key())
 
 
 def _materialize_pem(private_pem: str) -> str:
@@ -70,7 +73,22 @@ def _db_set(clave: str, valor: str) -> None:
         logger.exception("No se pudo guardar %s en DB", clave)
 
 
-def _generate_pair() -> tuple[str, str]:
+def _db_delete(clave: str) -> None:
+    try:
+        from app.database import SessionLocal
+        from app.models import SistemaConfig
+
+        db = SessionLocal()
+        try:
+            db.query(SistemaConfig).filter(SistemaConfig.clave == clave).delete()
+            db.commit()
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001
+        logger.exception("No se pudo borrar %s de DB", clave)
+
+
+def _generate_private_pem() -> str:
     try:
         from py_vapid import Vapid
     except ImportError:
@@ -81,51 +99,68 @@ def _generate_pair() -> tuple[str, str]:
     private_pem = vapid.private_pem()
     if isinstance(private_pem, bytes):
         private_pem = private_pem.decode("utf-8")
-    public_key = _public_key_to_urlsafe(vapid.public_key)
-    return private_pem, public_key
+    return private_pem
+
+
+def _wipe_all_subscriptions() -> int:
+    """Tras rotar VAPID, las suscripciones viejas quedan inválidas."""
+    try:
+        from app.database import SessionLocal
+        from app.models import PushSubscription
+
+        db = SessionLocal()
+        try:
+            n = db.query(PushSubscription).delete()
+            db.commit()
+            return n or 0
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001
+        logger.exception("No se pudieron limpiar suscripciones push")
+        return 0
 
 
 def _load_or_create_keys(settings) -> tuple[str, str]:
-    """Devuelve (ruta_pem_privada, public_urlsafe)."""
+    """Devuelve (ruta_pem_privada, public_urlsafe derivada)."""
     env_private = (settings.vapid_private_key or "").strip()
-    env_public = (settings.vapid_public_key or "").strip()
-    if env_private and env_public:
+    if env_private:
         if env_private.startswith("-----BEGIN"):
-            return _materialize_pem(env_private), env_public
-        return env_private, env_public
+            path = _materialize_pem(env_private)
+            public = _public_from_pem(env_private)
+            return path, public
+        pem_text = Path(env_private).read_text(encoding="utf-8")
+        public = _public_from_pem(pem_text)
+        return env_private, public
 
     db_private = _db_get(KEY_PRIVATE)
-    db_public = _db_get(KEY_PUBLIC)
-    if db_private and db_public and db_private.startswith("-----BEGIN"):
-        logger.info("VAPID cargadas desde base de datos")
-        return _materialize_pem(db_private), db_public
+    if db_private and db_private.startswith("-----BEGIN"):
+        path = _materialize_pem(db_private)
+        public = _public_from_pem(db_private)
+        # La pública guardada aparte causaba 403; limpiamos suscripciones una vez
+        if _db_get("vapid_public_key") is not None or _db_get("vapid_fix_v2") != "1":
+            wiped = _wipe_all_subscriptions()
+            _db_delete("vapid_public_key")
+            _db_set("vapid_fix_v2", "1")
+            logger.warning("Suscripciones push limpiadas por corrección VAPID (%s)", wiped)
+        logger.info("VAPID cargada desde Postgres (pública derivada del PEM)")
+        return path, public
 
-    if VAPID_PRIVATE_PEM.exists() and VAPID_FILE.exists():
-        data = json.loads(VAPID_FILE.read_text(encoding="utf-8"))
-        public = data.get("public_key", "")
+    if VAPID_PRIVATE_PEM.exists():
         private = VAPID_PRIVATE_PEM.read_text(encoding="utf-8")
-        if public and private.startswith("-----BEGIN"):
+        if private.startswith("-----BEGIN"):
             _db_set(KEY_PRIVATE, private)
-            _db_set(KEY_PUBLIC, public)
+            public = _public_from_pem(private)
+            _db_delete("vapid_public_key")
             return str(VAPID_PRIVATE_PEM), public
 
-    if VAPID_FILE.exists():
-        data = json.loads(VAPID_FILE.read_text(encoding="utf-8"))
-        private = data.get("private_key", "")
-        public = data.get("public_key", "")
-        if private.startswith("-----BEGIN") and public:
-            path = _materialize_pem(private)
-            _db_set(KEY_PRIVATE, private)
-            _db_set(KEY_PUBLIC, public)
-            return path, public
-
-    private_pem, public_key = _generate_pair()
+    private_pem = _generate_private_pem()
     path = _materialize_pem(private_pem)
-    VAPID_FILE.write_text(json.dumps({"public_key": public_key}, indent=2), encoding="utf-8")
     _db_set(KEY_PRIVATE, private_pem)
-    _db_set(KEY_PUBLIC, public_key)
-    logger.info("Claves VAPID generadas y persistidas en base de datos")
-    return path, public_key
+    _db_delete("vapid_public_key")
+    wiped = _wipe_all_subscriptions()
+    public = _public_from_pem(private_pem)
+    logger.info("VAPID nueva generada; suscripciones antiguas borradas=%s", wiped)
+    return path, public
 
 
 _cached: tuple[str, str] | None = None
@@ -135,6 +170,20 @@ def ensure_vapid_keys(settings) -> tuple[str, str]:
     global _cached
     if _cached is None:
         _cached = _load_or_create_keys(settings)
+    return _cached
+
+
+def force_rotate_vapid(settings) -> tuple[str, str]:
+    """Fuerza nuevas claves y limpia suscripciones (uso administrativo)."""
+    global _cached
+    private_pem = _generate_private_pem()
+    path = _materialize_pem(private_pem)
+    _db_set(KEY_PRIVATE, private_pem)
+    _db_delete("vapid_public_key")
+    wiped = _wipe_all_subscriptions()
+    public = _public_from_pem(private_pem)
+    _cached = (path, public)
+    logger.info("VAPID rotada manualmente; suscripciones borradas=%s", wiped)
     return _cached
 
 

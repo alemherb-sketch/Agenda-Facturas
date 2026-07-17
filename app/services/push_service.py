@@ -21,7 +21,28 @@ def get_vapid_public_key() -> str:
     return public or ""
 
 
-def guardar_suscripcion(db: Session, usuario_id: int, endpoint: str, p256dh: str, auth: str) -> PushSubscription:
+def borrar_suscripciones_usuario(db: Session, usuario_id: int) -> int:
+    n = (
+        db.query(PushSubscription)
+        .filter(PushSubscription.usuario_id == usuario_id)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return n or 0
+
+
+def guardar_suscripcion(
+    db: Session,
+    usuario_id: int,
+    endpoint: str,
+    p256dh: str,
+    auth: str,
+    *,
+    reemplazar_todas: bool = False,
+) -> PushSubscription:
+    if reemplazar_todas:
+        borrar_suscripciones_usuario(db, usuario_id)
+
     existing = db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).first()
     if existing:
         existing.usuario_id = usuario_id
@@ -31,12 +52,12 @@ def guardar_suscripcion(db: Session, usuario_id: int, endpoint: str, p256dh: str
         db.refresh(existing)
         return existing
 
-    # Mantener solo las 3 suscripciones más recientes por usuario
+    # Mantener solo las 2 suscripciones más recientes por usuario
     viejas = (
         db.query(PushSubscription)
         .filter(PushSubscription.usuario_id == usuario_id)
         .order_by(PushSubscription.id.desc())
-        .offset(2)
+        .offset(1)
         .all()
     )
     for antigua in viejas:
@@ -88,9 +109,10 @@ def enviar_push(db: Session, usuario_id: int, titulo: str, mensaje: str, url: st
             "body": mensaje,
             "url": url or "/#/recordatorios",
             "tag": f"af-{usuario_id}-{titulo[:20]}",
-        }
+        },
+        ensure_ascii=False,
     )
-    claims = {"sub": settings.vapid_claim_email or "mailto:admin@agenda-facturas.local"}
+    claims = {"sub": settings.vapid_claim_email or "mailto:avisos@agenda-facturas.pe"}
 
     for sub in list(subs):
         try:
@@ -106,11 +128,22 @@ def enviar_push(db: Session, usuario_id: int, titulo: str, mensaje: str, url: st
                 timeout=15,
             )
             enviados += 1
-            logger.info("Push OK usuario=%s", usuario_id)
+            logger.info("Push OK usuario=%s endpoint=%s...", usuario_id, sub.endpoint[:48])
         except WebPushException as exc:
             status = exc.response.status_code if exc.response is not None else None
-            logger.warning("Push fallido usuario=%s status=%s err=%s", usuario_id, status, exc)
-            if status in {404, 410}:
+            body = ""
+            try:
+                body = exc.response.text[:300] if exc.response is not None else ""
+            except Exception:  # noqa: BLE001
+                body = str(exc)
+            logger.warning(
+                "Push fallido usuario=%s status=%s body=%s",
+                usuario_id,
+                status,
+                body,
+            )
+            # 403 = VAPID distinta a la de la suscripción; 404/410 = expirada
+            if status in {403, 404, 410}:
                 db.delete(sub)
                 db.commit()
         except Exception as exc:  # noqa: BLE001
