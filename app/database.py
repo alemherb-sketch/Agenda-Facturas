@@ -36,13 +36,31 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def ensure_schema() -> None:
-    """Añade columnas nuevas en SQLite sin migraciones formales."""
-    if not db_url.startswith("sqlite"):
-        return
+    """Añade columnas nuevas sin migraciones formales (SQLite y Postgres)."""
+    is_sqlite = db_url.startswith("sqlite")
     with engine.begin() as conn:
-        cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(clientes)").fetchall()}
-        if cols:
-            if "activo" not in cols:
-                conn.exec_driver_sql("ALTER TABLE clientes ADD COLUMN activo BOOLEAN DEFAULT 1")
-            if "creado_en" not in cols:
-                conn.exec_driver_sql("ALTER TABLE clientes ADD COLUMN creado_en DATETIME")
+        if is_sqlite:
+            cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(clientes)").fetchall()}
+            if cols:
+                if "activo" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE clientes ADD COLUMN activo BOOLEAN DEFAULT 1")
+                if "creado_en" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE clientes ADD COLUMN creado_en DATETIME")
+
+            usuarios_cols = {
+                row[1] for row in conn.exec_driver_sql("PRAGMA table_info(usuarios)").fetchall()
+            }
+            if usuarios_cols:
+                if "telegram_chat_id" not in usuarios_cols:
+                    conn.exec_driver_sql("ALTER TABLE usuarios ADD COLUMN telegram_chat_id VARCHAR(32)")
+                if "notificar_email" not in usuarios_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE usuarios ADD COLUMN notificar_email BOOLEAN DEFAULT 1"
+                    )
+        else:
+            conn.exec_driver_sql(
+                "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(32)"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notificar_email BOOLEAN DEFAULT TRUE"
+            )

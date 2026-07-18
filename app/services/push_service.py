@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -5,7 +6,9 @@ from pywebpush import WebPushException, webpush
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import Notificacion, PushSubscription
+from app.models import Notificacion, PushSubscription, Usuario
+from app.services.email_service import enviar_correo
+from app.services.telegram_service import enviar_telegram
 from app.services.vapid_keys import ensure_vapid_keys
 
 logger = logging.getLogger(__name__)
@@ -163,4 +166,12 @@ def notificar_usuario(
     nota = crear_notificacion(db, usuario_id, titulo, mensaje, tipo, enlace)
     enviados = enviar_push(db, usuario_id, titulo, mensaje, enlace or "/")
     logger.info("Notificación id=%s push_enviados=%s", nota.id, enviados)
+
+    usuario = db.get(Usuario, usuario_id)
+    if usuario:
+        if usuario.telegram_chat_id:
+            enviar_telegram(usuario.telegram_chat_id, titulo, mensaje)
+        if usuario.notificar_email and usuario.email:
+            asyncio.run(enviar_correo(usuario.email, titulo, mensaje))
+
     return nota

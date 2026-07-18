@@ -63,6 +63,7 @@ def meta():
             {"value": "factura", "label": "Factura Electrónica", "serie": "F001"},
             {"value": "boleta", "label": "Boleta de Venta", "serie": "B001"},
             {"value": "nota_venta", "label": "Nota de Venta", "serie": "NV01"},
+            {"value": "cotizacion", "label": "Cotización", "serie": "CT01"},
             {"value": "nota_credito", "label": "Nota de Crédito", "serie": "FC01"},
             {"value": "nota_debito", "label": "Nota de Débito", "serie": "FD01"},
             {"value": "recibo_honorarios", "label": "Recibo por Honorarios", "serie": "E001"},

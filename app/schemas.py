@@ -163,6 +163,18 @@ class NotificacionOut(BaseModel):
     creado_en: datetime
 
 
+class PreferenciasAvisoIn(BaseModel):
+    telegram_chat_id: str | None = None
+    notificar_email: bool = True
+
+
+class PreferenciasAvisoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    telegram_chat_id: str | None
+    notificar_email: bool
+
+
 class ClienteCreate(BaseModel):
     nombre: str = Field(min_length=1, max_length=200)
     documento: str | None = None

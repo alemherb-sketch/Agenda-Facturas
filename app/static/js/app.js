@@ -941,6 +941,12 @@
     state.notifs = await API.listNotificaciones();
     const pendientes = await API.listComprobantes({ estado: "no_pagado" });
     const agendas = await API.listAgenda({ pendientes: "true" });
+    let prefs = { telegram_chat_id: "", notificar_email: true };
+    try {
+      prefs = await API.obtenerPreferencias();
+    } catch (_) {
+      /* ignore */
+    }
     return `
       <div class="page-head">
         <div>
@@ -962,7 +968,10 @@
           Instala la PWA (menú Chrome → «Instalar app» / «Agregar a inicio»).<br><br>
           <strong>PC:</strong> hay que pulsar <em>Activar avisos</em> también en Chrome de la PC
           (cada dispositivo tiene su propia suscripción). Desactiva «No molestar» / Focus Assist de Windows.
-          En Chrome: candado de la URL → Notificaciones → Permitir.
+          En Chrome: candado de la URL → Notificaciones → Permitir.<br><br>
+          Si aun así sigue llegando en silencio, el navegador/SO está fuera de tu control — activa
+          también <strong>Telegram</strong> abajo: no depende de canales de notificación ni de que la
+          app esté abierta, y siempre suena.
         </p>
       </div>
       <div class="panel" style="margin-bottom:1rem">
@@ -972,6 +981,23 @@
           2) Debe decir <strong>Push OK</strong> y llegar una prueba con sonido/vibración.<br>
           3) Repite este paso en cada celular y en la PC donde quieras recibir avisos.
         </p>
+      </div>
+      <div class="panel" style="margin-bottom:1rem">
+        <h3 style="margin:0 0 .4rem;font-family:var(--font-display)">Aviso por Telegram (recomendado)</h3>
+        <p style="margin:0 0 .6rem;color:var(--muted);font-size:.92rem;line-height:1.45">
+          1) Abre Telegram y busca <strong>@userinfobot</strong>, mándale cualquier mensaje.<br>
+          2) Copia el número <strong>Id</strong> que te responde.<br>
+          3) Pégalo aquí y guarda. Telegram avisa con sonido aunque la app esté cerrada.
+        </p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <input id="input-telegram-chat" placeholder="Tu chat_id de Telegram" value="${escapeHtml(prefs.telegram_chat_id || "")}" style="flex:1;min-width:180px" />
+          <button class="btn btn-primary" id="btn-save-telegram">Guardar Telegram</button>
+          <button class="btn btn-secondary" id="btn-test-telegram">Probar Telegram</button>
+        </div>
+        <label style="display:flex;gap:.5rem;align-items:center;margin-top:.8rem;font-size:.92rem">
+          <input type="checkbox" id="chk-notif-email" ${prefs.notificar_email ? "checked" : ""} />
+          También avisarme por email a ${escapeHtml(state.user?.email || "")}
+        </label>
       </div>
       <div class="grid-stats">
         <div class="stat warn"><label>Docs. no pagados</label><strong>${pendientes.length}</strong></div>
@@ -1318,6 +1344,33 @@
           }
           const prueba = await API.probarPush();
           toast(prueba.mensaje || "Prueba enviada");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
+      $("#btn-save-telegram")?.addEventListener("click", async () => {
+        try {
+          const chatId = $("#input-telegram-chat")?.value.trim() || null;
+          const notificarEmail = $("#chk-notif-email")?.checked ?? true;
+          await API.guardarPreferencias({ telegram_chat_id: chatId, notificar_email: notificarEmail });
+          toast("Preferencias guardadas");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
+      $("#btn-test-telegram")?.addEventListener("click", async () => {
+        try {
+          const prueba = await API.probarTelegram();
+          toast(prueba.mensaje || "Prueba enviada");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
+      $("#chk-notif-email")?.addEventListener("change", async (e) => {
+        try {
+          const chatId = $("#input-telegram-chat")?.value.trim() || null;
+          await API.guardarPreferencias({ telegram_chat_id: chatId, notificar_email: e.target.checked });
+          toast("Preferencias guardadas");
         } catch (ex) {
           toast(ex.message);
         }

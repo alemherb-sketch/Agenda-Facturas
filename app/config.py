@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     vapid_claim_email: str = "mailto:avisos@agenda-facturas.pe"
     cron_secret: str = ""
     sunat_api_token: str = ""
+    telegram_bot_token: str = ""
 
     @property
     def sqlalchemy_url(self) -> str:

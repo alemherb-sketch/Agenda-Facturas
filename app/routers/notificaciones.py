@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Notificacion, Usuario
-from app.schemas import NotificacionOut, PushSubscriptionIn
+from app.schemas import NotificacionOut, PreferenciasAvisoIn, PreferenciasAvisoOut, PushSubscriptionIn
 from app.services.push_service import get_vapid_public_key, guardar_suscripcion
 from app.services.reminders import procesar_recordatorios
+from app.services.telegram_service import enviar_telegram
 
 router = APIRouter(prefix="/api/notificaciones", tags=["notificaciones"])
 
@@ -128,3 +129,40 @@ def procesar_ahora(user: Annotated[Usuario, Depends(get_current_user)]):
     _ = user
     procesar_recordatorios()
     return {"ok": True, "mensaje": "Recordatorios revisados"}
+
+
+@router.get("/preferencias", response_model=PreferenciasAvisoOut)
+def obtener_preferencias(user: Annotated[Usuario, Depends(get_current_user)]):
+    return user
+
+
+@router.post("/preferencias", response_model=PreferenciasAvisoOut)
+def guardar_preferencias(
+    payload: PreferenciasAvisoIn,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    user.telegram_chat_id = (payload.telegram_chat_id or "").strip() or None
+    user.notificar_email = payload.notificar_email
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post("/telegram-probar")
+def telegram_probar(user: Annotated[Usuario, Depends(get_current_user)]):
+    if not user.telegram_chat_id:
+        return {"ok": False, "mensaje": "Primero guarda tu chat_id de Telegram."}
+    enviado = enviar_telegram(
+        user.telegram_chat_id,
+        "Prueba de aviso",
+        "Si ves este mensaje, tus recordatorios llegarán por Telegram con sonido.",
+    )
+    return {
+        "ok": enviado,
+        "mensaje": (
+            "Mensaje de prueba enviado. Revisa Telegram."
+            if enviado
+            else "No se pudo enviar. Verifica el chat_id y que TELEGRAM_BOT_TOKEN esté configurado."
+        ),
+    }

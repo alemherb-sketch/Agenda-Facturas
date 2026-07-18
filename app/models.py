@@ -25,6 +25,7 @@ class TipoDocumento(str, enum.Enum):
     FACTURA = "factura"
     BOLETA = "boleta"
     NOTA_VENTA = "nota_venta"
+    COTIZACION = "cotizacion"
     NOTA_CREDITO = "nota_credito"
     NOTA_DEBITO = "nota_debito"
     RECIBO_HONORARIOS = "recibo_honorarios"
@@ -58,6 +59,8 @@ class Usuario(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(32))
+    notificar_email: Mapped[bool] = mapped_column(Boolean, default=True)
 
     comprobantes: Mapped[list[Comprobante]] = relationship(back_populates="usuario", cascade="all, delete-orphan")
     agendas: Mapped[list[Agenda]] = relationship(back_populates="usuario", cascade="all, delete-orphan")

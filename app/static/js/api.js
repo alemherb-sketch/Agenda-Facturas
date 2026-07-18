@@ -136,6 +136,18 @@ const API = {
   probarPush() {
     return this.request("/api/notificaciones/probar-push", { method: "POST" });
   },
+  obtenerPreferencias() {
+    return this.request("/api/notificaciones/preferencias");
+  },
+  guardarPreferencias(body) {
+    return this.request("/api/notificaciones/preferencias", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  probarTelegram() {
+    return this.request("/api/notificaciones/telegram-probar", { method: "POST" });
+  },
   consultaDocumento(numero) {
     return this.request(`/api/consulta/documento?numero=${encodeURIComponent(numero)}`);
   },
