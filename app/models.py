@@ -78,6 +78,9 @@ class Usuario(Base):
     movimientos_caja: Mapped[list[MovimientoCaja]] = relationship(
         back_populates="usuario", cascade="all, delete-orphan"
     )
+    contactos: Mapped[list[Contacto]] = relationship(
+        back_populates="usuario", cascade="all, delete-orphan"
+    )
 
 
 class Cliente(Base):
@@ -247,9 +250,35 @@ class MovimientoCaja(Base):
         Enum(TipoMovimientoCaja, native_enum=False), nullable=False
     )
     monto: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    numero_transaccion: Mapped[str | None] = mapped_column(String(80))
     concepto: Mapped[str] = mapped_column(String(300), nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     usuario: Mapped[Usuario] = relationship(back_populates="movimientos_caja")
     caja: Mapped[Caja] = relationship(back_populates="movimientos")
+
+
+class Contacto(Base):
+    """Agenda telefónica del usuario (manual o importada del teléfono)."""
+
+    __tablename__ = "contactos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    nombre: Mapped[str] = mapped_column(String(200), nullable=False)
+    telefono: Mapped[str | None] = mapped_column(String(40), index=True)
+    telefono_alt: Mapped[str | None] = mapped_column(String(40))
+    email: Mapped[str | None] = mapped_column(String(180))
+    empresa: Mapped[str | None] = mapped_column(String(200))
+    notas: Mapped[str | None] = mapped_column(String(500))
+    origen: Mapped[str] = mapped_column(String(20), default="manual")  # manual | telefono
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id"))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    usuario: Mapped[Usuario] = relationship(back_populates="contactos")
+    cliente: Mapped[Cliente | None] = relationship()

@@ -11,8 +11,12 @@
     productos: [],
     cajas: [],
     movimientosCaja: [],
-    filtersCaja: { caja_id: "", tipo: "", q: "" },
-    charts: { estado: null, tipo: null, mes: null },
+    cajaDash: null,
+    contactos: [],
+    filtersCaja: { caja_id: "", tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
+    filtersContacto: { q: "" },
+    draftFromContact: null,
+    charts: { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null },
     editingDoc: null,
     editingAgenda: null,
     editingCliente: null,
@@ -71,9 +75,10 @@
       <div class="auth-screen">
         <div class="auth-wrap">
           <header class="auth-header">
-            <p class="auth-kicker">Perú · Negocios y comprobantes</p>
+            <img class="auth-brand-logo" src="/static/img/logo-jaelin.png" alt="JAELIN Transporte & Maquinaria" />
+            <p class="auth-kicker">JAELIN · Transporte & Maquinaria</p>
             <h1 class="auth-logo">Agenda Facturas</h1>
-            <p class="auth-tagline">Comprobantes, agenda y recordatorios sincronizados en celular y PC.</p>
+            <p class="auth-tagline">Comprobantes, agenda telefónica y recordatorios sincronizados en celular y PC.</p>
           </header>
 
           <section class="auth-panel">
@@ -175,10 +180,10 @@
       <div class="app-shell">
         <header class="topbar">
           <a class="brand" href="#/dashboard">
-            <div class="brand-mark">AF</div>
+            <div class="brand-mark"><img src="/static/img/logo-jaelin.png" alt="JAELIN" /></div>
             <div class="brand-text">
               <strong>Agenda Facturas</strong>
-              <span>${state.user?.razon_social || state.user?.nombre || "Perú"}</span>
+              <span>${state.user?.razon_social || state.user?.nombre || "JAELIN"}</span>
             </div>
           </a>
           <div class="top-actions" style="position:relative">
@@ -240,12 +245,13 @@
       box: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.8 7.2 12 3l8.2 4.2v9.6L12 21l-8.2-4.2V7.2Zm8.2 1.1 6.2-3.2L12 4.4 5.8 7.6 12 8.3Zm-6.7.9v7.4L11 20v-8.2L5.3 9.2Zm13.4 0L13 11.8V20l5.7-2.9V9.2Z"/></svg>`,
       cash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9ZM12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Zm-7.2-6.5h2.2v-.9H4.8v.9Zm12.4 0h2.2v-.9h-2.2v.9Zm-12.4 8.1h2.2v-.9H4.8v.9Zm12.4 0h2.2v-.9h-2.2v.9Z"/></svg>`,
       bell: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.2 2.2 0 0 0 2.1-1.6H9.9A2.2 2.2 0 0 0 12 22Zm7-5.2V11a7 7 0 1 0-14 0v5.8L3 19v1h18v-1l-2-2.2Z"/></svg>`,
+      phone: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 3.8c.5-.5 1.3-.6 1.9-.2l2 1.3c.6.4.8 1.2.5 1.8l-.9 1.8a1.4 1.4 0 0 0 .3 1.6l2.9 2.9c.4.4 1 .5 1.6.3l1.8-.9c.6-.3 1.4-.1 1.8.5l1.3 2c.4.6.3 1.4-.2 1.9l-1.2 1.2c-.6.6-1.5.9-2.4.7-2.2-.4-4.7-1.9-7.3-4.5S5.4 10.2 5 8c-.2-.9.1-1.8.7-2.4L8.2 3.8Z"/></svg>`,
     };
     return icons[name] || "";
   }
 
   function mobileNavHtml() {
-    const moreActive = ["clientes", "productos", "cajas", "recordatorios"].includes(state.route);
+    const moreActive = ["clientes", "productos", "cajas", "contactos", "recordatorios"].includes(state.route);
     const items = [
       ["dashboard", "home", "Inicio"],
       ["comprobantes", "docs", "Docs"],
@@ -265,6 +271,7 @@
   function mobileMoreHtml() {
     const items = [
       ["clientes", "clients", "Clientes"],
+      ["contactos", "phone", "Teléfonos"],
       ["productos", "box", "Productos"],
       ["cajas", "cash", "Cajas"],
       ["recordatorios", "bell", "Avisos"],
@@ -283,6 +290,7 @@
       ["dashboard", "📊", "Dashboard"],
       ["comprobantes", "🧾", "Comprobantes"],
       ["clientes", "👥", "Clientes"],
+      ["contactos", "📞", "Agenda tel."],
       ["productos", "📦", "Productos"],
       ["cajas", "💵", "Cajas"],
       ["nuevo", "＋", "Nuevo"],
@@ -343,6 +351,7 @@
     const hero = isDesktop()
       ? `<div class="dashboard-hero desktop-only">
           <div class="hero-panel">
+            <img class="dash-brand-logo" src="/static/img/logo-jaelin.png" alt="JAELIN" />
             <h2>Panel de control</h2>
             <p>Resumen de tu facturación, cobranzas y agenda. Los datos se sincronizan en tiempo real con tu app móvil.</p>
             <div class="hero-metrics">
@@ -364,6 +373,7 @@
           </div>
         </div>`
       : `<div class="panel mobile-hint" style="margin-bottom:1rem">
+          <img class="dash-brand-logo" src="/static/img/logo-jaelin.png" alt="JAELIN" style="width:56px;height:56px" />
           <h3 style="margin:0 0 .4rem;font-family:var(--font-display)">Resumen rápido</h3>
           <p style="margin:0;color:var(--muted)">Misma información que en PC, optimizada para móvil.</p>
         </div>`;
@@ -469,7 +479,68 @@
 
   function destroyCharts() {
     Object.values(state.charts).forEach((c) => c?.destroy?.());
-    state.charts = { estado: null, tipo: null, mes: null };
+    state.charts = { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null };
+  }
+
+  function defaultCajaDates() {
+    const hoy = new Date();
+    const hasta = hoy.toISOString().slice(0, 10);
+    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+    return { desde, hasta };
+  }
+
+  function paintCajaCharts(dash) {
+    if (typeof Chart === "undefined" || !dash) return;
+    state.charts.cajaDia?.destroy?.();
+    state.charts.cajaPie?.destroy?.();
+    state.charts.cajaDia = null;
+    state.charts.cajaPie = null;
+
+    const diaEl = $("#chart-caja-dia");
+    if (diaEl && dash.por_dia?.length) {
+      state.charts.cajaDia = new Chart(diaEl, {
+        type: "bar",
+        data: {
+          labels: dash.por_dia.map((x) => x.fecha.slice(5)),
+          datasets: [
+            {
+              label: "Ingresos",
+              data: dash.por_dia.map((x) => x.ingresos),
+              backgroundColor: "rgba(6, 118, 71, 0.75)",
+              borderRadius: 6,
+            },
+            {
+              label: "Egresos",
+              data: dash.por_dia.map((x) => x.egresos),
+              backgroundColor: "rgba(180, 35, 24, 0.7)",
+              borderRadius: 6,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "bottom" } },
+          scales: { x: { stacked: false }, y: { beginAtZero: true } },
+        },
+      });
+    }
+
+    const pieEl = $("#chart-caja-pie");
+    if (pieEl && dash.por_caja?.length) {
+      state.charts.cajaPie = new Chart(pieEl, {
+        type: "doughnut",
+        data: {
+          labels: dash.por_caja.map((x) => x.caja),
+          datasets: [
+            {
+              data: dash.por_caja.map((x) => Math.abs(x.ingresos) + Math.abs(x.egresos)),
+              backgroundColor: ["#0f3d2e", "#1f6b4f", "#c9852a", "#175cd3", "#0f766e", "#b54708", "#475467"],
+            },
+          ],
+        },
+        options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+      });
+    }
   }
 
   async function viewComprobantes() {
@@ -549,10 +620,16 @@
   }
 
   function viewNuevoForm(doc = null) {
+    const draft = !doc ? state.draftFromContact : null;
     const items = doc?.items?.length
       ? doc.items
       : [{ descripcion: "", cantidad: 1, precio_unitario: 0, unidad: "NIU", aplica_igv: true }];
     const today = new Date().toISOString().slice(0, 10);
+    const clienteNombre = doc?.cliente_nombre || draft?.nombre || "";
+    const clienteEmail = doc?.cliente_email || draft?.email || "";
+    const clienteTel = doc?.cliente_telefono || draft?.telefono || "";
+    const clienteDoc = doc?.cliente_documento || "";
+    if (draft) state.draftFromContact = null;
     return `
       <div class="page-head">
         <div>
@@ -601,14 +678,14 @@
           <div class="field">
             <label>RUC / DNI</label>
             <div class="doc-search">
-              <input name="cliente_documento" id="c-documento" list="lista-docs-cliente" value="${escapeHtml(doc?.cliente_documento || "")}" placeholder="RUC 11 dígitos o DNI 8 dígitos" inputmode="numeric" />
+              <input name="cliente_documento" id="c-documento" list="lista-docs-cliente" value="${escapeHtml(clienteDoc)}" placeholder="RUC 11 dígitos o DNI 8 dígitos" inputmode="numeric" />
               <button type="button" class="btn btn-secondary" id="btn-buscar-sunat" title="Buscar en SUNAT">Buscar</button>
             </div>
             <small class="field-hint" id="sunat-hint">Busca en SUNAT o elige un cliente del catálogo.</small>
           </div>
           <div class="field">
             <label>Cliente</label>
-            <input name="cliente_nombre" id="c-cliente" list="lista-clientes" required value="${escapeHtml(doc?.cliente_nombre || "")}" placeholder="Nombre o razón social" />
+            <input name="cliente_nombre" id="c-cliente" list="lista-clientes" required value="${escapeHtml(clienteNombre)}" placeholder="Nombre o razón social" />
             <datalist id="lista-clientes">
               ${state.clientes
                 .map(
@@ -626,11 +703,11 @@
           </div>
           <div class="field">
             <label>Email del cliente</label>
-            <input name="cliente_email" type="email" placeholder="cliente@correo.com" />
+            <input name="cliente_email" type="email" placeholder="cliente@correo.com" value="${escapeHtml(clienteEmail)}" />
           </div>
           <div class="field">
             <label>Teléfono / WhatsApp</label>
-            <input name="cliente_telefono" placeholder="999888777" />
+            <input name="cliente_telefono" placeholder="999888777" value="${escapeHtml(clienteTel)}" />
           </div>
           <div class="field full">
             <label>Observaciones</label>
@@ -822,6 +899,118 @@
       <div class="modal-backdrop" id="modal-cliente"></div>`;
   }
 
+  function whatsappUrl(phone, text = "") {
+    const digits = String(phone || "").replace(/\D/g, "");
+    if (!digits) return null;
+    let n = digits;
+    if (n.length === 9) n = `51${n}`;
+    const msg = text ? `?text=${encodeURIComponent(text)}` : "";
+    return `https://wa.me/${n}${msg}`;
+  }
+
+  function supportsPhoneContacts() {
+    return typeof navigator !== "undefined" && "contacts" in navigator && "ContactsManager" in window;
+  }
+
+  async function pickPhoneContacts() {
+    if (!supportsPhoneContacts()) {
+      throw new Error(
+        "Tu navegador no permite leer la agenda del teléfono. Usa Chrome en Android (HTTPS) o agrega contactos manualmente."
+      );
+    }
+    const selected = await navigator.contacts.select(["name", "tel", "email"], { multiple: true });
+    return (selected || [])
+      .map((c) => {
+        const rawNames = Array.isArray(c.name) ? c.name : c.name ? [c.name] : [];
+        const nombres = rawNames
+          .map((n) => (typeof n === "string" ? n : n?.formatted || n?.givenName || ""))
+          .map((n) => String(n || "").trim())
+          .filter(Boolean);
+        const tels = (Array.isArray(c.tel) ? c.tel : [])
+          .map((t) => String(t || "").trim())
+          .filter(Boolean);
+        const emails = (Array.isArray(c.email) ? c.email : [])
+          .map((e) => String(e || "").trim())
+          .filter(Boolean);
+        return {
+          nombre: nombres[0] || tels[0] || emails[0] || "Sin nombre",
+          telefono: tels[0] || null,
+          telefono_alt: tels[1] || null,
+          email: emails[0] || null,
+          empresa: null,
+        };
+      })
+      .filter((c) => c.telefono || c.email);
+  }
+
+  async function viewContactos() {
+    const params = {};
+    if (state.filtersContacto.q) params.q = state.filtersContacto.q;
+    state.contactos = await API.listContactos(params);
+    const canSync = supportsPhoneContacts();
+
+    return `
+      <div class="page-head">
+        <div>
+          <h1>Agenda telefónica</h1>
+          <p>Contactos del teléfono sincronizados con clientes, agenda, WhatsApp y comprobantes.</p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-secondary" id="btn-sync-phone" ${canSync ? "" : "title=\"Disponible en Chrome Android\""}>
+            📲 Importar del teléfono
+          </button>
+          <button class="btn btn-primary" id="btn-new-contacto">＋ Contacto</button>
+        </div>
+      </div>
+      ${
+        canSync
+          ? `<div class="panel" style="margin-bottom:1rem"><p style="margin:0;color:var(--muted)">Puedes importar varios contactos desde la agenda del teléfono. Se actualizan si el número ya existe.</p></div>`
+          : `<div class="panel" style="margin-bottom:1rem"><p style="margin:0;color:var(--muted)">La sincronización con la agenda del teléfono funciona en <strong>Chrome Android</strong> (app instalada o HTTPS). En PC agrega contactos manualmente.</p></div>`
+      }
+      <div class="toolbar panel">
+        <input id="f-contacto-q" placeholder="Buscar nombre, teléfono, email..." value="${escapeHtml(state.filtersContacto.q)}" style="flex:1;min-width:180px" />
+        <button class="btn btn-secondary" id="btn-filtrar-contacto">Buscar</button>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        ${
+          state.contactos.length
+            ? `<div class="contact-card-list">
+              ${state.contactos
+                .map((c) => {
+                  const tel = c.telefono || c.telefono_alt || "";
+                  const wa = whatsappUrl(tel, `Hola ${c.nombre}, te escribo desde JAELIN.`);
+                  return `<article class="contact-card">
+                    <div class="contact-card-head">
+                      <div>
+                        <strong>${escapeHtml(c.nombre)}</strong>
+                        ${c.empresa ? `<div class="contact-meta">${escapeHtml(c.empresa)}</div>` : ""}
+                      </div>
+                      <span class="badge ${c.origen === "telefono" ? "emitido" : "cita"}">${c.origen === "telefono" ? "Teléfono" : "Manual"}</span>
+                    </div>
+                    <div class="contact-meta">
+                      ${tel ? `<div>📞 ${escapeHtml(tel)}${c.telefono_alt && c.telefono_alt !== tel ? ` · ${escapeHtml(c.telefono_alt)}` : ""}</div>` : "<div>Sin teléfono</div>"}
+                      ${c.email ? `<div>✉️ ${escapeHtml(c.email)}</div>` : ""}
+                      ${c.cliente_id ? `<div style="color:var(--ok)">Vinculado a cliente #${c.cliente_id}</div>` : ""}
+                    </div>
+                    <div class="contact-actions">
+                      ${tel ? `<a class="btn btn-secondary btn-sm" href="tel:${escapeHtml(tel)}">Llamar</a>` : ""}
+                      ${wa ? `<a class="btn btn-secondary btn-sm" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
+                      <button class="btn btn-secondary btn-sm" data-ct-cliente="${c.id}">A cliente</button>
+                      <button class="btn btn-secondary btn-sm" data-ct-factura="${c.id}">Comprobante</button>
+                      <button class="btn btn-secondary btn-sm" data-ct-agenda="${c.id}">Agendar</button>
+                      <button class="btn btn-ghost btn-sm" data-ct-edit="${c.id}">Editar</button>
+                      <button class="btn btn-danger btn-sm" data-ct-del="${c.id}">Eliminar</button>
+                    </div>
+                  </article>`;
+                })
+                .join("")}
+            </div>`
+            : `<div class="empty"><strong>Sin contactos</strong>Importa desde el teléfono o agrega uno manualmente.</div>`
+        }
+      </div>
+      <div class="modal-backdrop" id="modal-contacto"></div>`;
+  }
+
   async function viewProductos() {
     state.productos = await API.listProductos();
     return `
@@ -861,39 +1050,72 @@
   }
 
   async function viewCajas() {
-    const params = {};
+    const defaults = defaultCajaDates();
+    if (!state.filtersCaja.fecha_desde) state.filtersCaja.fecha_desde = defaults.desde;
+    if (!state.filtersCaja.fecha_hasta) state.filtersCaja.fecha_hasta = defaults.hasta;
+
+    const params = {
+      fecha_desde: state.filtersCaja.fecha_desde,
+      fecha_hasta: state.filtersCaja.fecha_hasta,
+    };
     if (state.filtersCaja.caja_id) params.caja_id = state.filtersCaja.caja_id;
     if (state.filtersCaja.tipo) params.tipo = state.filtersCaja.tipo;
     if (state.filtersCaja.q) params.q = state.filtersCaja.q;
-    const [cajas, movimientos] = await Promise.all([
-      API.listCajas(),
-      API.listMovimientosCaja(params),
-    ]);
+
+    const [cajas, dash] = await Promise.all([API.listCajas(), API.dashboardCajas(params)]);
     state.cajas = cajas;
-    state.movimientosCaja = movimientos;
+    state.cajaDash = dash;
+    state.movimientosCaja = dash.movimientos || [];
     const saldoTotal = cajas.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
-    const ingresos = cajas.reduce((acc, c) => acc + Number(c.total_ingresos || 0), 0);
-    const egresos = cajas.reduce((acc, c) => acc + Number(c.total_egresos || 0), 0);
     const today = new Date().toISOString().slice(0, 10);
 
     return `
       <div class="page-head">
         <div>
           <h1>Cajas</h1>
-          <p>Control de ingresos y egresos por caja (efectivo, banco, yape, etc.).</p>
+          <p>Dashboard de movimientos, ingresos y egresos por caja.</p>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-new-caja">＋ Nueva caja</button>
           <button class="btn btn-primary" id="btn-new-mov">＋ Movimiento</button>
         </div>
       </div>
+      <div class="toolbar panel">
+        <input id="f-caja-desde" type="date" value="${escapeHtml(state.filtersCaja.fecha_desde)}" title="Desde" />
+        <input id="f-caja-hasta" type="date" value="${escapeHtml(state.filtersCaja.fecha_hasta)}" title="Hasta" />
+        <select id="f-caja-id">
+          <option value="">Todas las cajas</option>
+          ${cajas
+            .map(
+              (c) =>
+                `<option value="${c.id}" ${String(state.filtersCaja.caja_id) === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}</option>`
+            )
+            .join("")}
+        </select>
+        <select id="f-caja-tipo">
+          <option value="">Todos los tipos</option>
+          <option value="ingreso" ${state.filtersCaja.tipo === "ingreso" ? "selected" : ""}>Ingreso</option>
+          <option value="egreso" ${state.filtersCaja.tipo === "egreso" ? "selected" : ""}>Egreso</option>
+        </select>
+        <input id="f-caja-q" placeholder="N° o concepto..." value="${escapeHtml(state.filtersCaja.q)}" style="flex:1;min-width:140px" />
+        <button class="btn btn-secondary" id="btn-filtrar-caja">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-caja-mes">Mes actual</button>
+      </div>
       <div class="grid-stats">
-        <div class="stat"><label>Cajas activas</label><strong>${cajas.length}</strong></div>
-        <div class="stat ok"><label>Ingresos</label><strong>${money(ingresos)}</strong></div>
-        <div class="stat warn"><label>Egresos</label><strong>${money(egresos)}</strong></div>
-        <div class="stat"><label>Saldo total</label><strong>${money(saldoTotal)}</strong></div>
+        <div class="stat ok"><label>Ingresos del período</label><strong>${money(dash.total_ingresos)}</strong></div>
+        <div class="stat warn"><label>Egresos del período</label><strong>${money(dash.total_egresos)}</strong></div>
+        <div class="stat"><label>Saldo del período</label><strong>${money(dash.saldo_periodo)}</strong></div>
+        <div class="stat"><label>Movimientos</label><strong>${dash.cantidad_movimientos}</strong></div>
+      </div>
+      <div class="charts">
+        <div class="panel chart-box"><h3>Movimientos por día</h3><canvas id="chart-caja-dia"></canvas></div>
+        <div class="panel chart-box"><h3>Actividad por caja</h3><canvas id="chart-caja-pie"></canvas></div>
       </div>
       <div class="panel" style="margin-bottom:1rem;padding:0;overflow:hidden">
+        <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <strong style="font-family:var(--font-display)">Saldo acumulado por caja</strong>
+          <span style="color:var(--muted);font-size:.85rem">Total: ${money(saldoTotal)}</span>
+        </div>
         ${
           cajas.length
             ? `<div class="table-wrap"><table>
@@ -918,39 +1140,47 @@
             : `<div class="empty"><strong>Sin cajas</strong>Crea tu primera caja (ej. Caja principal, Yape, Banco).</div>`
         }
       </div>
-      <div class="toolbar panel">
-        <input id="f-caja-q" placeholder="Buscar concepto..." value="${escapeHtml(state.filtersCaja.q)}" style="flex:1;min-width:160px" />
-        <select id="f-caja-id">
-          <option value="">Todas las cajas</option>
-          ${cajas
-            .map(
-              (c) =>
-                `<option value="${c.id}" ${String(state.filtersCaja.caja_id) === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}</option>`
-            )
-            .join("")}
-        </select>
-        <select id="f-caja-tipo">
-          <option value="">Todos los tipos</option>
-          <option value="ingreso" ${state.filtersCaja.tipo === "ingreso" ? "selected" : ""}>Ingreso</option>
-          <option value="egreso" ${state.filtersCaja.tipo === "egreso" ? "selected" : ""}>Egreso</option>
-        </select>
-        <button class="btn btn-secondary" id="btn-filtrar-caja">Filtrar</button>
-      </div>
+      ${
+        dash.por_caja?.length
+          ? `<div class="panel" style="margin-bottom:1rem;padding:0;overflow:hidden">
+              <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line)">
+                <strong style="font-family:var(--font-display)">Resumen del período por caja</strong>
+                <span style="color:var(--muted);font-size:.85rem;margin-left:.5rem">${fmtDate(dash.fecha_desde)} — ${fmtDate(dash.fecha_hasta)}</span>
+              </div>
+              <div class="table-wrap"><table>
+                <thead><tr><th>Caja</th><th>Ingresos</th><th>Egresos</th><th>Saldo período</th></tr></thead>
+                <tbody>
+                ${dash.por_caja
+                  .map(
+                    (c) => `<tr>
+                    <td>${escapeHtml(c.caja)}</td>
+                    <td style="color:var(--ok)">${money(c.ingresos)}</td>
+                    <td style="color:var(--danger)">${money(c.egresos)}</td>
+                    <td><strong>${money(c.saldo)}</strong></td>
+                  </tr>`
+                  )
+                  .join("")}
+                </tbody>
+              </table></div>
+            </div>`
+          : ""
+      }
       <div class="panel" style="padding:0;overflow:hidden">
         <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line)">
-          <strong style="font-family:var(--font-display)">Movimientos</strong>
+          <strong style="font-family:var(--font-display)">Movimientos del período</strong>
         </div>
         ${
-          movimientos.length
+          state.movimientosCaja.length
             ? `<div class="table-wrap"><table>
-              <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>N° transacción</th><th>Concepto</th><th>Monto</th><th>Acciones</th></tr></thead>
               <tbody>
-              ${movimientos
+              ${state.movimientosCaja
                 .map(
                   (m) => `<tr>
                   <td>${fmtDate(m.fecha)}</td>
                   <td>${escapeHtml(m.caja_nombre)}</td>
                   <td><span class="badge ${m.tipo === "ingreso" ? "pagado" : "anulado"}">${movCajaLabel(m.tipo)}</span></td>
+                  <td>${escapeHtml(m.numero_transaccion || "—")}</td>
                   <td>${escapeHtml(m.concepto)}</td>
                   <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
                   <td class="actions">
@@ -961,7 +1191,7 @@
                 )
                 .join("")}
               </tbody></table></div>`
-            : `<div class="empty"><strong>Sin movimientos</strong>Registra un ingreso o egreso.</div>`
+            : `<div class="empty"><strong>Sin movimientos</strong>No hay movimientos en el rango de fechas seleccionado.</div>`
         }
       </div>
       <div class="modal-backdrop" id="modal-caja"></div>
@@ -1050,9 +1280,13 @@
             <label>Fecha</label>
             <input name="fecha" type="date" required value="${mov?.fecha || today}" />
           </div>
+          <div class="field">
+            <label>N° de transacción</label>
+            <input name="numero_transaccion" maxlength="80" value="${escapeHtml(mov?.numero_transaccion || "")}" placeholder="Ej. OP-123456, Yape ref." />
+          </div>
           <div class="field full">
-            <label>Concepto</label>
-            <input name="concepto" required maxlength="300" value="${escapeHtml(mov?.concepto || "")}" placeholder="Ej. Venta del día, pago proveedor" />
+            <label>Concepto de transacción</label>
+            <input name="concepto" required maxlength="300" value="${escapeHtml(mov?.concepto || "")}" placeholder="Ej. Venta del día, pago proveedor, transferencia" />
           </div>
           <div class="field full">
             <button class="btn btn-primary" type="submit">${mov ? "Guardar" : "Registrar movimiento"}</button>
@@ -1066,6 +1300,7 @@
       const body = Object.fromEntries(fd.entries());
       body.caja_id = Number(body.caja_id);
       body.monto = Number(body.monto);
+      body.numero_transaccion = (body.numero_transaccion || "").trim() || null;
       try {
         if (mov) await API.updateMovimientoCaja(mov.id, body);
         else await API.createMovimientoCaja(body);
@@ -1133,6 +1368,66 @@
         if (cliente) await API.updateCliente(cliente.id, body);
         else await API.createCliente(body);
         toast("Cliente guardado");
+        modal.classList.remove("open");
+        renderApp();
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
+  }
+
+  function openContactoModal(contacto = null) {
+    const modal = $("#modal-contacto");
+    if (!modal) return;
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head">
+          <h2>${contacto ? "Editar contacto" : "Nuevo contacto"}</h2>
+          <button class="btn btn-ghost btn-sm" id="close-ct">Cerrar</button>
+        </div>
+        <form id="form-contacto" class="form-grid">
+          <div class="field full">
+            <label>Nombre</label>
+            <input name="nombre" required maxlength="200" value="${escapeHtml(contacto?.nombre || "")}" placeholder="Nombre completo" />
+          </div>
+          <div class="field">
+            <label>Teléfono</label>
+            <input name="telefono" maxlength="40" value="${escapeHtml(contacto?.telefono || "")}" placeholder="999888777" inputmode="tel" />
+          </div>
+          <div class="field">
+            <label>Teléfono alterno</label>
+            <input name="telefono_alt" maxlength="40" value="${escapeHtml(contacto?.telefono_alt || "")}" placeholder="Opcional" inputmode="tel" />
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input name="email" type="email" maxlength="180" value="${escapeHtml(contacto?.email || "")}" />
+          </div>
+          <div class="field">
+            <label>Empresa</label>
+            <input name="empresa" maxlength="200" value="${escapeHtml(contacto?.empresa || "")}" />
+          </div>
+          <div class="field full">
+            <label>Notas</label>
+            <input name="notas" maxlength="500" value="${escapeHtml(contacto?.notas || "")}" placeholder="Referencia, cargo, etc." />
+          </div>
+          <div class="field full">
+            <button class="btn btn-primary" type="submit">Guardar</button>
+          </div>
+        </form>
+      </div>`;
+    $("#close-ct").onclick = () => modal.classList.remove("open");
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.classList.remove("open");
+    };
+    $("#form-contacto").onsubmit = async (e) => {
+      e.preventDefault();
+      const body = Object.fromEntries(new FormData(e.target).entries());
+      body.origen = contacto?.origen || "manual";
+      try {
+        if (contacto) await API.updateContacto(contacto.id, body);
+        else await API.createContacto(body);
+        toast("Contacto guardado");
         modal.classList.remove("open");
         renderApp();
       } catch (ex) {
@@ -1308,12 +1603,20 @@
   }
 
   /* ---------- Modals helpers ---------- */
-  function openAgendaModal(agenda = null) {
+  function openAgendaModal(agenda = null, prefill = null) {
     const modal = $("#modal-agenda");
     if (!modal) return;
+    const draft = prefill || state.draftFromContact;
     const start = agenda?.fecha_inicio
       ? agenda.fecha_inicio.slice(0, 16)
       : new Date(Date.now() + 3600000).toISOString().slice(0, 16);
+    const tituloDefault = agenda?.titulo || (draft ? `Reunión con ${draft.nombre}` : "");
+    const participantesDefault =
+      agenda?.participantes ||
+      (draft
+        ? [draft.nombre, draft.telefono || draft.telefono_alt, draft.email].filter(Boolean).join(" · ")
+        : "");
+    if (draft && !agenda) state.draftFromContact = null;
     modal.classList.add("open");
     modal.innerHTML = `
       <div class="modal">
@@ -1336,7 +1639,7 @@
           </div>
           <div class="field full">
             <label>Título</label>
-            <input name="titulo" required value="${escapeHtml(agenda?.titulo || "")}" />
+            <input name="titulo" required value="${escapeHtml(tituloDefault)}" />
           </div>
           <div class="field">
             <label>Inicio</label>
@@ -1352,7 +1655,7 @@
           </div>
           <div class="field full">
             <label>Participantes</label>
-            <input name="participantes" value="${escapeHtml(agenda?.participantes || "")}" />
+            <input name="participantes" value="${escapeHtml(participantesDefault)}" />
           </div>
           <div class="field full">
             <label>Descripción detallada</label>
@@ -1663,6 +1966,75 @@
       );
     }
 
+    if (state.route === "contactos") {
+      $("#btn-new-contacto")?.addEventListener("click", () => openContactoModal());
+      $("#btn-filtrar-contacto")?.addEventListener("click", () => {
+        state.filtersContacto.q = ($("#f-contacto-q")?.value || "").trim();
+        renderApp();
+      });
+      $("#btn-sync-phone")?.addEventListener("click", async () => {
+        try {
+          const picked = await pickPhoneContacts();
+          if (!picked.length) return toast("No se seleccionaron contactos");
+          const res = await API.importarContactos(picked);
+          toast(`Importados: ${res.creados} nuevos, ${res.actualizados} actualizados`);
+          renderApp();
+        } catch (ex) {
+          if (String(ex.name || "").includes("Abort") || String(ex.message || "").includes("cancel")) {
+            return;
+          }
+          toast(ex.message || String(ex));
+        }
+      });
+      $$("[data-ct-edit]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const ct = state.contactos.find((c) => c.id === Number(b.dataset.ctEdit));
+          openContactoModal(ct);
+        })
+      );
+      $$("[data-ct-del]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (!confirm("¿Eliminar este contacto?")) return;
+          await API.deleteContacto(b.dataset.ctDel);
+          toast("Contacto eliminado");
+          renderApp();
+        })
+      );
+      $$("[data-ct-cliente]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          try {
+            const cli = await API.contactoACliente(b.dataset.ctCliente);
+            toast(`Cliente creado/actualizado: ${cli.nombre}`);
+            renderApp();
+          } catch (ex) {
+            toast(ex.message);
+          }
+        })
+      );
+      $$("[data-ct-factura]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const ct = state.contactos.find((c) => c.id === Number(b.dataset.ctFactura));
+          if (!ct) return;
+          state.draftFromContact = {
+            nombre: ct.nombre,
+            telefono: ct.telefono || ct.telefono_alt || "",
+            email: ct.email || "",
+          };
+          location.hash = "#/nuevo";
+        })
+      );
+      $$("[data-ct-agenda]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          const ct = state.contactos.find((c) => c.id === Number(b.dataset.ctAgenda));
+          if (!ct) return;
+          state.draftFromContact = ct;
+          location.hash = "#/agenda";
+          await renderApp();
+          openAgendaModal(null, ct);
+        })
+      );
+    }
+
     if (state.route === "productos") {
       $("#btn-new-producto")?.addEventListener("click", () => openProductoModal());
       $$("[data-prod-edit]").forEach((b) =>
@@ -1688,6 +2060,14 @@
         state.filtersCaja.q = ($("#f-caja-q")?.value || "").trim();
         state.filtersCaja.caja_id = $("#f-caja-id")?.value || "";
         state.filtersCaja.tipo = $("#f-caja-tipo")?.value || "";
+        state.filtersCaja.fecha_desde = $("#f-caja-desde")?.value || "";
+        state.filtersCaja.fecha_hasta = $("#f-caja-hasta")?.value || "";
+        renderApp();
+      });
+      $("#btn-caja-mes")?.addEventListener("click", () => {
+        const d = defaultCajaDates();
+        state.filtersCaja.fecha_desde = d.desde;
+        state.filtersCaja.fecha_hasta = d.hasta;
         renderApp();
       });
       $$("[data-caja-edit]").forEach((b) =>
@@ -1982,6 +2362,7 @@
       if (state.route === "dashboard") html = await viewDashboard();
       else if (state.route === "comprobantes") html = await viewComprobantes();
       else if (state.route === "clientes") html = await viewClientes();
+      else if (state.route === "contactos") html = await viewContactos();
       else if (state.route === "productos") html = await viewProductos();
       else if (state.route === "cajas") html = await viewCajas();
       else if (state.route === "nuevo") {
@@ -1996,8 +2377,12 @@
         state.productos = productos;
         state.editingDoc = doc;
         html = viewNuevoForm(doc);
-      } else if (state.route === "agenda") html = await viewAgenda();
-      else if (state.route === "recordatorios") html = await viewRecordatorios();
+      } else if (state.route === "agenda") {
+        html = await viewAgenda();
+        if (state.draftFromContact && !params.id) {
+          // Modal se abre tras bindView si venimos de contactos
+        }
+      } else if (state.route === "recordatorios") html = await viewRecordatorios();
       else html = await viewDashboard();
     } catch (ex) {
       html = `<div class="panel empty"><strong>Error</strong>${escapeHtml(ex.message)}</div>`;
@@ -2016,6 +2401,9 @@
       } catch (_) {
         /* ignore */
       }
+    }
+    if (state.route === "cajas" && state.cajaDash) {
+      paintCajaCharts(state.cajaDash);
     }
   }
 

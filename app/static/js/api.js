@@ -190,6 +190,10 @@ const API = {
   deleteCaja(id) {
     return this.request(`/api/cajas/${id}`, { method: "DELETE" });
   },
+  dashboardCajas(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/cajas/dashboard${qs ? `?${qs}` : ""}`);
+  },
   listMovimientosCaja(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/cajas/movimientos${qs ? `?${qs}` : ""}`);
@@ -202,5 +206,27 @@ const API = {
   },
   deleteMovimientoCaja(id) {
     return this.request(`/api/cajas/movimientos/${id}`, { method: "DELETE" });
+  },
+  listContactos(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/contactos${qs ? `?${qs}` : ""}`);
+  },
+  createContacto(body) {
+    return this.request("/api/contactos", { method: "POST", body: JSON.stringify(body) });
+  },
+  updateContacto(id, body) {
+    return this.request(`/api/contactos/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  deleteContacto(id) {
+    return this.request(`/api/contactos/${id}`, { method: "DELETE" });
+  },
+  importarContactos(contactos) {
+    return this.request("/api/contactos/importar", {
+      method: "POST",
+      body: JSON.stringify({ contactos }),
+    });
+  },
+  contactoACliente(id) {
+    return this.request(`/api/contactos/${id}/a-cliente`, { method: "POST" });
   },
 };

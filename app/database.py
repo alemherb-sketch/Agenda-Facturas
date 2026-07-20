@@ -65,6 +65,15 @@ def ensure_schema() -> None:
                 conn.exec_driver_sql(
                     "ALTER TABLE comprobante_items ADD COLUMN aplica_igv BOOLEAN DEFAULT 1"
                 )
+
+            mov_cols = {
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(movimientos_caja)").fetchall()
+            }
+            if mov_cols and "numero_transaccion" not in mov_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE movimientos_caja ADD COLUMN numero_transaccion VARCHAR(80)"
+                )
         else:
             conn.exec_driver_sql(
                 "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(32)"
@@ -74,4 +83,7 @@ def ensure_schema() -> None:
             )
             conn.exec_driver_sql(
                 "ALTER TABLE comprobante_items ADD COLUMN IF NOT EXISTS aplica_igv BOOLEAN DEFAULT TRUE"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS numero_transaccion VARCHAR(80)"
             )

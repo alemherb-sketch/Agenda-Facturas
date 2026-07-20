@@ -290,6 +290,7 @@ class MovimientoCajaCreate(BaseModel):
     caja_id: int
     tipo: TipoMovimientoCaja
     monto: Decimal = Field(gt=0)
+    numero_transaccion: str | None = Field(default=None, max_length=80)
     concepto: str = Field(min_length=1, max_length=300)
     fecha: date
 
@@ -298,6 +299,7 @@ class MovimientoCajaUpdate(BaseModel):
     caja_id: int | None = None
     tipo: TipoMovimientoCaja | None = None
     monto: Decimal | None = Field(default=None, gt=0)
+    numero_transaccion: str | None = Field(default=None, max_length=80)
     concepto: str | None = Field(default=None, min_length=1, max_length=300)
     fecha: date | None = None
 
@@ -310,6 +312,75 @@ class MovimientoCajaOut(BaseModel):
     caja_nombre: str
     tipo: TipoMovimientoCaja
     monto: Decimal
+    numero_transaccion: str | None = None
     concepto: str
     fecha: date
     creado_en: datetime
+
+
+class CajaDashboardOut(BaseModel):
+    fecha_desde: date
+    fecha_hasta: date
+    total_ingresos: Decimal = Decimal("0.00")
+    total_egresos: Decimal = Decimal("0.00")
+    saldo_periodo: Decimal = Decimal("0.00")
+    cantidad_movimientos: int = 0
+    por_caja: list[dict] = []
+    por_dia: list[dict] = []
+    movimientos: list[MovimientoCajaOut] = []
+
+
+class ContactoCreate(BaseModel):
+    nombre: str = Field(min_length=1, max_length=200)
+    telefono: str | None = Field(default=None, max_length=40)
+    telefono_alt: str | None = Field(default=None, max_length=40)
+    email: str | None = Field(default=None, max_length=180)
+    empresa: str | None = Field(default=None, max_length=200)
+    notas: str | None = Field(default=None, max_length=500)
+    origen: str = "manual"
+
+
+class ContactoUpdate(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1, max_length=200)
+    telefono: str | None = Field(default=None, max_length=40)
+    telefono_alt: str | None = Field(default=None, max_length=40)
+    email: str | None = Field(default=None, max_length=180)
+    empresa: str | None = Field(default=None, max_length=200)
+    notas: str | None = Field(default=None, max_length=500)
+    activo: bool | None = None
+
+
+class ContactoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nombre: str
+    telefono: str | None = None
+    telefono_alt: str | None = None
+    email: str | None = None
+    empresa: str | None = None
+    notas: str | None = None
+    origen: str = "manual"
+    cliente_id: int | None = None
+    activo: bool = True
+    creado_en: datetime | None = None
+
+
+class ContactoImportItem(BaseModel):
+    nombre: str = Field(min_length=1, max_length=200)
+    telefono: str | None = Field(default=None, max_length=40)
+    telefono_alt: str | None = Field(default=None, max_length=40)
+    email: str | None = Field(default=None, max_length=180)
+    empresa: str | None = Field(default=None, max_length=200)
+
+
+class ContactoImportIn(BaseModel):
+    contactos: list[ContactoImportItem] = Field(min_length=1, max_length=200)
+
+
+class ContactoImportOut(BaseModel):
+    creados: int
+    actualizados: int
+    omitidos: int
+    total: int
+    contactos: list[ContactoOut] = []

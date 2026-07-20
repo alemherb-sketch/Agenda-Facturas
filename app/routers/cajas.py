@@ -1,8 +1,10 @@
+from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
@@ -10,6 +12,7 @@ from app.database import get_db
 from app.models import Caja, MovimientoCaja, TipoMovimientoCaja, Usuario
 from app.schemas import (
     CajaCreate,
+    CajaDashboardOut,
     CajaOut,
     CajaUpdate,
     MovimientoCajaCreate,
@@ -59,6 +62,13 @@ def _caja_out(db: Session, caja: Caja) -> CajaOut:
     )
 
 
+def _clean_numero(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    return text or None
+
+
 def _mov_out(mov: MovimientoCaja) -> MovimientoCajaOut:
     return MovimientoCajaOut(
         id=mov.id,
@@ -66,10 +76,39 @@ def _mov_out(mov: MovimientoCaja) -> MovimientoCajaOut:
         caja_nombre=mov.caja.nombre if mov.caja else "",
         tipo=mov.tipo,
         monto=mov.monto,
+        numero_transaccion=mov.numero_transaccion,
         concepto=mov.concepto,
         fecha=mov.fecha,
         creado_en=mov.creado_en,
     )
+
+
+def _apply_mov_filters(
+    query,
+    *,
+    caja_id: int | None = None,
+    tipo: str | None = None,
+    q: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+):
+    if caja_id:
+        query = query.filter(MovimientoCaja.caja_id == caja_id)
+    if tipo:
+        query = query.filter(MovimientoCaja.tipo == tipo)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            or_(
+                MovimientoCaja.concepto.ilike(like),
+                MovimientoCaja.numero_transaccion.ilike(like),
+            )
+        )
+    if fecha_desde:
+        query = query.filter(MovimientoCaja.fecha >= fecha_desde)
+    if fecha_hasta:
+        query = query.filter(MovimientoCaja.fecha <= fecha_hasta)
+    return query
 
 
 @router.get("", response_model=list[CajaOut])
@@ -104,6 +143,138 @@ def crear_caja(
     db.commit()
     db.refresh(caja)
     return _caja_out(db, caja)
+
+
+@router.get("/dashboard", response_model=CajaDashboardOut)
+def dashboard_cajas(
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    caja_id: int | None = None,
+    tipo: str | None = None,
+    q: str | None = None,
+    limit: int = Query(300, le=500),
+):
+    hoy = date.today()
+    if fecha_hasta is None:
+        fecha_hasta = hoy
+    if fecha_desde is None:
+        fecha_desde = fecha_hasta.replace(day=1)
+    if fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
+
+    query = (
+        db.query(MovimientoCaja)
+        .options(joinedload(MovimientoCaja.caja))
+        .filter(MovimientoCaja.usuario_id == user.id)
+    )
+    query = _apply_mov_filters(
+        query,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
+    totales = (
+        db.query(MovimientoCaja.tipo, func.coalesce(func.sum(MovimientoCaja.monto), 0))
+        .filter(MovimientoCaja.usuario_id == user.id)
+    )
+    totales = _apply_mov_filters(
+        totales,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
+    total_ingresos = Decimal("0.00")
+    total_egresos = Decimal("0.00")
+    for tipo_row, total in totales.group_by(MovimientoCaja.tipo).all():
+        valor = Decimal(str(total))
+        if tipo_row == TipoMovimientoCaja.INGRESO:
+            total_ingresos = valor
+        elif tipo_row == TipoMovimientoCaja.EGRESO:
+            total_egresos = valor
+
+    cantidad = (
+        db.query(func.count(MovimientoCaja.id)).filter(MovimientoCaja.usuario_id == user.id)
+    )
+    cantidad = _apply_mov_filters(
+        cantidad,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    ).scalar() or 0
+
+    movimientos = query.order_by(MovimientoCaja.fecha.desc(), MovimientoCaja.id.desc()).limit(limit).all()
+
+    por_caja_map: dict[str, dict] = defaultdict(
+        lambda: {"ingresos": Decimal("0.00"), "egresos": Decimal("0.00")}
+    )
+    por_dia_map: dict[str, dict] = defaultdict(
+        lambda: {"ingresos": Decimal("0.00"), "egresos": Decimal("0.00")}
+    )
+
+    # Agregados de gráficos sobre el universo filtrado (sin tope de listado)
+    agg_rows = (
+        db.query(MovimientoCaja)
+        .options(joinedload(MovimientoCaja.caja))
+        .filter(MovimientoCaja.usuario_id == user.id)
+    )
+    agg_rows = _apply_mov_filters(
+        agg_rows,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    ).all()
+
+    for mov in agg_rows:
+        monto = Decimal(str(mov.monto))
+        caja_nombre = mov.caja.nombre if mov.caja else f"Caja #{mov.caja_id}"
+        dia = mov.fecha.isoformat()
+        if mov.tipo == TipoMovimientoCaja.INGRESO:
+            por_caja_map[caja_nombre]["ingresos"] += monto
+            por_dia_map[dia]["ingresos"] += monto
+        else:
+            por_caja_map[caja_nombre]["egresos"] += monto
+            por_dia_map[dia]["egresos"] += monto
+
+    por_caja = [
+        {
+            "caja": nombre,
+            "ingresos": float(vals["ingresos"]),
+            "egresos": float(vals["egresos"]),
+            "saldo": float(vals["ingresos"] - vals["egresos"]),
+        }
+        for nombre, vals in sorted(por_caja_map.items())
+    ]
+    por_dia = [
+        {
+            "fecha": dia,
+            "ingresos": float(vals["ingresos"]),
+            "egresos": float(vals["egresos"]),
+            "saldo": float(vals["ingresos"] - vals["egresos"]),
+        }
+        for dia, vals in sorted(por_dia_map.items())
+    ]
+
+    return CajaDashboardOut(
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        total_ingresos=total_ingresos,
+        total_egresos=total_egresos,
+        saldo_periodo=total_ingresos - total_egresos,
+        cantidad_movimientos=int(cantidad),
+        por_caja=por_caja,
+        por_dia=por_dia,
+        movimientos=[_mov_out(m) for m in movimientos],
+    )
 
 
 @router.put("/{caja_id}", response_model=CajaOut)
@@ -154,6 +325,8 @@ def listar_movimientos(
     caja_id: int | None = None,
     tipo: str | None = None,
     q: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
     limit: int = Query(200, le=500),
 ):
     query = (
@@ -162,13 +335,14 @@ def listar_movimientos(
         .filter(MovimientoCaja.usuario_id == user.id)
         .order_by(MovimientoCaja.fecha.desc(), MovimientoCaja.id.desc())
     )
-    if caja_id:
-        query = query.filter(MovimientoCaja.caja_id == caja_id)
-    if tipo:
-        query = query.filter(MovimientoCaja.tipo == tipo)
-    if q:
-        like = f"%{q}%"
-        query = query.filter(MovimientoCaja.concepto.ilike(like))
+    query = _apply_mov_filters(
+        query,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
     return [_mov_out(m) for m in query.limit(limit).all()]
 
 
@@ -186,6 +360,7 @@ def crear_movimiento(
         caja_id=caja.id,
         tipo=payload.tipo,
         monto=payload.monto,
+        numero_transaccion=_clean_numero(payload.numero_transaccion),
         concepto=payload.concepto.strip(),
         fecha=payload.fecha,
     )
@@ -221,6 +396,8 @@ def actualizar_movimiento(
         _get_caja(db, user, data["caja_id"])
     if "concepto" in data and data["concepto"]:
         data["concepto"] = data["concepto"].strip()
+    if "numero_transaccion" in data:
+        data["numero_transaccion"] = _clean_numero(data["numero_transaccion"])
     for key, value in data.items():
         setattr(mov, key, value)
     db.commit()
