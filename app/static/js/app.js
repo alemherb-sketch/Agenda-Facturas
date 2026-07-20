@@ -76,9 +76,8 @@
         <div class="auth-wrap">
           <header class="auth-header">
             <img class="auth-brand-logo" src="/static/img/logo-jaelin.png" alt="JAELIN Transporte & Maquinaria" />
-            <p class="auth-kicker">JAELIN · Transporte & Maquinaria</p>
             <h1 class="auth-logo">Agenda Facturas</h1>
-            <p class="auth-tagline">Comprobantes, agenda telefónica y recordatorios sincronizados en celular y PC.</p>
+            <p class="auth-tagline">Comprobantes, agenda y recordatorios</p>
           </header>
 
           <section class="auth-panel">
