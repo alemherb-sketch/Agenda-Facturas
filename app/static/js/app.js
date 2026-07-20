@@ -1687,7 +1687,7 @@
     };
   }
 
-  function openShareModal(docId, mode) {
+  async function openShareModal(docId, mode) {
     let modal = $("#modal-share");
     if (!modal) {
       modal = document.createElement("div");
@@ -1696,17 +1696,61 @@
       document.body.appendChild(modal);
     }
     modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head"><h2>${mode === "mail" ? "Enviar por correo" : "Compartir por WhatsApp"}</h2><button class="btn btn-ghost btn-sm" id="x">Cerrar</button></div>
+        <div class="empty" style="padding:1.2rem"><p>Cargando agenda…</p></div>
+      </div>`;
+    $("#x").onclick = () => modal.classList.remove("open");
+
+    let contactos = state.contactos || [];
+    try {
+      contactos = await API.listContactos();
+      state.contactos = contactos;
+    } catch (_) {
+      /* keep cached */
+    }
+
+    const doc = (state.docs || []).find((d) => String(d.id) === String(docId));
+    const defaultTel = doc?.cliente_telefono || "";
+    const defaultEmail = doc?.cliente_email || "";
+
     if (mode === "mail") {
+      const conEmail = contactos.filter((c) => c.email);
       modal.innerHTML = `
         <div class="modal">
           <div class="modal-head"><h2>Enviar por correo</h2><button class="btn btn-ghost btn-sm" id="x">Cerrar</button></div>
           <form id="form-mail" class="form-grid">
-            <div class="field full"><label>Correo del destinatario</label><input type="email" name="email" required /></div>
+            <div class="field full">
+              <label>Agenda de contactos</label>
+              <select id="share-contacto">
+                <option value="">Seleccionar contacto…</option>
+                ${conEmail
+                  .map(
+                    (c) =>
+                      `<option value="${escapeHtml(c.email)}" data-nombre="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)} — ${escapeHtml(c.email)}</option>`
+                  )
+                  .join("")}
+              </select>
+              ${
+                conEmail.length
+                  ? ""
+                  : `<small class="field-hint">No hay contactos con email. Agrégalos en Agenda tel.</small>`
+              }
+            </div>
+            <div class="field full"><label>Correo del destinatario</label><input type="email" name="email" id="share-email" required value="${escapeHtml(defaultEmail)}" list="lista-emails-share" /></div>
+            <datalist id="lista-emails-share">
+              ${conEmail.map((c) => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.nombre)}</option>`).join("")}
+            </datalist>
             <div class="field full"><label>Mensaje (opcional)</label><textarea name="mensaje" rows="3"></textarea></div>
             <div class="field full"><button class="btn btn-primary" type="submit">Enviar PDF</button></div>
           </form>
         </div>`;
       $("#x").onclick = () => modal.classList.remove("open");
+      $("#share-contacto")?.addEventListener("change", (e) => {
+        const email = e.target.value;
+        if (email) $("#share-email").value = email;
+      });
       $("#form-mail").onsubmit = async (e) => {
         e.preventDefault();
         const body = Object.fromEntries(new FormData(e.target).entries());
@@ -1718,28 +1762,62 @@
           toast(ex.message);
         }
       };
-    } else {
-      modal.innerHTML = `
-        <div class="modal">
-          <div class="modal-head"><h2>Compartir por WhatsApp</h2><button class="btn btn-ghost btn-sm" id="x">Cerrar</button></div>
-          <form id="form-wa" class="form-grid">
-            <div class="field full"><label>Celular (9 dígitos Perú, opcional)</label><input name="telefono" placeholder="999888777" /></div>
-            <div class="field full"><button class="btn btn-accent" type="submit">Abrir WhatsApp</button></div>
-          </form>
-        </div>`;
-      $("#x").onclick = () => modal.classList.remove("open");
-      $("#form-wa").onsubmit = async (e) => {
-        e.preventDefault();
-        const tel = new FormData(e.target).get("telefono");
-        try {
-          const data = await API.whatsappComprobante(docId, tel);
-          window.open(data.url, "_blank");
-          modal.classList.remove("open");
-        } catch (ex) {
-          toast(ex.message);
-        }
-      };
+      return;
     }
+
+    const conTel = contactos.filter((c) => c.telefono || c.telefono_alt);
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head"><h2>Compartir por WhatsApp</h2><button class="btn btn-ghost btn-sm" id="x">Cerrar</button></div>
+        <form id="form-wa" class="form-grid">
+          <div class="field full">
+            <label>Agenda de contactos</label>
+            <select id="share-contacto">
+              <option value="">Seleccionar contacto…</option>
+              ${conTel
+                .map((c) => {
+                  const tel = c.telefono || c.telefono_alt || "";
+                  return `<option value="${escapeHtml(tel)}" data-nombre="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)} — ${escapeHtml(tel)}</option>`;
+                })
+                .join("")}
+            </select>
+            ${
+              conTel.length
+                ? `<small class="field-hint">Elige un contacto o escribe el número abajo.</small>`
+                : `<small class="field-hint">Sin contactos con teléfono. Ve a <strong>Agenda tel.</strong> o escribe el número.</small>`
+            }
+          </div>
+          <div class="field full">
+            <label>Celular (9 dígitos Perú, opcional)</label>
+            <input name="telefono" id="share-tel" placeholder="999888777" value="${escapeHtml(defaultTel)}" list="lista-tels-share" inputmode="tel" />
+            <datalist id="lista-tels-share">
+              ${conTel
+                .map((c) => {
+                  const tel = c.telefono || c.telefono_alt || "";
+                  return `<option value="${escapeHtml(tel)}">${escapeHtml(c.nombre)}</option>`;
+                })
+                .join("")}
+            </datalist>
+          </div>
+          <div class="field full"><button class="btn btn-accent" type="submit">Abrir WhatsApp</button></div>
+        </form>
+      </div>`;
+    $("#x").onclick = () => modal.classList.remove("open");
+    $("#share-contacto")?.addEventListener("change", (e) => {
+      const tel = e.target.value;
+      if (tel) $("#share-tel").value = tel.replace(/\D/g, "").slice(-9) || tel;
+    });
+    $("#form-wa").onsubmit = async (e) => {
+      e.preventDefault();
+      const tel = new FormData(e.target).get("telefono");
+      try {
+        const data = await API.whatsappComprobante(docId, tel);
+        window.open(data.url, "_blank");
+        modal.classList.remove("open");
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
   }
 
   /* ---------- Bind per view ---------- */
