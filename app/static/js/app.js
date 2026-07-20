@@ -578,7 +578,7 @@
           state.docs.length
             ? `<div class="table-wrap"><table>
               <thead><tr>
-                <th>Documento</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Acciones</th>
+                <th>Documento</th><th>Cliente</th><th>Zona</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Acciones</th>
               </tr></thead>
               <tbody>
               ${state.docs
@@ -586,6 +586,7 @@
                   (d) => `<tr>
                   <td><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></td>
                   <td>${escapeHtml(d.cliente_nombre)}<br><span style="color:var(--muted);font-size:.8rem">${d.cliente_documento || ""}</span></td>
+                  <td>${escapeHtml(d.zona || "—")}</td>
                   <td>${fmtDate(d.fecha_emision)}</td>
                   <td>${money(d.total)}</td>
                   <td>
@@ -712,14 +713,14 @@
             <label>Zona</label>
             <select name="zona">
               <option value="">Seleccionar zona…</option>
-              ${["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio"]
+              ${["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio", "Otros"]
                 .map(
                   (z) =>
                     `<option value="${z}" ${doc?.zona === z ? "selected" : ""}>${z}</option>`
                 )
                 .join("")}
               ${
-                doc?.zona && !["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio"].includes(doc.zona)
+                doc?.zona && !["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio", "Otros"].includes(doc.zona)
                   ? `<option value="${escapeHtml(doc.zona)}" selected>${escapeHtml(doc.zona)} (anterior)</option>`
                   : ""
               }
