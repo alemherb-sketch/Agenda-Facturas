@@ -57,10 +57,21 @@ def ensure_schema() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE usuarios ADD COLUMN notificar_email BOOLEAN DEFAULT 1"
                     )
+
+            item_cols = {
+                row[1] for row in conn.exec_driver_sql("PRAGMA table_info(comprobante_items)").fetchall()
+            }
+            if item_cols and "aplica_igv" not in item_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE comprobante_items ADD COLUMN aplica_igv BOOLEAN DEFAULT 1"
+                )
         else:
             conn.exec_driver_sql(
                 "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(32)"
             )
             conn.exec_driver_sql(
                 "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notificar_email BOOLEAN DEFAULT TRUE"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE comprobante_items ADD COLUMN IF NOT EXISTS aplica_igv BOOLEAN DEFAULT TRUE"
             )

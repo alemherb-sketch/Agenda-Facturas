@@ -18,29 +18,45 @@ def money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def tipo_permite_igv(tipo: TipoDocumento) -> bool:
+    return tipo in TIPOS_CON_IGV
+
+
 def calcular_totales(tipo: TipoDocumento, items: list[ItemCreate]) -> tuple[list[dict], Decimal, Decimal, Decimal]:
+    """
+    Precios con IGV: si el ítem tiene aplica_igv=True, el importe de línea incluye IGV 18%.
+    Ítems sin IGV se suman como operación inafecta/exonerada.
+    """
     detalle = []
-    base = Decimal("0.00")
+    gravado_inc = Decimal("0.00")
+    sin_igv = Decimal("0.00")
+    permite = tipo_permite_igv(tipo)
+
     for item in items:
-        subtotal = money(item.cantidad * item.precio_unitario)
-        base += subtotal
+        line_total = money(item.cantidad * item.precio_unitario)
+        aplica = bool(getattr(item, "aplica_igv", True)) and permite
         detalle.append(
             {
                 "descripcion": item.descripcion,
                 "cantidad": item.cantidad,
                 "precio_unitario": money(item.precio_unitario),
-                "subtotal": subtotal,
+                "subtotal": line_total,
                 "unidad": item.unidad,
+                "aplica_igv": aplica,
             }
         )
+        if aplica:
+            gravado_inc += line_total
+        else:
+            sin_igv += line_total
 
-    if tipo in TIPOS_CON_IGV:
-        # Precios ingresados incluyen IGV (práctica común en negocio peruano)
-        total = money(base)
-        subtotal = money(total / (Decimal("1") + IGV_RATE))
-        igv = money(total - subtotal)
+    if permite and gravado_inc > 0:
+        base_gravada = money(gravado_inc / (Decimal("1") + IGV_RATE))
+        igv = money(gravado_inc - base_gravada)
+        subtotal = money(base_gravada + sin_igv)
+        total = money(gravado_inc + sin_igv)
     else:
-        subtotal = money(base)
+        subtotal = money(gravado_inc + sin_igv)
         igv = Decimal("0.00")
         total = subtotal
 

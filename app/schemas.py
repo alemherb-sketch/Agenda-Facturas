@@ -46,6 +46,7 @@ class ItemCreate(BaseModel):
     cantidad: Decimal = Field(gt=0)
     precio_unitario: Decimal = Field(ge=0)
     unidad: str = "NIU"
+    aplica_igv: bool = True
 
 
 class ItemOut(ItemCreate):

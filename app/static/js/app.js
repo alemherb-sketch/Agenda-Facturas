@@ -543,7 +543,7 @@
   function viewNuevoForm(doc = null) {
     const items = doc?.items?.length
       ? doc.items
-      : [{ descripcion: "", cantidad: 1, precio_unitario: 0, unidad: "NIU" }];
+      : [{ descripcion: "", cantidad: 1, precio_unitario: 0, unidad: "NIU", aplica_igv: true }];
     const today = new Date().toISOString().slice(0, 10);
     return `
       <div class="page-head">
@@ -655,7 +655,14 @@
       </form>`;
   }
 
+  function tipoPermiteIgv(tipo) {
+    return ["factura", "boleta", "nota_credito", "nota_debito", "ticket"].includes(tipo);
+  }
+
   function itemRowHtml(i, it = {}) {
+    const tipo = $("#c-tipo")?.value || "factura";
+    const permite = tipoPermiteIgv(tipo);
+    const checked = it.aplica_igv !== false && permite;
     return `
       <div class="item-row" data-item>
         <div class="field item-desc">
@@ -670,26 +677,57 @@
           ${i === 0 ? "<label>P. unitario</label>" : ""}
           <input data-k="precio_unitario" type="number" min="0" step="0.01" inputmode="decimal" required value="${it.precio_unitario ?? 0}" />
         </div>
+        <div class="field item-igv">
+          ${i === 0 ? "<label>IGV</label>" : ""}
+          <label class="igv-toggle" title="Incluir IGV 18% en este ítem">
+            <input data-k="aplica_igv" type="checkbox" ${checked ? "checked" : ""} ${permite ? "" : "disabled"} />
+            <span>${permite ? "Sí" : "N/A"}</span>
+          </label>
+        </div>
         <button type="button" class="btn btn-danger btn-sm btn-remove-item" title="Quitar">✕</button>
       </div>`;
   }
 
+  function syncItemIgvControls() {
+    const permite = tipoPermiteIgv($("#c-tipo")?.value);
+    $$("[data-item]").forEach((row) => {
+      const chk = $('[data-k="aplica_igv"]', row);
+      const label = $(".igv-toggle span", row);
+      if (!chk) return;
+      chk.disabled = !permite;
+      if (!permite) {
+        chk.checked = false;
+        if (label) label.textContent = "N/A";
+      } else if (label) {
+        label.textContent = chk.checked ? "Sí" : "No";
+      }
+    });
+  }
+
   function recalcItems() {
-    let base = 0;
+    let gravado = 0;
+    let sinIgv = 0;
+    const tipo = $("#c-tipo")?.value;
+    const permite = tipoPermiteIgv(tipo);
     $$("[data-item]").forEach((row) => {
       const cant = Number($('[data-k="cantidad"]', row).value || 0);
       const pu = Number($('[data-k="precio_unitario"]', row).value || 0);
-      base += cant * pu;
+      const line = cant * pu;
+      const chk = $('[data-k="aplica_igv"]', row);
+      const aplica = permite && chk?.checked;
+      if (aplica) gravado += line;
+      else sinIgv += line;
+      const label = $(".igv-toggle span", row);
+      if (label && permite) label.textContent = chk?.checked ? "Sí" : "No";
     });
-    const tipo = $("#c-tipo")?.value;
-    const conIgv = ["factura", "boleta", "nota_credito", "nota_debito", "ticket"].includes(tipo);
-    let sub = base;
+    let sub = gravado + sinIgv;
     let igv = 0;
-    let total = base;
-    if (conIgv) {
-      total = base;
-      sub = total / 1.18;
-      igv = total - sub;
+    let total = gravado + sinIgv;
+    if (permite && gravado > 0) {
+      const baseGravada = gravado / 1.18;
+      igv = gravado - baseGravada;
+      sub = baseGravada + sinIgv;
+      total = gravado + sinIgv;
     }
     $("#t-sub").textContent = money(sub);
     $("#t-igv").textContent = money(igv);
@@ -1253,6 +1291,7 @@
       tipo?.addEventListener("change", () => {
         const opt = tipo.selectedOptions[0];
         if (opt && !state.editingDoc) $("#c-serie").value = opt.dataset.serie || "F001";
+        syncItemIgvControls();
         recalcItems();
       });
       $("#btn-add-item")?.addEventListener("click", () => {
@@ -1269,17 +1308,20 @@
       $("#c-documento")?.addEventListener("change", fillClienteFromCatalog);
       $("#c-cliente")?.addEventListener("change", fillClienteFromCatalog);
       bindItemEvents();
+      syncItemIgvControls();
       recalcItems();
       $("#form-comprobante")?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const fd = new FormData(e.target);
         const body = Object.fromEntries(fd.entries());
         if (!body.fecha_vencimiento) body.fecha_vencimiento = null;
+        const permiteIgv = tipoPermiteIgv(body.tipo);
         body.items = $$("[data-item]").map((row) => ({
           descripcion: $('[data-k="descripcion"]', row).value,
           cantidad: Number($('[data-k="cantidad"]', row).value),
           precio_unitario: Number($('[data-k="precio_unitario"]', row).value),
           unidad: "NIU",
+          aplica_igv: permiteIgv && Boolean($('[data-k="aplica_igv"]', row)?.checked),
         }));
         try {
           if (state.editingDoc) {
@@ -1424,6 +1466,7 @@
     });
     $$("[data-item] input").forEach((inp) => {
       inp.oninput = recalcItems;
+      inp.onchange = recalcItems;
       if (inp.dataset.k === "descripcion") {
         inp.addEventListener("change", () => {
           const prod = state.productos.find(

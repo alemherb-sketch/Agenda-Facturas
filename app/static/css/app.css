@@ -342,7 +342,7 @@ select.estado-quick:disabled { opacity: 0.65; cursor: wait; }
 .items-editor { display: grid; gap: 0.6rem; min-width: 0; }
 .item-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.7fr) minmax(0, 0.8fr) auto;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.55fr) minmax(0, 0.7fr) minmax(3.2rem, 0.45fr) auto;
   gap: 0.45rem;
   align-items: end;
   width: 100%;
@@ -356,6 +356,33 @@ select.estado-quick:disabled { opacity: 0.65; cursor: wait; }
   width: 2.5rem;
   flex-shrink: 0;
   justify-self: end;
+}
+.item-igv .igv-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--brand);
+  user-select: none;
+}
+.item-igv .igv-toggle input {
+  width: auto;
+  min-width: 1rem;
+  margin: 0;
+  accent-color: var(--brand-2);
+}
+.item-igv .igv-toggle:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--muted);
 }
 .totals-box {
   margin-top: 0.8rem;
@@ -721,7 +748,7 @@ select.estado-quick:disabled { opacity: 0.65; cursor: wait; }
   .charts { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: minmax(0, 1fr); }
   .item-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(3.6rem, auto);
   }
   .item-row .item-desc { grid-column: 1 / -1; }
   .item-row .btn-remove-item {

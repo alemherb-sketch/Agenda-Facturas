@@ -74,19 +74,21 @@ def generar_pdf_comprobante(comprobante: Comprobante, emisor: Usuario) -> bytes:
     story.append(info_table)
     story.append(Spacer(1, 10))
 
-    rows = [["#", "Descripción", "Cant.", "P. Unit.", "Subtotal"]]
+    rows = [["#", "Descripción", "Cant.", "P. Unit.", "IGV", "Subtotal"]]
     for idx, item in enumerate(comprobante.items, start=1):
+        aplica = bool(getattr(item, "aplica_igv", True))
         rows.append(
             [
                 str(idx),
                 item.descripcion,
                 f"{float(item.cantidad):,.3f}".rstrip("0").rstrip("."),
                 f"S/ {float(item.precio_unitario):,.2f}",
+                "Sí" if aplica else "No",
                 f"S/ {float(item.subtotal):,.2f}",
             ]
         )
 
-    items_table = Table(rows, colWidths=[10 * mm, 90 * mm, 25 * mm, 30 * mm, 30 * mm])
+    items_table = Table(rows, colWidths=[10 * mm, 78 * mm, 22 * mm, 28 * mm, 14 * mm, 28 * mm])
     items_table.setStyle(
         TableStyle(
             [

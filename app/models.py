@@ -150,6 +150,7 @@ class ComprobanteItem(Base):
     precio_unitario: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     unidad: Mapped[str] = mapped_column(String(20), default="NIU")
+    aplica_igv: Mapped[bool] = mapped_column(Boolean, default=True)
 
     comprobante: Mapped[Comprobante] = relationship(back_populates="items")
 
