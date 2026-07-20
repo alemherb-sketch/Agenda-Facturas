@@ -710,7 +710,20 @@
           </div>
           <div class="field">
             <label>Zona</label>
-            <input name="zona" maxlength="120" value="${escapeHtml(doc?.zona || "")}" placeholder="Ej. Lima Norte, Callao, Arequipa" />
+            <select name="zona">
+              <option value="">Seleccionar zona…</option>
+              ${["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio"]
+                .map(
+                  (z) =>
+                    `<option value="${z}" ${doc?.zona === z ? "selected" : ""}>${z}</option>`
+                )
+                .join("")}
+              ${
+                doc?.zona && !["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio"].includes(doc.zona)
+                  ? `<option value="${escapeHtml(doc.zona)}" selected>${escapeHtml(doc.zona)} (anterior)</option>`
+                  : ""
+              }
+            </select>
           </div>
           <div class="field">
             <label>Motivo</label>
