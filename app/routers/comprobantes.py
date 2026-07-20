@@ -104,6 +104,8 @@ def crear(
         moneda=payload.moneda,
         estado=payload.estado,
         observaciones=payload.observaciones,
+        zona=(payload.zona or "").strip() or None,
+        motivo=(payload.motivo or "").strip() or None,
         cliente_nombre=payload.cliente_nombre,
         cliente_documento=payload.cliente_documento,
     )
@@ -134,6 +136,9 @@ def actualizar(
     doc = _get_owned(db, user, comprobante_id)
     data = payload.model_dump(exclude_unset=True)
     items = data.pop("items", None)
+    for key in ("zona", "motivo", "observaciones"):
+        if key in data and isinstance(data[key], str):
+            data[key] = data[key].strip() or None
     for key, value in data.items():
         setattr(doc, key, value.upper() if key == "serie" and isinstance(value, str) else value)
 

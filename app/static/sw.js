@@ -1,9 +1,9 @@
-const CACHE = "agenda-facturas-v18";
+const CACHE = "agenda-facturas-v19";
 const ASSETS = [
   "/",
-  "/static/css/app.css?v=18",
-  "/static/js/api.js?v=18",
-  "/static/js/app.js?v=18",
+  "/static/css/app.css?v=19",
+  "/static/js/api.js?v=19",
+  "/static/js/app.js?v=19",
   "/static/img/logo-jaelin.png",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",

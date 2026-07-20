@@ -74,6 +74,16 @@ def ensure_schema() -> None:
                 conn.exec_driver_sql(
                     "ALTER TABLE movimientos_caja ADD COLUMN numero_transaccion VARCHAR(80)"
                 )
+
+            comp_cols = {
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(comprobantes)").fetchall()
+            }
+            if comp_cols:
+                if "zona" not in comp_cols:
+                    conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN zona VARCHAR(120)")
+                if "motivo" not in comp_cols:
+                    conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN motivo VARCHAR(300)")
         else:
             conn.exec_driver_sql(
                 "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(32)"
@@ -86,4 +96,10 @@ def ensure_schema() -> None:
             )
             conn.exec_driver_sql(
                 "ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS numero_transaccion VARCHAR(80)"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS zona VARCHAR(120)"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS motivo VARCHAR(300)"
             )

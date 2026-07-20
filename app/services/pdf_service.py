@@ -58,6 +58,12 @@ def generar_pdf_comprobante(comprobante: Comprobante, emisor: Usuario) -> bytes:
     ]
     if comprobante.fecha_vencimiento:
         info.append(["Vencimiento:", comprobante.fecha_vencimiento.strftime("%d/%m/%Y")])
+    zona = getattr(comprobante, "zona", None)
+    motivo = getattr(comprobante, "motivo", None)
+    if zona:
+        info.append(["Zona:", zona])
+    if motivo:
+        info.append(["Motivo:", motivo])
 
     info_table = Table(info, colWidths=[40 * mm, 130 * mm])
     info_table.setStyle(

@@ -65,6 +65,8 @@ class ComprobanteCreate(BaseModel):
     moneda: str = "PEN"
     estado: EstadoComprobante = EstadoComprobante.EMITIDO
     observaciones: str | None = None
+    zona: str | None = Field(default=None, max_length=120)
+    motivo: str | None = Field(default=None, max_length=300)
     cliente_nombre: str = Field(min_length=1, max_length=200)
     cliente_documento: str | None = None
     cliente_email: str | None = None
@@ -81,6 +83,8 @@ class ComprobanteUpdate(BaseModel):
     moneda: str | None = None
     estado: EstadoComprobante | None = None
     observaciones: str | None = None
+    zona: str | None = Field(default=None, max_length=120)
+    motivo: str | None = Field(default=None, max_length=300)
     cliente_nombre: str | None = None
     cliente_documento: str | None = None
     items: list[ItemCreate] | None = None
@@ -101,6 +105,8 @@ class ComprobanteOut(BaseModel):
     total: Decimal
     estado: EstadoComprobante
     observaciones: str | None
+    zona: str | None = None
+    motivo: str | None = None
     cliente_nombre: str
     cliente_documento: str | None
     items: list[ItemOut]

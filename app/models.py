@@ -138,6 +138,8 @@ class Comprobante(Base):
         Enum(EstadoComprobante, native_enum=False), default=EstadoComprobante.EMITIDO
     )
     observaciones: Mapped[str | None] = mapped_column(Text)
+    zona: Mapped[str | None] = mapped_column(String(120))
+    motivo: Mapped[str | None] = mapped_column(String(300))
     cliente_nombre: Mapped[str] = mapped_column(String(200), nullable=False)
     cliente_documento: Mapped[str | None] = mapped_column(String(15))
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

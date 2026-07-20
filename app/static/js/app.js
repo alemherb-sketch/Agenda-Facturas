@@ -708,6 +708,14 @@
             <label>Teléfono / WhatsApp</label>
             <input name="cliente_telefono" placeholder="999888777" value="${escapeHtml(clienteTel)}" />
           </div>
+          <div class="field">
+            <label>Zona</label>
+            <input name="zona" maxlength="120" value="${escapeHtml(doc?.zona || "")}" placeholder="Ej. Lima Norte, Callao, Arequipa" />
+          </div>
+          <div class="field">
+            <label>Motivo</label>
+            <input name="motivo" maxlength="300" value="${escapeHtml(doc?.motivo || "")}" placeholder="Ej. Servicio de transporte, alquiler de maquinaria" />
+          </div>
           <div class="field full">
             <label>Observaciones</label>
             <textarea name="observaciones" rows="2">${escapeHtml(doc?.observaciones || "")}</textarea>
@@ -1921,6 +1929,9 @@
         const fd = new FormData(e.target);
         const body = Object.fromEntries(fd.entries());
         if (!body.fecha_vencimiento) body.fecha_vencimiento = null;
+        body.zona = (body.zona || "").trim() || null;
+        body.motivo = (body.motivo || "").trim() || null;
+        body.observaciones = (body.observaciones || "").trim() || null;
         const permiteIgv = tipoPermiteIgv(body.tipo);
         body.items = $$("[data-item]").map((row) => ({
           descripcion: $('[data-k="descripcion"]', row).value,
