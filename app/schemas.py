@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models import EstadoComprobante, TipoAgenda, TipoDocumento, TipoMovimientoCaja
+from app.models import EstadoComprobante, TipoAgenda, TipoDocumento, TipoMovimientoCaja, TipoMovimientoCombustible
 
 
 class UsuarioCreate(BaseModel):
@@ -390,3 +390,45 @@ class ContactoImportOut(BaseModel):
     omitidos: int
     total: int
     contactos: list[ContactoOut] = []
+
+
+class MovimientoCombustibleCreate(BaseModel):
+    tipo: TipoMovimientoCombustible
+    galones: Decimal = Field(gt=0)
+    fecha: date
+    conductor: str = Field(min_length=1, max_length=150)
+    marca: str | None = Field(default=None, max_length=80)
+    placa: str | None = Field(default=None, max_length=20)
+    notas: str | None = Field(default=None, max_length=300)
+
+
+class MovimientoCombustibleUpdate(BaseModel):
+    tipo: TipoMovimientoCombustible | None = None
+    galones: Decimal | None = Field(default=None, gt=0)
+    fecha: date | None = None
+    conductor: str | None = Field(default=None, min_length=1, max_length=150)
+    marca: str | None = Field(default=None, max_length=80)
+    placa: str | None = Field(default=None, max_length=20)
+    notas: str | None = Field(default=None, max_length=300)
+
+
+class MovimientoCombustibleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tipo: TipoMovimientoCombustible
+    galones: Decimal
+    fecha: date
+    conductor: str
+    marca: str | None = None
+    placa: str | None = None
+    notas: str | None = None
+    creado_en: datetime
+
+
+class CombustibleResumenOut(BaseModel):
+    total_ingresos: Decimal = Decimal("0.000")
+    total_salidas: Decimal = Decimal("0.000")
+    saldo_galones: Decimal = Decimal("0.000")
+    cantidad_movimientos: int = 0
+    movimientos: list[MovimientoCombustibleOut] = []

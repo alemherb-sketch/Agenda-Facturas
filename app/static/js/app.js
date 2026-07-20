@@ -13,8 +13,11 @@
     movimientosCaja: [],
     cajaDash: null,
     contactos: [],
+    combustibles: [],
+    combustibleResumen: null,
     filtersCaja: { caja_id: "", tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
     filtersContacto: { q: "" },
+    filtersCombustible: { tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
     draftFromContact: null,
     charts: { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null },
     editingDoc: null,
@@ -33,6 +36,10 @@
   const agendaLabel = (v) => state.meta?.tipos_agenda.find((t) => t.value === v)?.label || v;
   const movCajaLabel = (v) =>
     state.meta?.tipos_movimiento_caja?.find((t) => t.value === v)?.label || v;
+  const movCombustibleLabel = (v) =>
+    state.meta?.tipos_movimiento_combustible?.find((t) => t.value === v)?.label || v;
+  const galones = (n) =>
+    `${Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} gal`;
 
   function toast(msg) {
     let wrap = $(".toast-wrap");
@@ -243,6 +250,7 @@
       clients: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm6 1.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6ZM3.5 19.5c0-2.8 2.7-5 5.5-5s5.5 2.2 5.5 5V20H3.5v-.5Zm11.2-.5c0-1.5.6-2.8 1.6-3.7 1 .5 2.1.7 3.2.7 1.4 0 2.7-.4 3.8-1.1v4.1h-8.6V19Z"/></svg>`,
       box: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.8 7.2 12 3l8.2 4.2v9.6L12 21l-8.2-4.2V7.2Zm8.2 1.1 6.2-3.2L12 4.4 5.8 7.6 12 8.3Zm-6.7.9v7.4L11 20v-8.2L5.3 9.2Zm13.4 0L13 11.8V20l5.7-2.9V9.2Z"/></svg>`,
       cash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9ZM12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Zm-7.2-6.5h2.2v-.9H4.8v.9Zm12.4 0h2.2v-.9h-2.2v.9Zm-12.4 8.1h2.2v-.9H4.8v.9Zm12.4 0h2.2v-.9h-2.2v.9Z"/></svg>`,
+      fuel: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h7.5A1.5 1.5 0 0 1 15 5v12.5a2.5 2.5 0 0 1-2.5 2.5h-4A2.5 2.5 0 0 1 6 17.5V5A1.5 1.5 0 0 1 7.5 3.5H6Zm9.5 3.2 2.2 2.2v7.6a1.8 1.8 0 1 0 1.8-1.8h-.3V9.2L16.8 6.7h-1.3V6.7ZM8 8h4.5v2H8V8Z"/></svg>`,
       bell: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.2 2.2 0 0 0 2.1-1.6H9.9A2.2 2.2 0 0 0 12 22Zm7-5.2V11a7 7 0 1 0-14 0v5.8L3 19v1h18v-1l-2-2.2Z"/></svg>`,
       phone: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 3.8c.5-.5 1.3-.6 1.9-.2l2 1.3c.6.4.8 1.2.5 1.8l-.9 1.8a1.4 1.4 0 0 0 .3 1.6l2.9 2.9c.4.4 1 .5 1.6.3l1.8-.9c.6-.3 1.4-.1 1.8.5l1.3 2c.4.6.3 1.4-.2 1.9l-1.2 1.2c-.6.6-1.5.9-2.4.7-2.2-.4-4.7-1.9-7.3-4.5S5.4 10.2 5 8c-.2-.9.1-1.8.7-2.4L8.2 3.8Z"/></svg>`,
     };
@@ -250,7 +258,7 @@
   }
 
   function mobileNavHtml() {
-    const moreActive = ["clientes", "productos", "cajas", "contactos", "recordatorios"].includes(state.route);
+    const moreActive = ["clientes", "productos", "cajas", "combustibles", "contactos", "recordatorios"].includes(state.route);
     const items = [
       ["dashboard", "home", "Inicio"],
       ["comprobantes", "docs", "Docs"],
@@ -273,6 +281,7 @@
       ["contactos", "phone", "Teléfonos"],
       ["productos", "box", "Productos"],
       ["cajas", "cash", "Cajas"],
+      ["combustibles", "fuel", "Combustibles"],
       ["recordatorios", "bell", "Avisos"],
     ];
     return items
@@ -292,6 +301,7 @@
       ["contactos", "📞", "Agenda tel."],
       ["productos", "📦", "Productos"],
       ["cajas", "💵", "Cajas"],
+      ["combustibles", "⛽", "Combustibles"],
       ["nuevo", "＋", "Nuevo"],
       ["agenda", "📅", "Agenda"],
       ["recordatorios", "⏰", "Avisos"],
@@ -1230,6 +1240,145 @@
       </div>
       <div class="modal-backdrop" id="modal-caja"></div>
       <div class="modal-backdrop" id="modal-mov" data-today="${today}"></div>`;
+  }
+
+  async function viewCombustibles() {
+    const params = {};
+    if (state.filtersCombustible.tipo) params.tipo = state.filtersCombustible.tipo;
+    if (state.filtersCombustible.q) params.q = state.filtersCombustible.q;
+    if (state.filtersCombustible.fecha_desde) params.fecha_desde = state.filtersCombustible.fecha_desde;
+    if (state.filtersCombustible.fecha_hasta) params.fecha_hasta = state.filtersCombustible.fecha_hasta;
+    const resumen = await API.resumenCombustibles(params);
+    state.combustibleResumen = resumen;
+    state.combustibles = resumen.movimientos || [];
+    const today = new Date().toISOString().slice(0, 10);
+
+    return `
+      <div class="page-head">
+        <div>
+          <h1>Combustibles</h1>
+          <p>Control de ingresos y salidas de combustible (galones) por vehículo.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-combustible">＋ Movimiento</button>
+      </div>
+      <div class="toolbar panel">
+        <select id="f-comb-tipo">
+          <option value="">Todos</option>
+          <option value="ingreso" ${state.filtersCombustible.tipo === "ingreso" ? "selected" : ""}>Ingresos</option>
+          <option value="salida" ${state.filtersCombustible.tipo === "salida" ? "selected" : ""}>Salidas</option>
+        </select>
+        <input id="f-comb-desde" type="date" title="Desde" value="${escapeHtml(state.filtersCombustible.fecha_desde)}" />
+        <input id="f-comb-hasta" type="date" title="Hasta" value="${escapeHtml(state.filtersCombustible.fecha_hasta)}" />
+        <input id="f-comb-q" placeholder="Conductor, marca o placa..." value="${escapeHtml(state.filtersCombustible.q)}" style="flex:1;min-width:160px" />
+        <button class="btn btn-secondary" id="btn-filtrar-comb">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-limpiar-comb">Limpiar</button>
+      </div>
+      <div class="grid-stats">
+        <div class="stat ok"><label>Ingresos</label><strong>${galones(resumen.total_ingresos)}</strong></div>
+        <div class="stat warn"><label>Salidas</label><strong>${galones(resumen.total_salidas)}</strong></div>
+        <div class="stat"><label>Saldo disponible</label><strong>${galones(resumen.saldo_galones)}</strong></div>
+        <div class="stat"><label>Registros</label><strong>${resumen.cantidad_movimientos}</strong></div>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        ${
+          state.combustibles.length
+            ? `<div class="table-wrap"><table>
+              <thead><tr>
+                <th>Fecha</th><th>Tipo</th><th>Galones</th><th>Conductor</th><th>Marca</th><th>Placa</th><th>Acciones</th>
+              </tr></thead>
+              <tbody>
+              ${state.combustibles
+                .map(
+                  (m) => `<tr>
+                  <td>${fmtDate(m.fecha)}</td>
+                  <td><span class="badge ${m.tipo === "ingreso" ? "pagado" : "anulado"}">${movCombustibleLabel(m.tipo)}</span></td>
+                  <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "salida" ? "−" : "+"}${galones(m.galones)}</strong></td>
+                  <td>${escapeHtml(m.conductor)}</td>
+                  <td>${escapeHtml(m.marca || "—")}</td>
+                  <td><strong>${escapeHtml(m.placa || "—")}</strong></td>
+                  <td class="actions">
+                    <button class="btn btn-secondary btn-sm" data-comb-edit="${m.id}">Editar</button>
+                    <button class="btn btn-danger btn-sm" data-comb-del="${m.id}">Eliminar</button>
+                  </td>
+                </tr>`
+                )
+                .join("")}
+              </tbody></table></div>`
+            : `<div class="empty"><strong>Sin movimientos</strong>Registra un ingreso o salida de combustible.</div>`
+        }
+      </div>
+      <div class="modal-backdrop" id="modal-combustible" data-today="${today}"></div>`;
+  }
+
+  function openCombustibleModal(mov = null) {
+    const modal = $("#modal-combustible");
+    if (!modal) return;
+    const today = modal.dataset.today || new Date().toISOString().slice(0, 10);
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head">
+          <h2>${mov ? "Editar movimiento" : "Nuevo movimiento de combustible"}</h2>
+          <button class="btn btn-ghost btn-sm" id="close-comb">Cerrar</button>
+        </div>
+        <form id="form-combustible" class="form-grid">
+          <div class="field">
+            <label>Tipo</label>
+            <select name="tipo" required>
+              <option value="ingreso" ${!mov || mov?.tipo === "ingreso" ? "selected" : ""}>Ingreso (galones)</option>
+              <option value="salida" ${mov?.tipo === "salida" ? "selected" : ""}>Salida (galones)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Galones</label>
+            <input name="galones" type="number" min="0.001" step="0.001" required value="${mov?.galones ?? ""}" placeholder="0.000" />
+          </div>
+          <div class="field">
+            <label>Fecha</label>
+            <input name="fecha" type="date" required value="${mov?.fecha || today}" />
+          </div>
+          <div class="field">
+            <label>Conductor</label>
+            <input name="conductor" required maxlength="150" value="${escapeHtml(mov?.conductor || "")}" placeholder="Nombre del conductor" />
+          </div>
+          <div class="field">
+            <label>Marca del vehículo</label>
+            <input name="marca" maxlength="80" value="${escapeHtml(mov?.marca || "")}" placeholder="Ej. Volvo, Toyota" />
+          </div>
+          <div class="field">
+            <label>Placa</label>
+            <input name="placa" maxlength="20" value="${escapeHtml(mov?.placa || "")}" placeholder="ABC-123" style="text-transform:uppercase" />
+          </div>
+          <div class="field full">
+            <label>Notas (opcional)</label>
+            <input name="notas" maxlength="300" value="${escapeHtml(mov?.notas || "")}" placeholder="Detalle adicional" />
+          </div>
+          <div class="field full">
+            <button class="btn btn-primary" type="submit">${mov ? "Guardar" : "Registrar"}</button>
+          </div>
+        </form>
+      </div>`;
+    $("#close-comb").onclick = () => modal.classList.remove("open");
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.classList.remove("open");
+    };
+    $("#form-combustible").onsubmit = async (e) => {
+      e.preventDefault();
+      const body = Object.fromEntries(new FormData(e.target).entries());
+      body.galones = Number(body.galones);
+      body.marca = (body.marca || "").trim() || null;
+      body.placa = (body.placa || "").trim().toUpperCase() || null;
+      body.notas = (body.notas || "").trim() || null;
+      try {
+        if (mov) await API.updateCombustible(mov.id, body);
+        else await API.createCombustible(body);
+        toast(mov ? "Movimiento actualizado" : "Movimiento registrado");
+        modal.classList.remove("open");
+        renderApp();
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
   }
 
   function openCajaModal(caja = null) {
@@ -2221,6 +2370,35 @@
         })
       );
     }
+
+    if (state.route === "combustibles") {
+      $("#btn-new-combustible")?.addEventListener("click", () => openCombustibleModal());
+      $("#btn-filtrar-comb")?.addEventListener("click", () => {
+        state.filtersCombustible.tipo = $("#f-comb-tipo")?.value || "";
+        state.filtersCombustible.q = ($("#f-comb-q")?.value || "").trim();
+        state.filtersCombustible.fecha_desde = $("#f-comb-desde")?.value || "";
+        state.filtersCombustible.fecha_hasta = $("#f-comb-hasta")?.value || "";
+        renderApp();
+      });
+      $("#btn-limpiar-comb")?.addEventListener("click", () => {
+        state.filtersCombustible = { tipo: "", q: "", fecha_desde: "", fecha_hasta: "" };
+        renderApp();
+      });
+      $$("[data-comb-edit]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const mov = state.combustibles.find((m) => m.id === Number(b.dataset.combEdit));
+          openCombustibleModal(mov);
+        })
+      );
+      $$("[data-comb-del]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (!confirm("¿Eliminar este movimiento de combustible?")) return;
+          await API.deleteCombustible(b.dataset.combDel);
+          toast("Movimiento eliminado");
+          renderApp();
+        })
+      );
+    }
   }
 
   function bindItemEvents() {
@@ -2487,6 +2665,7 @@
       else if (state.route === "contactos") html = await viewContactos();
       else if (state.route === "productos") html = await viewProductos();
       else if (state.route === "cajas") html = await viewCajas();
+      else if (state.route === "combustibles") html = await viewCombustibles();
       else if (state.route === "nuevo") {
         const editId = params.id ? Number(params.id) : null;
         const [clientes, productos, doc] = await Promise.all([

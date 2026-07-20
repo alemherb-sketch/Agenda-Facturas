@@ -229,4 +229,21 @@ const API = {
   contactoACliente(id) {
     return this.request(`/api/contactos/${id}/a-cliente`, { method: "POST" });
   },
+  resumenCombustibles(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/combustibles/resumen${qs ? `?${qs}` : ""}`);
+  },
+  listCombustibles(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/combustibles${qs ? `?${qs}` : ""}`);
+  },
+  createCombustible(body) {
+    return this.request("/api/combustibles", { method: "POST", body: JSON.stringify(body) });
+  },
+  updateCombustible(id, body) {
+    return this.request(`/api/combustibles/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  deleteCombustible(id) {
+    return this.request(`/api/combustibles/${id}`, { method: "DELETE" });
+  },
 };

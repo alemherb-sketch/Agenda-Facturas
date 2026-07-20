@@ -51,6 +51,11 @@ class TipoMovimientoCaja(str, enum.Enum):
     EGRESO = "egreso"
 
 
+class TipoMovimientoCombustible(str, enum.Enum):
+    INGRESO = "ingreso"
+    SALIDA = "salida"
+
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -79,6 +84,9 @@ class Usuario(Base):
         back_populates="usuario", cascade="all, delete-orphan"
     )
     contactos: Mapped[list[Contacto]] = relationship(
+        back_populates="usuario", cascade="all, delete-orphan"
+    )
+    movimientos_combustible: Mapped[list[MovimientoCombustible]] = relationship(
         back_populates="usuario", cascade="all, delete-orphan"
     )
 
@@ -284,3 +292,22 @@ class Contacto(Base):
 
     usuario: Mapped[Usuario] = relationship(back_populates="contactos")
     cliente: Mapped[Cliente | None] = relationship()
+
+
+class MovimientoCombustible(Base):
+    __tablename__ = "movimientos_combustible"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    tipo: Mapped[TipoMovimientoCombustible] = mapped_column(
+        Enum(TipoMovimientoCombustible, native_enum=False), nullable=False
+    )
+    galones: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    conductor: Mapped[str] = mapped_column(String(150), nullable=False)
+    marca: Mapped[str | None] = mapped_column(String(80))
+    placa: Mapped[str | None] = mapped_column(String(20))
+    notas: Mapped[str | None] = mapped_column(String(300))
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    usuario: Mapped[Usuario] = relationship(back_populates="movimientos_combustible")
