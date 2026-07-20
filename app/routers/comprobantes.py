@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 from urllib.parse import quote
 
@@ -53,6 +54,9 @@ def listar(
     db: Annotated[Session, Depends(get_db)],
     estado: str | None = None,
     tipo: str | None = None,
+    zona: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
     q: str | None = None,
     limit: int = Query(100, le=500),
 ):
@@ -66,6 +70,14 @@ def listar(
         query = query.filter(Comprobante.estado == estado)
     if tipo:
         query = query.filter(Comprobante.tipo == tipo)
+    if zona:
+        query = query.filter(Comprobante.zona == zona)
+    if fecha_desde:
+        query = query.filter(Comprobante.fecha_emision >= fecha_desde)
+    if fecha_hasta:
+        query = query.filter(Comprobante.fecha_emision <= fecha_hasta)
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
     if q:
         like = f"%{q}%"
         query = query.filter(

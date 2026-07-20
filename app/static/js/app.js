@@ -21,7 +21,7 @@
     editingAgenda: null,
     editingCliente: null,
     editingProducto: null,
-    filters: { q: "", estado: "", tipo: "" },
+    filters: { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" },
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -543,10 +543,14 @@
   }
 
   async function viewComprobantes() {
+    const zonas = ["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio", "Otros"];
     const params = {};
     if (state.filters.q) params.q = state.filters.q;
     if (state.filters.estado) params.estado = state.filters.estado;
     if (state.filters.tipo) params.tipo = state.filters.tipo;
+    if (state.filters.zona) params.zona = state.filters.zona;
+    if (state.filters.fecha_desde) params.fecha_desde = state.filters.fecha_desde;
+    if (state.filters.fecha_hasta) params.fecha_hasta = state.filters.fecha_hasta;
     state.docs = await API.listComprobantes(params);
 
     return `
@@ -558,7 +562,7 @@
         <button class="btn btn-primary" data-go="nuevo">＋ Nuevo</button>
       </div>
       <div class="toolbar panel">
-        <input id="f-q" placeholder="Buscar cliente, serie o número..." value="${escapeHtml(state.filters.q)}" style="flex:1;min-width:180px" />
+        <input id="f-q" placeholder="Buscar cliente, serie o número..." value="${escapeHtml(state.filters.q)}" style="flex:1;min-width:160px" />
         <select id="f-estado">
           <option value="">Todos los estados</option>
           ${(state.meta?.estados || [])
@@ -571,7 +575,16 @@
             .map((e) => `<option value="${e.value}" ${state.filters.tipo === e.value ? "selected" : ""}>${e.label}</option>`)
             .join("")}
         </select>
+        <select id="f-zona">
+          <option value="">Todas las zonas</option>
+          ${zonas
+            .map((z) => `<option value="${z}" ${state.filters.zona === z ? "selected" : ""}>${z}</option>`)
+            .join("")}
+        </select>
+        <input id="f-desde" type="date" title="Desde" value="${escapeHtml(state.filters.fecha_desde)}" />
+        <input id="f-hasta" type="date" title="Hasta" value="${escapeHtml(state.filters.fecha_hasta)}" />
         <button class="btn btn-secondary" id="btn-filtrar">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-limpiar-filtros">Limpiar</button>
       </div>
       <div class="panel" style="padding:0;overflow:hidden">
         ${
@@ -1851,6 +1864,13 @@
         state.filters.q = $("#f-q").value.trim();
         state.filters.estado = $("#f-estado").value;
         state.filters.tipo = $("#f-tipo").value;
+        state.filters.zona = $("#f-zona")?.value || "";
+        state.filters.fecha_desde = $("#f-desde")?.value || "";
+        state.filters.fecha_hasta = $("#f-hasta")?.value || "";
+        renderApp();
+      });
+      $("#btn-limpiar-filtros")?.addEventListener("click", () => {
+        state.filters = { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" };
         renderApp();
       });
       $$("[data-edit]").forEach((b) =>
