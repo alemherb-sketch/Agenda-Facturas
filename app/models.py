@@ -46,6 +46,11 @@ class TipoAgenda(str, enum.Enum):
     NOTA = "nota"
 
 
+class TipoMovimientoCaja(str, enum.Enum):
+    INGRESO = "ingreso"
+    EGRESO = "egreso"
+
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -67,6 +72,10 @@ class Usuario(Base):
     clientes: Mapped[list[Cliente]] = relationship(back_populates="usuario", cascade="all, delete-orphan")
     productos: Mapped[list[Producto]] = relationship(back_populates="usuario", cascade="all, delete-orphan")
     suscripciones: Mapped[list[PushSubscription]] = relationship(
+        back_populates="usuario", cascade="all, delete-orphan"
+    )
+    cajas: Mapped[list[Caja]] = relationship(back_populates="usuario", cascade="all, delete-orphan")
+    movimientos_caja: Mapped[list[MovimientoCaja]] = relationship(
         back_populates="usuario", cascade="all, delete-orphan"
     )
 
@@ -209,3 +218,38 @@ class SistemaConfig(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     clave: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
     valor: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class Caja(Base):
+    __tablename__ = "cajas"
+    __table_args__ = (UniqueConstraint("usuario_id", "nombre", name="uq_caja_nombre"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    descripcion: Mapped[str | None] = mapped_column(String(250))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    usuario: Mapped[Usuario] = relationship(back_populates="cajas")
+    movimientos: Mapped[list[MovimientoCaja]] = relationship(
+        back_populates="caja", cascade="all, delete-orphan"
+    )
+
+
+class MovimientoCaja(Base):
+    __tablename__ = "movimientos_caja"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    caja_id: Mapped[int] = mapped_column(ForeignKey("cajas.id"), index=True)
+    tipo: Mapped[TipoMovimientoCaja] = mapped_column(
+        Enum(TipoMovimientoCaja, native_enum=False), nullable=False
+    )
+    monto: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    concepto: Mapped[str] = mapped_column(String(300), nullable=False)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    usuario: Mapped[Usuario] = relationship(back_populates="movimientos_caja")
+    caja: Mapped[Caja] = relationship(back_populates="movimientos")

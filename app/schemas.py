@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models import EstadoComprobante, TipoAgenda, TipoDocumento
+from app.models import EstadoComprobante, TipoAgenda, TipoDocumento, TipoMovimientoCaja
 
 
 class UsuarioCreate(BaseModel):
@@ -260,3 +260,56 @@ class DashboardOut(BaseModel):
     agendas_hoy: int
     documentos_vencidos: int
     recientes: list[ComprobanteOut]
+
+
+class CajaCreate(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    descripcion: str | None = None
+
+
+class CajaUpdate(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    descripcion: str | None = None
+    activo: bool | None = None
+
+
+class CajaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nombre: str
+    descripcion: str | None = None
+    activo: bool = True
+    saldo: Decimal = Decimal("0.00")
+    total_ingresos: Decimal = Decimal("0.00")
+    total_egresos: Decimal = Decimal("0.00")
+    creado_en: datetime | None = None
+
+
+class MovimientoCajaCreate(BaseModel):
+    caja_id: int
+    tipo: TipoMovimientoCaja
+    monto: Decimal = Field(gt=0)
+    concepto: str = Field(min_length=1, max_length=300)
+    fecha: date
+
+
+class MovimientoCajaUpdate(BaseModel):
+    caja_id: int | None = None
+    tipo: TipoMovimientoCaja | None = None
+    monto: Decimal | None = Field(default=None, gt=0)
+    concepto: str | None = Field(default=None, min_length=1, max_length=300)
+    fecha: date | None = None
+
+
+class MovimientoCajaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    caja_id: int
+    caja_nombre: str
+    tipo: TipoMovimientoCaja
+    monto: Decimal
+    concepto: str
+    fecha: date
+    creado_en: datetime

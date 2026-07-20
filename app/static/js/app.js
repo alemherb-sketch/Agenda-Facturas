@@ -9,6 +9,9 @@
     notifs: [],
     clientes: [],
     productos: [],
+    cajas: [],
+    movimientosCaja: [],
+    filtersCaja: { caja_id: "", tipo: "", q: "" },
     charts: { estado: null, tipo: null, mes: null },
     editingDoc: null,
     editingAgenda: null,
@@ -24,6 +27,8 @@
   const tipoLabel = (v) => state.meta?.tipos_documento.find((t) => t.value === v)?.label || v;
   const estadoLabel = (v) => state.meta?.estados.find((t) => t.value === v)?.label || v;
   const agendaLabel = (v) => state.meta?.tipos_agenda.find((t) => t.value === v)?.label || v;
+  const movCajaLabel = (v) =>
+    state.meta?.tipos_movimiento_caja?.find((t) => t.value === v)?.label || v;
 
   function toast(msg) {
     let wrap = $(".toast-wrap");
@@ -233,13 +238,14 @@
       more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>`,
       clients: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm6 1.2a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6ZM3.5 19.5c0-2.8 2.7-5 5.5-5s5.5 2.2 5.5 5V20H3.5v-.5Zm11.2-.5c0-1.5.6-2.8 1.6-3.7 1 .5 2.1.7 3.2.7 1.4 0 2.7-.4 3.8-1.1v4.1h-8.6V19Z"/></svg>`,
       box: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.8 7.2 12 3l8.2 4.2v9.6L12 21l-8.2-4.2V7.2Zm8.2 1.1 6.2-3.2L12 4.4 5.8 7.6 12 8.3Zm-6.7.9v7.4L11 20v-8.2L5.3 9.2Zm13.4 0L13 11.8V20l5.7-2.9V9.2Z"/></svg>`,
+      cash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9ZM12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Zm-7.2-6.5h2.2v-.9H4.8v.9Zm12.4 0h2.2v-.9h-2.2v.9Zm-12.4 8.1h2.2v-.9H4.8v.9Zm12.4 0h2.2v-.9h-2.2v.9Z"/></svg>`,
       bell: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.2 2.2 0 0 0 2.1-1.6H9.9A2.2 2.2 0 0 0 12 22Zm7-5.2V11a7 7 0 1 0-14 0v5.8L3 19v1h18v-1l-2-2.2Z"/></svg>`,
     };
     return icons[name] || "";
   }
 
   function mobileNavHtml() {
-    const moreActive = ["clientes", "productos", "recordatorios"].includes(state.route);
+    const moreActive = ["clientes", "productos", "cajas", "recordatorios"].includes(state.route);
     const items = [
       ["dashboard", "home", "Inicio"],
       ["comprobantes", "docs", "Docs"],
@@ -260,6 +266,7 @@
     const items = [
       ["clientes", "clients", "Clientes"],
       ["productos", "box", "Productos"],
+      ["cajas", "cash", "Cajas"],
       ["recordatorios", "bell", "Avisos"],
     ];
     return items
@@ -277,6 +284,7 @@
       ["comprobantes", "🧾", "Comprobantes"],
       ["clientes", "👥", "Clientes"],
       ["productos", "📦", "Productos"],
+      ["cajas", "💵", "Cajas"],
       ["nuevo", "＋", "Nuevo"],
       ["agenda", "📅", "Agenda"],
       ["recordatorios", "⏰", "Avisos"],
@@ -850,6 +858,224 @@
         }
       </div>
       <div class="modal-backdrop" id="modal-producto"></div>`;
+  }
+
+  async function viewCajas() {
+    const params = {};
+    if (state.filtersCaja.caja_id) params.caja_id = state.filtersCaja.caja_id;
+    if (state.filtersCaja.tipo) params.tipo = state.filtersCaja.tipo;
+    if (state.filtersCaja.q) params.q = state.filtersCaja.q;
+    const [cajas, movimientos] = await Promise.all([
+      API.listCajas(),
+      API.listMovimientosCaja(params),
+    ]);
+    state.cajas = cajas;
+    state.movimientosCaja = movimientos;
+    const saldoTotal = cajas.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
+    const ingresos = cajas.reduce((acc, c) => acc + Number(c.total_ingresos || 0), 0);
+    const egresos = cajas.reduce((acc, c) => acc + Number(c.total_egresos || 0), 0);
+    const today = new Date().toISOString().slice(0, 10);
+
+    return `
+      <div class="page-head">
+        <div>
+          <h1>Cajas</h1>
+          <p>Control de ingresos y egresos por caja (efectivo, banco, yape, etc.).</p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-secondary" id="btn-new-caja">＋ Nueva caja</button>
+          <button class="btn btn-primary" id="btn-new-mov">＋ Movimiento</button>
+        </div>
+      </div>
+      <div class="grid-stats">
+        <div class="stat"><label>Cajas activas</label><strong>${cajas.length}</strong></div>
+        <div class="stat ok"><label>Ingresos</label><strong>${money(ingresos)}</strong></div>
+        <div class="stat warn"><label>Egresos</label><strong>${money(egresos)}</strong></div>
+        <div class="stat"><label>Saldo total</label><strong>${money(saldoTotal)}</strong></div>
+      </div>
+      <div class="panel" style="margin-bottom:1rem;padding:0;overflow:hidden">
+        ${
+          cajas.length
+            ? `<div class="table-wrap"><table>
+              <thead><tr><th>Caja</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Acciones</th></tr></thead>
+              <tbody>
+              ${cajas
+                .map(
+                  (c) => `<tr>
+                  <td><strong>${escapeHtml(c.nombre)}</strong>
+                    ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
+                  <td style="color:var(--ok)">${money(c.total_ingresos)}</td>
+                  <td style="color:var(--danger)">${money(c.total_egresos)}</td>
+                  <td><strong>${money(c.saldo)}</strong></td>
+                  <td class="actions">
+                    <button class="btn btn-secondary btn-sm" data-caja-edit="${c.id}">Editar</button>
+                    <button class="btn btn-danger btn-sm" data-caja-del="${c.id}">Archivar</button>
+                  </td>
+                </tr>`
+                )
+                .join("")}
+              </tbody></table></div>`
+            : `<div class="empty"><strong>Sin cajas</strong>Crea tu primera caja (ej. Caja principal, Yape, Banco).</div>`
+        }
+      </div>
+      <div class="toolbar panel">
+        <input id="f-caja-q" placeholder="Buscar concepto..." value="${escapeHtml(state.filtersCaja.q)}" style="flex:1;min-width:160px" />
+        <select id="f-caja-id">
+          <option value="">Todas las cajas</option>
+          ${cajas
+            .map(
+              (c) =>
+                `<option value="${c.id}" ${String(state.filtersCaja.caja_id) === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}</option>`
+            )
+            .join("")}
+        </select>
+        <select id="f-caja-tipo">
+          <option value="">Todos los tipos</option>
+          <option value="ingreso" ${state.filtersCaja.tipo === "ingreso" ? "selected" : ""}>Ingreso</option>
+          <option value="egreso" ${state.filtersCaja.tipo === "egreso" ? "selected" : ""}>Egreso</option>
+        </select>
+        <button class="btn btn-secondary" id="btn-filtrar-caja">Filtrar</button>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line)">
+          <strong style="font-family:var(--font-display)">Movimientos</strong>
+        </div>
+        ${
+          movimientos.length
+            ? `<div class="table-wrap"><table>
+              <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th>Acciones</th></tr></thead>
+              <tbody>
+              ${movimientos
+                .map(
+                  (m) => `<tr>
+                  <td>${fmtDate(m.fecha)}</td>
+                  <td>${escapeHtml(m.caja_nombre)}</td>
+                  <td><span class="badge ${m.tipo === "ingreso" ? "pagado" : "anulado"}">${movCajaLabel(m.tipo)}</span></td>
+                  <td>${escapeHtml(m.concepto)}</td>
+                  <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
+                  <td class="actions">
+                    <button class="btn btn-secondary btn-sm" data-mov-edit="${m.id}">Editar</button>
+                    <button class="btn btn-danger btn-sm" data-mov-del="${m.id}">Eliminar</button>
+                  </td>
+                </tr>`
+                )
+                .join("")}
+              </tbody></table></div>`
+            : `<div class="empty"><strong>Sin movimientos</strong>Registra un ingreso o egreso.</div>`
+        }
+      </div>
+      <div class="modal-backdrop" id="modal-caja"></div>
+      <div class="modal-backdrop" id="modal-mov" data-today="${today}"></div>`;
+  }
+
+  function openCajaModal(caja = null) {
+    const modal = $("#modal-caja");
+    if (!modal) return;
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head">
+          <h2>${caja ? "Editar caja" : "Nueva caja"}</h2>
+          <button class="btn btn-ghost btn-sm" id="close-caja">Cerrar</button>
+        </div>
+        <form id="form-caja" class="form-grid">
+          <div class="field full">
+            <label>Nombre</label>
+            <input name="nombre" required maxlength="120" value="${escapeHtml(caja?.nombre || "")}" placeholder="Ej. Caja principal, Yape, BCP" />
+          </div>
+          <div class="field full">
+            <label>Descripción (opcional)</label>
+            <input name="descripcion" maxlength="250" value="${escapeHtml(caja?.descripcion || "")}" placeholder="Detalle de la caja" />
+          </div>
+          <div class="field full">
+            <button class="btn btn-primary" type="submit">${caja ? "Guardar" : "Crear caja"}</button>
+          </div>
+        </form>
+      </div>`;
+    $("#close-caja").onclick = () => modal.classList.remove("open");
+    $("#form-caja").onsubmit = async (e) => {
+      e.preventDefault();
+      const body = Object.fromEntries(new FormData(e.target).entries());
+      try {
+        if (caja) await API.updateCaja(caja.id, body);
+        else await API.createCaja(body);
+        toast(caja ? "Caja actualizada" : "Caja creada");
+        modal.classList.remove("open");
+        renderApp();
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
+  }
+
+  function openMovimientoModal(mov = null) {
+    const modal = $("#modal-mov");
+    if (!modal) return;
+    if (!state.cajas.length) {
+      toast("Primero crea una caja");
+      return openCajaModal();
+    }
+    const today = modal.dataset.today || new Date().toISOString().slice(0, 10);
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head">
+          <h2>${mov ? "Editar movimiento" : "Nuevo movimiento"}</h2>
+          <button class="btn btn-ghost btn-sm" id="close-mov">Cerrar</button>
+        </div>
+        <form id="form-mov" class="form-grid">
+          <div class="field">
+            <label>Caja</label>
+            <select name="caja_id" required>
+              ${state.cajas
+                .map(
+                  (c) =>
+                    `<option value="${c.id}" ${String(mov?.caja_id || state.filtersCaja.caja_id) === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}</option>`
+                )
+                .join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label>Tipo</label>
+            <select name="tipo" required>
+              <option value="ingreso" ${!mov || mov?.tipo === "ingreso" ? "selected" : ""}>Ingreso</option>
+              <option value="egreso" ${mov?.tipo === "egreso" ? "selected" : ""}>Egreso</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Monto (S/)</label>
+            <input name="monto" type="number" min="0.01" step="0.01" required value="${mov?.monto ?? ""}" placeholder="0.00" />
+          </div>
+          <div class="field">
+            <label>Fecha</label>
+            <input name="fecha" type="date" required value="${mov?.fecha || today}" />
+          </div>
+          <div class="field full">
+            <label>Concepto</label>
+            <input name="concepto" required maxlength="300" value="${escapeHtml(mov?.concepto || "")}" placeholder="Ej. Venta del día, pago proveedor" />
+          </div>
+          <div class="field full">
+            <button class="btn btn-primary" type="submit">${mov ? "Guardar" : "Registrar movimiento"}</button>
+          </div>
+        </form>
+      </div>`;
+    $("#close-mov").onclick = () => modal.classList.remove("open");
+    $("#form-mov").onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = Object.fromEntries(fd.entries());
+      body.caja_id = Number(body.caja_id);
+      body.monto = Number(body.monto);
+      try {
+        if (mov) await API.updateMovimientoCaja(mov.id, body);
+        else await API.createMovimientoCaja(body);
+        toast(mov ? "Movimiento actualizado" : "Movimiento registrado");
+        modal.classList.remove("open");
+        renderApp();
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
   }
 
   function openClienteModal(cliente = null) {
@@ -1454,6 +1680,45 @@
         })
       );
     }
+
+    if (state.route === "cajas") {
+      $("#btn-new-caja")?.addEventListener("click", () => openCajaModal());
+      $("#btn-new-mov")?.addEventListener("click", () => openMovimientoModal());
+      $("#btn-filtrar-caja")?.addEventListener("click", () => {
+        state.filtersCaja.q = ($("#f-caja-q")?.value || "").trim();
+        state.filtersCaja.caja_id = $("#f-caja-id")?.value || "";
+        state.filtersCaja.tipo = $("#f-caja-tipo")?.value || "";
+        renderApp();
+      });
+      $$("[data-caja-edit]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const caja = state.cajas.find((c) => c.id === Number(b.dataset.cajaEdit));
+          openCajaModal(caja);
+        })
+      );
+      $$("[data-caja-del]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (!confirm("¿Archivar esta caja? Los movimientos se conservan.")) return;
+          await API.deleteCaja(b.dataset.cajaDel);
+          toast("Caja archivada");
+          renderApp();
+        })
+      );
+      $$("[data-mov-edit]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.movEdit));
+          openMovimientoModal(mov);
+        })
+      );
+      $$("[data-mov-del]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (!confirm("¿Eliminar este movimiento?")) return;
+          await API.deleteMovimientoCaja(b.dataset.movDel);
+          toast("Movimiento eliminado");
+          renderApp();
+        })
+      );
+    }
   }
 
   function bindItemEvents() {
@@ -1718,6 +1983,7 @@
       else if (state.route === "comprobantes") html = await viewComprobantes();
       else if (state.route === "clientes") html = await viewClientes();
       else if (state.route === "productos") html = await viewProductos();
+      else if (state.route === "cajas") html = await viewCajas();
       else if (state.route === "nuevo") {
         const editId = params.id ? Number(params.id) : null;
         const [clientes, productos, doc] = await Promise.all([

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.database import Base, engine, ensure_schema
-from app.routers import agenda, auth_router, clientes, comprobantes, consulta, cron, dashboard, notificaciones, productos
+from app.routers import agenda, auth_router, cajas, clientes, comprobantes, consulta, cron, dashboard, notificaciones, productos
 from app.services.reminders import procesar_recordatorios
 from app.services.seed import ensure_demo_user
 from app.services.vapid_keys import ensure_vapid_keys
@@ -52,6 +52,7 @@ app.include_router(notificaciones.router)
 app.include_router(consulta.router)
 app.include_router(clientes.router)
 app.include_router(productos.router)
+app.include_router(cajas.router)
 app.include_router(cron.router)
 
 
@@ -80,6 +81,10 @@ def meta():
             {"value": "reunion", "label": "Reunión"},
             {"value": "cita", "label": "Cita"},
             {"value": "nota", "label": "Nota"},
+        ],
+        "tipos_movimiento_caja": [
+            {"value": "ingreso", "label": "Ingreso"},
+            {"value": "egreso", "label": "Egreso"},
         ],
     }
 

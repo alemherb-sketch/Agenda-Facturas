@@ -177,4 +177,30 @@ const API = {
   deleteProducto(id) {
     return this.request(`/api/productos/${id}`, { method: "DELETE" });
   },
+  listCajas(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/cajas${qs ? `?${qs}` : ""}`);
+  },
+  createCaja(body) {
+    return this.request("/api/cajas", { method: "POST", body: JSON.stringify(body) });
+  },
+  updateCaja(id, body) {
+    return this.request(`/api/cajas/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  deleteCaja(id) {
+    return this.request(`/api/cajas/${id}`, { method: "DELETE" });
+  },
+  listMovimientosCaja(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/cajas/movimientos${qs ? `?${qs}` : ""}`);
+  },
+  createMovimientoCaja(body) {
+    return this.request("/api/cajas/movimientos", { method: "POST", body: JSON.stringify(body) });
+  },
+  updateMovimientoCaja(id, body) {
+    return this.request(`/api/cajas/movimientos/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  deleteMovimientoCaja(id) {
+    return this.request(`/api/cajas/movimientos/${id}`, { method: "DELETE" });
+  },
 };
