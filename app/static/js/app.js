@@ -647,8 +647,10 @@
         },
         options: {
           responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 1.15,
           plugins: {
-            legend: { position: "bottom" },
+            legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
             title: { display: false },
           },
         },
@@ -668,7 +670,12 @@
             },
           ],
         },
-        options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 1.15,
+          plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+        },
       });
     }
   }
@@ -1413,15 +1420,15 @@
         </div>
       </div>
       <div class="charts">
-        <div class="panel chart-box">
+        <div class="panel chart-box chart-box-pie">
           <h3>Salidas por conductor</h3>
           <p style="margin:-.2rem 0 .7rem;color:var(--muted);font-size:.85rem">Quién consume más galones</p>
-          <canvas id="chart-comb-conductor"></canvas>
+          <div class="chart-pie-wrap"><canvas id="chart-comb-conductor"></canvas></div>
         </div>
-        <div class="panel chart-box">
+        <div class="panel chart-box chart-box-pie">
           <h3>Salidas por marca</h3>
           <p style="margin:-.2rem 0 .7rem;color:var(--muted);font-size:.85rem">Distribución por marca de vehículo</p>
-          <canvas id="chart-comb-marca"></canvas>
+          <div class="chart-pie-wrap"><canvas id="chart-comb-marca"></canvas></div>
         </div>
       </div>
       <div class="panel" style="padding:0;overflow:hidden">
