@@ -431,4 +431,8 @@ class CombustibleResumenOut(BaseModel):
     total_salidas: Decimal = Decimal("0.000")
     saldo_galones: Decimal = Decimal("0.000")
     cantidad_movimientos: int = 0
+    por_dia: list[dict] = []
+    por_placa: list[dict] = []
+    por_conductor: list[dict] = []
+    por_marca: list[dict] = []
     movimientos: list[MovimientoCombustibleOut] = []

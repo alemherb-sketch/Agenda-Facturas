@@ -19,7 +19,7 @@
     filtersContacto: { q: "" },
     filtersCombustible: { tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
     draftFromContact: null,
-    charts: { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null },
+    charts: { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null, combDia: null, combPlaca: null, combConductor: null, combMarca: null },
     editingDoc: null,
     editingAgenda: null,
     editingCliente: null,
@@ -488,7 +488,17 @@
 
   function destroyCharts() {
     Object.values(state.charts).forEach((c) => c?.destroy?.());
-    state.charts = { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null };
+    state.charts = {
+      estado: null,
+      tipo: null,
+      mes: null,
+      cajaDia: null,
+      cajaPie: null,
+      combDia: null,
+      combPlaca: null,
+      combConductor: null,
+      combMarca: null,
+    };
   }
 
   function defaultCajaDates() {
@@ -544,6 +554,117 @@
             {
               data: dash.por_caja.map((x) => Math.abs(x.ingresos) + Math.abs(x.egresos)),
               backgroundColor: ["#0f3d2e", "#1f6b4f", "#c9852a", "#175cd3", "#0f766e", "#b54708", "#475467"],
+            },
+          ],
+        },
+        options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+      });
+    }
+  }
+
+  function paintCombustibleCharts(resumen) {
+    if (typeof Chart === "undefined" || !resumen) return;
+    ["combDia", "combPlaca", "combConductor", "combMarca"].forEach((k) => {
+      state.charts[k]?.destroy?.();
+      state.charts[k] = null;
+    });
+
+    const diaEl = $("#chart-comb-dia");
+    if (diaEl && resumen.por_dia?.length) {
+      state.charts.combDia = new Chart(diaEl, {
+        type: "line",
+        data: {
+          labels: resumen.por_dia.map((x) => x.fecha.slice(5)),
+          datasets: [
+            {
+              label: "Ingresos",
+              data: resumen.por_dia.map((x) => x.ingresos),
+              borderColor: "#067647",
+              backgroundColor: "rgba(6, 118, 71, 0.15)",
+              fill: true,
+              tension: 0.3,
+            },
+            {
+              label: "Salidas",
+              data: resumen.por_dia.map((x) => x.salidas),
+              borderColor: "#b54708",
+              backgroundColor: "rgba(181, 71, 8, 0.12)",
+              fill: true,
+              tension: 0.3,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "bottom" } },
+          scales: { y: { beginAtZero: true, title: { display: true, text: "Galones" } } },
+        },
+      });
+    }
+
+    const placaEl = $("#chart-comb-placa");
+    if (placaEl && resumen.por_placa?.length) {
+      state.charts.combPlaca = new Chart(placaEl, {
+        type: "bar",
+        data: {
+          labels: resumen.por_placa.map((x) => x.placa),
+          datasets: [
+            {
+              label: "Salidas (gal)",
+              data: resumen.por_placa.map((x) => x.salidas),
+              backgroundColor: "rgba(180, 35, 24, 0.72)",
+              borderRadius: 6,
+            },
+            {
+              label: "Ingresos (gal)",
+              data: resumen.por_placa.map((x) => x.ingresos),
+              backgroundColor: "rgba(6, 118, 71, 0.7)",
+              borderRadius: 6,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          indexAxis: "y",
+          plugins: { legend: { position: "bottom" } },
+          scales: { x: { beginAtZero: true } },
+        },
+      });
+    }
+
+    const condEl = $("#chart-comb-conductor");
+    if (condEl && resumen.por_conductor?.length) {
+      state.charts.combConductor = new Chart(condEl, {
+        type: "doughnut",
+        data: {
+          labels: resumen.por_conductor.map((x) => x.conductor),
+          datasets: [
+            {
+              data: resumen.por_conductor.map((x) => x.salidas),
+              backgroundColor: ["#0f3d2e", "#1f6b4f", "#c9852a", "#175cd3", "#0f766e", "#b54708", "#475467", "#6941c6"],
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: "bottom" },
+            title: { display: false },
+          },
+        },
+      });
+    }
+
+    const marcaEl = $("#chart-comb-marca");
+    if (marcaEl && resumen.por_marca?.length) {
+      state.charts.combMarca = new Chart(marcaEl, {
+        type: "pie",
+        data: {
+          labels: resumen.por_marca.map((x) => x.marca),
+          datasets: [
+            {
+              data: resumen.por_marca.map((x) => x.salidas),
+              backgroundColor: ["#0f3d2e", "#c9852a", "#175cd3", "#b54708", "#1f6b4f", "#0f766e", "#475467", "#6941c6"],
             },
           ],
         },
@@ -1278,6 +1399,30 @@
         <div class="stat warn"><label>Salidas</label><strong>${galones(resumen.total_salidas)}</strong></div>
         <div class="stat"><label>Saldo disponible</label><strong>${galones(resumen.saldo_galones)}</strong></div>
         <div class="stat"><label>Registros</label><strong>${resumen.cantidad_movimientos}</strong></div>
+      </div>
+      <div class="charts">
+        <div class="panel chart-box">
+          <h3>Ingresos vs salidas por día</h3>
+          <p style="margin:-.2rem 0 .7rem;color:var(--muted);font-size:.85rem">Tendencia de abastecimiento y consumo</p>
+          <canvas id="chart-comb-dia"></canvas>
+        </div>
+        <div class="panel chart-box">
+          <h3>Consumo por placa</h3>
+          <p style="margin:-.2rem 0 .7rem;color:var(--muted);font-size:.85rem">Top vehículos por salidas de combustible</p>
+          <canvas id="chart-comb-placa"></canvas>
+        </div>
+      </div>
+      <div class="charts">
+        <div class="panel chart-box">
+          <h3>Salidas por conductor</h3>
+          <p style="margin:-.2rem 0 .7rem;color:var(--muted);font-size:.85rem">Quién consume más galones</p>
+          <canvas id="chart-comb-conductor"></canvas>
+        </div>
+        <div class="panel chart-box">
+          <h3>Salidas por marca</h3>
+          <p style="margin:-.2rem 0 .7rem;color:var(--muted);font-size:.85rem">Distribución por marca de vehículo</p>
+          <canvas id="chart-comb-marca"></canvas>
+        </div>
       </div>
       <div class="panel" style="padding:0;overflow:hidden">
         ${
@@ -2705,6 +2850,9 @@
     }
     if (state.route === "cajas" && state.cajaDash) {
       paintCajaCharts(state.cajaDash);
+    }
+    if (state.route === "combustibles" && state.combustibleResumen) {
+      paintCombustibleCharts(state.combustibleResumen);
     }
   }
 

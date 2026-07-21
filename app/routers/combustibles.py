@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from typing import Annotated
@@ -119,11 +120,81 @@ def resumen(
         .all()
     )
 
+    agg_rows = (
+        db.query(MovimientoCombustible)
+        .filter(MovimientoCombustible.usuario_id == user.id)
+    )
+    agg_rows = _apply_filters(
+        agg_rows, tipo=tipo, q=q, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, placa=placa
+    ).all()
+
+    por_dia_map: dict[str, dict] = defaultdict(
+        lambda: {"ingresos": Decimal("0"), "salidas": Decimal("0")}
+    )
+    por_placa_map: dict[str, dict] = defaultdict(
+        lambda: {"ingresos": Decimal("0"), "salidas": Decimal("0")}
+    )
+    por_conductor_map: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    por_marca_map: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+
+    for mov in agg_rows:
+        g = Decimal(str(mov.galones))
+        dia = mov.fecha.isoformat()
+        placa_key = (mov.placa or "Sin placa").upper()
+        if mov.tipo == TipoMovimientoCombustible.INGRESO:
+            por_dia_map[dia]["ingresos"] += g
+            por_placa_map[placa_key]["ingresos"] += g
+        else:
+            por_dia_map[dia]["salidas"] += g
+            por_placa_map[placa_key]["salidas"] += g
+            por_conductor_map[mov.conductor or "Sin conductor"] += g
+            por_marca_map[mov.marca or "Sin marca"] += g
+
+    por_dia = [
+        {
+            "fecha": dia,
+            "ingresos": float(vals["ingresos"]),
+            "salidas": float(vals["salidas"]),
+            "neto": float(vals["ingresos"] - vals["salidas"]),
+        }
+        for dia, vals in sorted(por_dia_map.items())
+    ]
+    por_placa = sorted(
+        [
+            {
+                "placa": placa_key,
+                "ingresos": float(vals["ingresos"]),
+                "salidas": float(vals["salidas"]),
+                "neto": float(vals["ingresos"] - vals["salidas"]),
+            }
+            for placa_key, vals in por_placa_map.items()
+        ],
+        key=lambda x: x["salidas"],
+        reverse=True,
+    )[:10]
+    por_conductor = sorted(
+        [
+            {"conductor": nombre, "salidas": float(total)}
+            for nombre, total in por_conductor_map.items()
+        ],
+        key=lambda x: x["salidas"],
+        reverse=True,
+    )[:8]
+    por_marca = sorted(
+        [{"marca": nombre, "salidas": float(total)} for nombre, total in por_marca_map.items()],
+        key=lambda x: x["salidas"],
+        reverse=True,
+    )[:8]
+
     return CombustibleResumenOut(
         total_ingresos=ingresos,
         total_salidas=salidas,
         saldo_galones=ingresos - salidas,
         cantidad_movimientos=int(cantidad),
+        por_dia=por_dia,
+        por_placa=por_placa,
+        por_conductor=por_conductor,
+        por_marca=por_marca,
         movimientos=movimientos,
     )
 
