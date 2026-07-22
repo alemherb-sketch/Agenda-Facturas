@@ -6,6 +6,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.models import Comprobante, MovimientoCaja, Usuario
@@ -76,6 +77,10 @@ class EmpresaHeader(Flowable):
         self._dir = Paragraph(EMPRESA_DIRECCION, small)
         self._logo = LOGO_MARK_PATH if LOGO_MARK_PATH.exists() else LOGO_PATH
         self._has_logo = self._logo.exists()
+        self._logo_aspect = 1.0
+        if self._has_logo:
+            logo_w_px, logo_h_px = ImageReader(str(self._logo)).getSize()
+            self._logo_aspect = logo_w_px / logo_h_px
 
     def wrap(self, availWidth, availHeight):
         self.width = availWidth
@@ -93,7 +98,7 @@ class EmpresaHeader(Flowable):
         if self._has_logo:
             # Misma altura exacta que el texto → tope y base coinciden
             self._logo_h = self.height
-            self._logo_w = self._logo_h * (328 / 204)
+            self._logo_w = self._logo_h * self._logo_aspect
             text_w = max(availWidth - self._logo_w - gap, 100 * mm)
             # Re-wrap por si cambió el ancho disponible
             self._hr = self._razon.wrap(text_w, availHeight)[1]
@@ -101,7 +106,7 @@ class EmpresaHeader(Flowable):
             self._hd = self._dir.wrap(text_w, availHeight)[1]
             self.height = self._hr + gap_y + self._hu + gap_y + self._hd
             self._logo_h = self.height
-            self._logo_w = self._logo_h * (328 / 204)
+            self._logo_w = self._logo_h * self._logo_aspect
             self._x_text = self._logo_w + gap
         else:
             self._logo_w = self._logo_h = 0
