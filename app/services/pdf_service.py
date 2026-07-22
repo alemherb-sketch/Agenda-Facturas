@@ -25,13 +25,33 @@ def _styles():
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         "TitlePE",
-        parent=styles["Heading1"],
-        fontSize=14,
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=13,
         textColor=colors.HexColor("#0f3d2e"),
+        leading=16,
+        spaceBefore=0,
         spaceAfter=2,
     )
-    normal = ParagraphStyle("NormalPE", parent=styles["Normal"], fontSize=9, leading=12)
-    small = ParagraphStyle("SmallPE", parent=styles["Normal"], fontSize=8, textColor=colors.grey, leading=11)
+    normal = ParagraphStyle(
+        "NormalPE",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=9,
+        leading=12,
+        spaceBefore=0,
+        spaceAfter=1,
+    )
+    small = ParagraphStyle(
+        "SmallPE",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8,
+        textColor=colors.HexColor("#5b6b62"),
+        leading=10,
+        spaceBefore=0,
+        spaceAfter=0,
+    )
     subtitle = ParagraphStyle(
         "SubtitlePE",
         parent=styles["Heading2"],
@@ -43,45 +63,53 @@ def _styles():
     return title_style, normal, small, subtitle
 
 
-def _logo_image(width_mm: float = 28) -> Image | None:
+def _logo_image(width_mm: float = 22) -> Image | None:
     if not LOGO_PATH.exists():
         return None
     size = width_mm * mm
-    return Image(str(LOGO_PATH), width=size, height=size)
+    img = Image(str(LOGO_PATH), width=size, height=size)
+    img.hAlign = "LEFT"
+    return img
 
 
-def _header_empresa(story, title_style, normal, small, *, logo_mm: float = 28) -> None:
+def _header_empresa(story, title_style, normal, small, *, logo_mm: float = 22) -> None:
+    """Logo a la izquierda y datos de empresa centrados verticalmente al lado."""
     logo = _logo_image(logo_mm)
+    text_width = 155 * mm
     text_table = Table(
         [
             [Paragraph(EMPRESA_RAZON, title_style)],
             [Paragraph(f"RUC: {EMPRESA_RUC}", normal)],
             [Paragraph(EMPRESA_DIRECCION, small)],
         ],
-        colWidths=[145 * mm],
+        colWidths=[text_width],
     )
     text_table.setStyle(
         TableStyle(
             [
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ]
         )
     )
     if logo:
+        logo_col = (logo_mm + 4) * mm
         header = Table(
             [[logo, text_table]],
-            colWidths=[(logo_mm + 6) * mm, 145 * mm],
+            colWidths=[logo_col, text_width],
+            rowHeights=[max(logo_mm * mm, 20 * mm)],
         )
         header.setStyle(
             TableStyle(
                 [
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
+                    ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
                     ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (0, 0), 8),
+                    ("RIGHTPADDING", (0, 0), (0, 0), 10),
+                    ("RIGHTPADDING", (1, 0), (1, 0), 0),
                     ("TOPPADDING", (0, 0), (-1, -1), 0),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
                 ]
@@ -90,7 +118,7 @@ def _header_empresa(story, title_style, normal, small, *, logo_mm: float = 28) -
         story.append(header)
     else:
         story.append(text_table)
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 10))
 
 
 def generar_pdf_comprobante(comprobante: Comprobante, emisor: Usuario | None = None) -> bytes:
