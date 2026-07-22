@@ -1,11 +1,12 @@
 from io import BytesIO
 from datetime import date, datetime
+from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.models import Comprobante, MovimientoCaja, Usuario
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS
@@ -17,6 +18,7 @@ EMPRESA_DIRECCION = (
     "CAL.LOS GIRASOLES NRO. 174 URB. LOS MANGUITOS "
     "LA LIBERTAD - TRUJILLO - VICTOR LARCO HERRERA"
 )
+LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "img" / "logo-jaelin.png"
 
 
 def _styles():
@@ -41,10 +43,53 @@ def _styles():
     return title_style, normal, small, subtitle
 
 
-def _header_empresa(story, title_style, normal, small) -> None:
-    story.append(Paragraph(EMPRESA_RAZON, title_style))
-    story.append(Paragraph(f"RUC: {EMPRESA_RUC}", normal))
-    story.append(Paragraph(EMPRESA_DIRECCION, small))
+def _logo_image(width_mm: float = 28) -> Image | None:
+    if not LOGO_PATH.exists():
+        return None
+    size = width_mm * mm
+    return Image(str(LOGO_PATH), width=size, height=size)
+
+
+def _header_empresa(story, title_style, normal, small, *, logo_mm: float = 28) -> None:
+    logo = _logo_image(logo_mm)
+    text_table = Table(
+        [
+            [Paragraph(EMPRESA_RAZON, title_style)],
+            [Paragraph(f"RUC: {EMPRESA_RUC}", normal)],
+            [Paragraph(EMPRESA_DIRECCION, small)],
+        ],
+        colWidths=[145 * mm],
+    )
+    text_table.setStyle(
+        TableStyle(
+            [
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    if logo:
+        header = Table(
+            [[logo, text_table]],
+            colWidths=[(logo_mm + 6) * mm, 145 * mm],
+        )
+        header.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (0, 0), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
+            )
+        )
+        story.append(header)
+    else:
+        story.append(text_table)
     story.append(Spacer(1, 8))
 
 
