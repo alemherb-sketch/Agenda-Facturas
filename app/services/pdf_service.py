@@ -6,7 +6,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.models import Comprobante, MovimientoCaja, Usuario
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS
@@ -19,6 +19,8 @@ EMPRESA_DIRECCION = (
     "LA LIBERTAD - TRUJILLO - VICTOR LARCO HERRERA"
 )
 LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "img" / "logo-jaelin.png"
+# Solo el isotipo (sin texto JAELIN) para alinear con razón social / RUC / dirección
+LOGO_MARK_PATH = Path(__file__).resolve().parent.parent / "static" / "img" / "logo-jaelin-mark.png"
 
 
 def _styles():
@@ -29,18 +31,18 @@ def _styles():
         fontName="Helvetica-Bold",
         fontSize=13,
         textColor=colors.HexColor("#0f3d2e"),
-        leading=16,
+        leading=15,
         spaceBefore=0,
-        spaceAfter=2,
+        spaceAfter=0,
     )
     normal = ParagraphStyle(
         "NormalPE",
         parent=styles["Normal"],
         fontName="Helvetica",
         fontSize=9,
-        leading=12,
+        leading=11,
         spaceBefore=0,
-        spaceAfter=1,
+        spaceAfter=0,
     )
     small = ParagraphStyle(
         "SmallPE",
@@ -63,62 +65,74 @@ def _styles():
     return title_style, normal, small, subtitle
 
 
-def _logo_image(width_mm: float = 22) -> Image | None:
-    if not LOGO_PATH.exists():
-        return None
-    size = width_mm * mm
-    img = Image(str(LOGO_PATH), width=size, height=size)
-    img.hAlign = "LEFT"
-    return img
+class EmpresaHeader(Flowable):
+    """Isotipo + razón social / RUC / dirección con la misma altura (base y tope alineados)."""
 
+    def __init__(self):
+        super().__init__()
+        title_style, normal, small, _ = _styles()
+        self._razon = Paragraph(EMPRESA_RAZON, title_style)
+        self._ruc = Paragraph(f"RUC: {EMPRESA_RUC}", normal)
+        self._dir = Paragraph(EMPRESA_DIRECCION, small)
+        self._logo = LOGO_MARK_PATH if LOGO_MARK_PATH.exists() else LOGO_PATH
+        self._has_logo = self._logo.exists()
 
-def _header_empresa(story, title_style, normal, small, *, logo_mm: float = 22) -> None:
-    """Logo a la izquierda y datos de empresa centrados verticalmente al lado."""
-    logo = _logo_image(logo_mm)
-    text_width = 155 * mm
-    text_table = Table(
-        [
-            [Paragraph(EMPRESA_RAZON, title_style)],
-            [Paragraph(f"RUC: {EMPRESA_RUC}", normal)],
-            [Paragraph(EMPRESA_DIRECCION, small)],
-        ],
-        colWidths=[text_width],
-    )
-    text_table.setStyle(
-        TableStyle(
-            [
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ]
-        )
-    )
-    if logo:
-        logo_col = (logo_mm + 4) * mm
-        header = Table(
-            [[logo, text_table]],
-            colWidths=[logo_col, text_width],
-            rowHeights=[max(logo_mm * mm, 20 * mm)],
-        )
-        header.setStyle(
-            TableStyle(
-                [
-                    ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
-                    ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (0, 0), 10),
-                    ("RIGHTPADDING", (1, 0), (1, 0), 0),
-                    ("TOPPADDING", (0, 0), (-1, -1), 0),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ]
+    def wrap(self, availWidth, availHeight):
+        self.width = availWidth
+        gap = 5 * mm
+        # Altura del texto primero
+        provisional_logo_w = 22 * mm if self._has_logo else 0
+        text_w = max(availWidth - provisional_logo_w - gap, 100 * mm)
+        hr = self._razon.wrap(text_w, availHeight)[1]
+        hu = self._ruc.wrap(text_w, availHeight)[1]
+        hd = self._dir.wrap(text_w, availHeight)[1]
+        gap_y = 2
+        self._hr, self._hu, self._hd = hr, hu, hd
+        self._gap_y = gap_y
+        self.height = hr + gap_y + hu + gap_y + hd
+        if self._has_logo:
+            # Misma altura exacta que el texto → tope y base coinciden
+            self._logo_h = self.height
+            self._logo_w = self._logo_h * (328 / 204)
+            text_w = max(availWidth - self._logo_w - gap, 100 * mm)
+            # Re-wrap por si cambió el ancho disponible
+            self._hr = self._razon.wrap(text_w, availHeight)[1]
+            self._hu = self._ruc.wrap(text_w, availHeight)[1]
+            self._hd = self._dir.wrap(text_w, availHeight)[1]
+            self.height = self._hr + gap_y + self._hu + gap_y + self._hd
+            self._logo_h = self.height
+            self._logo_w = self._logo_h * (328 / 204)
+            self._x_text = self._logo_w + gap
+        else:
+            self._logo_w = self._logo_h = 0
+            self._x_text = 0
+        return self.width, self.height
+
+    def draw(self):
+        c = self.canv
+        if self._has_logo:
+            c.drawImage(
+                str(self._logo),
+                0,
+                0,
+                width=self._logo_w,
+                height=self._logo_h,
+                preserveAspectRatio=True,
+                mask="auto",
+                anchor="c",
             )
-        )
-        story.append(header)
-    else:
-        story.append(text_table)
-    story.append(Spacer(1, 10))
+        # Texto desde la misma base y=0 hasta height
+        y = 0
+        self._dir.drawOn(c, self._x_text, y)
+        y += self._hd + self._gap_y
+        self._ruc.drawOn(c, self._x_text, y)
+        y += self._hu + self._gap_y
+        self._razon.drawOn(c, self._x_text, y)
+
+
+def _header_empresa(story, title_style=None, normal=None, small=None, *, logo_mm: float | None = None) -> None:
+    story.append(EmpresaHeader())
+    story.append(Spacer(1, 8))
 
 
 def generar_pdf_comprobante(comprobante: Comprobante, emisor: Usuario | None = None) -> bytes:
