@@ -1,16 +1,54 @@
 from io import BytesIO
+from datetime import date, datetime
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.models import Comprobante, Usuario
+from app.models import Comprobante, MovimientoCaja, Usuario
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS
 
+# Datos fijos de empresa para todos los formatos de impresión
+EMPRESA_RAZON = "JAELIN E.I.R.L."
+EMPRESA_RUC = "20605739041"
+EMPRESA_DIRECCION = (
+    "CAL.LOS GIRASOLES NRO. 174 URB. LOS MANGUITOS "
+    "LA LIBERTAD - TRUJILLO - VICTOR LARCO HERRERA"
+)
 
-def generar_pdf_comprobante(comprobante: Comprobante, emisor: Usuario) -> bytes:
+
+def _styles():
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "TitlePE",
+        parent=styles["Heading1"],
+        fontSize=14,
+        textColor=colors.HexColor("#0f3d2e"),
+        spaceAfter=2,
+    )
+    normal = ParagraphStyle("NormalPE", parent=styles["Normal"], fontSize=9, leading=12)
+    small = ParagraphStyle("SmallPE", parent=styles["Normal"], fontSize=8, textColor=colors.grey, leading=11)
+    subtitle = ParagraphStyle(
+        "SubtitlePE",
+        parent=styles["Heading2"],
+        fontSize=12,
+        textColor=colors.HexColor("#b45309"),
+        spaceBefore=4,
+        spaceAfter=6,
+    )
+    return title_style, normal, small, subtitle
+
+
+def _header_empresa(story, title_style, normal, small) -> None:
+    story.append(Paragraph(EMPRESA_RAZON, title_style))
+    story.append(Paragraph(f"RUC: {EMPRESA_RUC}", normal))
+    story.append(Paragraph(EMPRESA_DIRECCION, small))
+    story.append(Spacer(1, 8))
+
+
+def generar_pdf_comprobante(comprobante: Comprobante, emisor: Usuario | None = None) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -20,34 +58,19 @@ def generar_pdf_comprobante(comprobante: Comprobante, emisor: Usuario) -> bytes:
         topMargin=12 * mm,
         bottomMargin=12 * mm,
     )
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "TitlePE",
-        parent=styles["Heading1"],
-        fontSize=16,
-        textColor=colors.HexColor("#0f3d2e"),
-        spaceAfter=6,
-    )
-    normal = ParagraphStyle("NormalPE", parent=styles["Normal"], fontSize=9, leading=12)
-    small = ParagraphStyle("SmallPE", parent=styles["Normal"], fontSize=8, textColor=colors.grey)
+    title_style, normal, small, subtitle = _styles()
 
     story = []
-    razon = emisor.razon_social or emisor.nombre
-    story.append(Paragraph(razon, title_style))
-    if emisor.ruc_empresa:
-        story.append(Paragraph(f"RUC: {emisor.ruc_empresa}", normal))
-    if emisor.direccion:
-        story.append(Paragraph(emisor.direccion, small))
-    story.append(Spacer(1, 8))
+    _header_empresa(story, title_style, normal, small)
 
     tipo = TIPO_LABELS.get(comprobante.tipo, str(comprobante.tipo))
     story.append(
         Paragraph(
             f"<b>{tipo}</b> &nbsp;&nbsp; {comprobante.serie}-{comprobante.numero.zfill(8)}",
-            ParagraphStyle("DocTitle", parent=styles["Heading2"], fontSize=13, textColor=colors.HexColor("#b45309")),
+            subtitle,
         )
     )
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 4))
 
     info = [
         ["Fecha de emisión:", comprobante.fecha_emision.strftime("%d/%m/%Y")],
@@ -142,11 +165,191 @@ def generar_pdf_comprobante(comprobante: Comprobante, emisor: Usuario) -> bytes:
     story.append(Spacer(1, 18))
     story.append(
         Paragraph(
-            "Documento generado por Agenda Facturas Perú. Representación impresa referencial "
-            "(no sustituye el CPE SUNAT).",
+            "Documento generado por Agenda Facturas — JAELIN E.I.R.L. "
+            "Representación impresa referencial (no sustituye el CPE SUNAT).",
             small,
         )
     )
 
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def _table_style_header() -> TableStyle:
+    return TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f3d2e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#cbd5e1")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]
+    )
+
+
+def generar_pdf_reporte_comprobantes(
+    docs: list[Comprobante],
+    *,
+    filtros: dict | None = None,
+) -> bytes:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=12 * mm,
+        rightMargin=12 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+    title_style, normal, small, subtitle = _styles()
+    story = []
+    _header_empresa(story, title_style, normal, small)
+    story.append(Paragraph("Reporte de comprobantes", subtitle))
+
+    filtros = filtros or {}
+    filtros_txt = []
+    if filtros.get("fecha_desde") or filtros.get("fecha_hasta"):
+        filtros_txt.append(
+            f"Periodo: {filtros.get('fecha_desde') or '…'} — {filtros.get('fecha_hasta') or '…'}"
+        )
+    if filtros.get("zona"):
+        filtros_txt.append(f"Zona: {filtros['zona']}")
+    if filtros.get("estado"):
+        filtros_txt.append(f"Estado: {ESTADO_LABELS.get(filtros['estado'], filtros['estado'])}")
+    if filtros.get("tipo"):
+        tipo_val = filtros["tipo"]
+        tipo_lbl = next(
+            (lbl for key, lbl in TIPO_LABELS.items() if getattr(key, "value", key) == tipo_val),
+            tipo_val,
+        )
+        filtros_txt.append(f"Tipo: {tipo_lbl}")
+    if filtros.get("q"):
+        filtros_txt.append(f"Búsqueda: {filtros['q']}")
+    if filtros_txt:
+        story.append(Paragraph(" · ".join(filtros_txt), small))
+    story.append(
+        Paragraph(
+            f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} · {len(docs)} documento(s)",
+            small,
+        )
+    )
+    story.append(Spacer(1, 8))
+
+    rows = [["Fecha", "Tipo", "Serie-Nº", "Cliente", "Zona", "Estado", "Total"]]
+    total_general = 0.0
+    for c in docs:
+        total_general += float(c.total or 0)
+        rows.append(
+            [
+                c.fecha_emision.strftime("%d/%m/%Y"),
+                TIPO_LABELS.get(c.tipo, str(c.tipo))[:18],
+                f"{c.serie}-{c.numero}",
+                (c.cliente_nombre or "")[:36],
+                getattr(c, "zona", None) or "—",
+                ESTADO_LABELS.get(c.estado.value, c.estado.value),
+                f"S/ {float(c.total):,.2f}",
+            ]
+        )
+    rows.append(["", "", "", "", "", "TOTAL", f"S/ {total_general:,.2f}"])
+
+    table = Table(
+        rows,
+        colWidths=[22 * mm, 38 * mm, 28 * mm, 70 * mm, 32 * mm, 24 * mm, 28 * mm],
+    )
+    style = _table_style_header()
+    style.add("ALIGN", (-1, 1), (-1, -1), "RIGHT")
+    style.add("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold")
+    style.add("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#ecfdf5"))
+    table.setStyle(style)
+    story.append(table)
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("Reporte filtrado — JAELIN E.I.R.L.", small))
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def generar_pdf_reporte_cajas(
+    movimientos: list[MovimientoCaja],
+    *,
+    filtros: dict | None = None,
+    total_ingresos: float = 0,
+    total_egresos: float = 0,
+) -> bytes:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=12 * mm,
+        rightMargin=12 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+    title_style, normal, small, subtitle = _styles()
+    story = []
+    _header_empresa(story, title_style, normal, small)
+    story.append(Paragraph("Reporte de movimientos de cajas", subtitle))
+
+    filtros = filtros or {}
+    filtros_txt = []
+    if filtros.get("fecha_desde") or filtros.get("fecha_hasta"):
+        filtros_txt.append(
+            f"Periodo: {filtros.get('fecha_desde') or '…'} — {filtros.get('fecha_hasta') or '…'}"
+        )
+    if filtros.get("caja"):
+        filtros_txt.append(f"Caja: {filtros['caja']}")
+    if filtros.get("tipo"):
+        filtros_txt.append(f"Tipo: {filtros['tipo']}")
+    if filtros.get("q"):
+        filtros_txt.append(f"Búsqueda: {filtros['q']}")
+    if filtros_txt:
+        story.append(Paragraph(" · ".join(filtros_txt), small))
+    story.append(
+        Paragraph(
+            f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} · {len(movimientos)} movimiento(s)",
+            small,
+        )
+    )
+    story.append(Spacer(1, 6))
+    story.append(
+        Paragraph(
+            f"<b>Ingresos:</b> S/ {total_ingresos:,.2f} &nbsp;&nbsp; "
+            f"<b>Egresos:</b> S/ {total_egresos:,.2f} &nbsp;&nbsp; "
+            f"<b>Saldo periodo:</b> S/ {total_ingresos - total_egresos:,.2f}",
+            normal,
+        )
+    )
+    story.append(Spacer(1, 8))
+
+    rows = [["Fecha", "Caja", "Tipo", "N° Transacción", "Concepto", "Monto"]]
+    for m in movimientos:
+        caja_nombre = m.caja.nombre if getattr(m, "caja", None) else ""
+        monto = float(m.monto or 0)
+        signo = "−" if str(m.tipo.value if hasattr(m.tipo, "value") else m.tipo) == "egreso" else "+"
+        rows.append(
+            [
+                m.fecha.strftime("%d/%m/%Y") if isinstance(m.fecha, date) else str(m.fecha),
+                (caja_nombre or "")[:28],
+                "Ingreso" if str(getattr(m.tipo, "value", m.tipo)) == "ingreso" else "Egreso",
+                getattr(m, "numero_transaccion", None) or "—",
+                (m.concepto or "")[:48],
+                f"{signo}S/ {monto:,.2f}",
+            ]
+        )
+
+    table = Table(
+        rows,
+        colWidths=[22 * mm, 40 * mm, 22 * mm, 35 * mm, 95 * mm, 28 * mm],
+    )
+    style = _table_style_header()
+    style.add("ALIGN", (-1, 1), (-1, -1), "RIGHT")
+    table.setStyle(style)
+    story.append(table)
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("Reporte filtrado — JAELIN E.I.R.L.", small))
     doc.build(story)
     return buffer.getvalue()

@@ -55,6 +55,15 @@
     setTimeout(() => el.remove(), 3200);
   }
 
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function parseHash() {
     const hash = location.hash.replace(/^#\/?/, "");
     const [route, query = ""] = hash.split("?");
@@ -697,7 +706,10 @@
           <h1>Comprobantes</h1>
           <p>Facturas, boletas, notas de venta y más, según legislación peruana.</p>
         </div>
-        <button class="btn btn-primary" data-go="nuevo">＋ Nuevo</button>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-secondary" id="btn-reporte-comp">🖨 Imprimir reporte</button>
+          <button class="btn btn-primary" data-go="nuevo">＋ Nuevo</button>
+        </div>
       </div>
       <div class="toolbar panel">
         <input id="f-q" placeholder="Buscar cliente, serie o número..." value="${escapeHtml(state.filters.q)}" style="flex:1;min-width:160px" />
@@ -1248,6 +1260,7 @@
           <p>Dashboard de movimientos, ingresos y egresos por caja.</p>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-secondary" id="btn-reporte-caja">🖨 Imprimir reporte</button>
           <button class="btn btn-secondary" id="btn-new-caja">＋ Nueva caja</button>
           <button class="btn btn-primary" id="btn-new-mov">＋ Movimiento</button>
         </div>
@@ -2174,6 +2187,15 @@
         state.filters = { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" };
         renderApp();
       });
+      $("#btn-reporte-comp")?.addEventListener("click", async () => {
+        try {
+          const blob = await API.reporteComprobantes({ ...state.filters });
+          downloadBlob(blob, "reporte-comprobantes.pdf");
+          toast("Reporte generado");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
       $$("[data-edit]").forEach((b) =>
         b.addEventListener("click", (e) => {
           e.preventDefault();
@@ -2195,12 +2217,7 @@
         b.addEventListener("click", async () => {
           try {
             const blob = await API.pdfComprobante(b.dataset.pdf);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `comprobante-${b.dataset.pdf}.pdf`;
-            a.click();
-            URL.revokeObjectURL(url);
+            downloadBlob(blob, `comprobante-${b.dataset.pdf}.pdf`);
           } catch (ex) {
             toast(ex.message);
           }
@@ -2479,6 +2496,15 @@
     if (state.route === "cajas") {
       $("#btn-new-caja")?.addEventListener("click", () => openCajaModal());
       $("#btn-new-mov")?.addEventListener("click", () => openMovimientoModal());
+      $("#btn-reporte-caja")?.addEventListener("click", async () => {
+        try {
+          const blob = await API.reporteCajas({ ...state.filtersCaja });
+          downloadBlob(blob, "reporte-cajas.pdf");
+          toast("Reporte de cajas generado");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
       $("#btn-filtrar-caja")?.addEventListener("click", () => {
         state.filtersCaja.q = ($("#f-caja-q")?.value || "").trim();
         state.filtersCaja.caja_id = $("#f-caja-id")?.value || "";

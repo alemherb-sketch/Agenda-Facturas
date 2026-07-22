@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -19,6 +20,7 @@ from app.schemas import (
     MovimientoCajaOut,
     MovimientoCajaUpdate,
 )
+from app.services.pdf_service import generar_pdf_reporte_cajas
 
 router = APIRouter(prefix="/api/cajas", tags=["cajas"])
 
@@ -274,6 +276,85 @@ def dashboard_cajas(
         por_caja=por_caja,
         por_dia=por_dia,
         movimientos=[_mov_out(m) for m in movimientos],
+    )
+
+
+@router.get("/reporte")
+def reporte_pdf(
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    caja_id: int | None = None,
+    tipo: str | None = None,
+    q: str | None = None,
+    limit: int = Query(500, le=1000),
+):
+    hoy = date.today()
+    if fecha_hasta is None:
+        fecha_hasta = hoy
+    if fecha_desde is None:
+        fecha_desde = fecha_hasta.replace(day=1)
+    if fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
+
+    query = (
+        db.query(MovimientoCaja)
+        .options(joinedload(MovimientoCaja.caja))
+        .filter(MovimientoCaja.usuario_id == user.id)
+    )
+    query = _apply_mov_filters(
+        query,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
+    movimientos = query.order_by(MovimientoCaja.fecha.desc(), MovimientoCaja.id.desc()).limit(limit).all()
+
+    totales = (
+        db.query(MovimientoCaja.tipo, func.coalesce(func.sum(MovimientoCaja.monto), 0))
+        .filter(MovimientoCaja.usuario_id == user.id)
+    )
+    totales = _apply_mov_filters(
+        totales,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
+    total_ingresos = Decimal("0.00")
+    total_egresos = Decimal("0.00")
+    for tipo_row, total in totales.group_by(MovimientoCaja.tipo).all():
+        valor = Decimal(str(total))
+        if tipo_row == TipoMovimientoCaja.INGRESO:
+            total_ingresos = valor
+        elif tipo_row == TipoMovimientoCaja.EGRESO:
+            total_egresos = valor
+
+    caja_nombre = None
+    if caja_id:
+        caja = _get_caja(db, user, caja_id)
+        caja_nombre = caja.nombre
+
+    pdf = generar_pdf_reporte_cajas(
+        movimientos,
+        filtros={
+            "fecha_desde": fecha_desde.isoformat(),
+            "fecha_hasta": fecha_hasta.isoformat(),
+            "caja": caja_nombre,
+            "tipo": tipo,
+            "q": q,
+        },
+        total_ingresos=float(total_ingresos),
+        total_egresos=float(total_egresos),
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="reporte-cajas.pdf"'},
     )
 
 

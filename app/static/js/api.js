@@ -89,6 +89,13 @@ const API = {
   pdfComprobante(id) {
     return this.request(`/api/comprobantes/${id}/pdf`);
   },
+  reporteComprobantes(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/comprobantes/reporte${qs ? `?${qs}` : ""}`);
+  },
   emailComprobante(id, body) {
     return this.request(`/api/comprobantes/${id}/enviar-correo`, {
       method: "POST",
@@ -193,6 +200,13 @@ const API = {
   dashboardCajas(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/cajas/dashboard${qs ? `?${qs}` : ""}`);
+  },
+  reporteCajas(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/cajas/reporte${qs ? `?${qs}` : ""}`);
   },
   listMovimientosCaja(params = {}) {
     const qs = new URLSearchParams(params).toString();

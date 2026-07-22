@@ -21,7 +21,7 @@ from app.schemas import (
 from app.services.catalogo import upsert_cliente, upsert_productos_desde_items
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS, calcular_totales
 from app.services.email_service import enviar_correo
-from app.services.pdf_service import generar_pdf_comprobante
+from app.services.pdf_service import generar_pdf_comprobante, generar_pdf_reporte_comprobantes
 
 router = APIRouter(prefix="/api/comprobantes", tags=["comprobantes"])
 
@@ -60,6 +60,32 @@ def listar(
     q: str | None = None,
     limit: int = Query(100, le=500),
 ):
+    query = _filtrar_comprobantes(
+        db,
+        user,
+        estado=estado,
+        tipo=tipo,
+        zona=zona,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        q=q,
+    )
+    return query.limit(limit).all()
+
+
+def _filtrar_comprobantes(
+    db: Session,
+    user: Usuario,
+    *,
+    estado: str | None = None,
+    tipo: str | None = None,
+    zona: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    q: str | None = None,
+):
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
     query = (
         db.query(Comprobante)
         .options(joinedload(Comprobante.items))
@@ -76,8 +102,6 @@ def listar(
         query = query.filter(Comprobante.fecha_emision >= fecha_desde)
     if fecha_hasta:
         query = query.filter(Comprobante.fecha_emision <= fecha_hasta)
-    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
-        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -86,7 +110,47 @@ def listar(
             | (Comprobante.serie.ilike(like))
             | (Comprobante.cliente_documento.ilike(like))
         )
-    return query.limit(limit).all()
+    return query
+
+
+@router.get("/reporte")
+def reporte_pdf(
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    estado: str | None = None,
+    tipo: str | None = None,
+    zona: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    q: str | None = None,
+    limit: int = Query(500, le=1000),
+):
+    docs = _filtrar_comprobantes(
+        db,
+        user,
+        estado=estado,
+        tipo=tipo,
+        zona=zona,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        q=q,
+    ).limit(limit).all()
+    pdf = generar_pdf_reporte_comprobantes(
+        docs,
+        filtros={
+            "estado": estado,
+            "tipo": tipo,
+            "zona": zona,
+            "fecha_desde": fecha_desde.isoformat() if fecha_desde else None,
+            "fecha_hasta": fecha_hasta.isoformat() if fecha_hasta else None,
+            "q": q,
+        },
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="reporte-comprobantes.pdf"'},
+    )
 
 
 @router.post("", response_model=ComprobanteOut, status_code=201)
