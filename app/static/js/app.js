@@ -2728,12 +2728,14 @@
         showNative &&
         document.visibilityState === "visible" &&
         localStorage.getItem("af_notif_local") === "1" &&
+        "Notification" in window &&
         Notification.permission === "granted"
       ) {
         for (const n of unread) {
           if (lastNotifIds.has(n.id)) continue;
           lastNotifIds.add(n.id);
           try {
+            playAlertBeep();
             new Notification(n.titulo, {
               body: n.mensaje,
               icon: "/static/icons/icon-192.png",
@@ -2868,21 +2870,30 @@
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
       const ctx = new Ctx();
-      const now = ctx.currentTime;
-      [0, 0.18, 0.36].forEach((offset, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = i === 2 ? 880 : 660;
-        gain.gain.setValueAtTime(0.0001, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.22, now + offset + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.15);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.16);
-      });
-      setTimeout(() => ctx.close().catch(() => undefined), 800);
+      const schedule = () => {
+        const now = ctx.currentTime;
+        [0, 0.18, 0.36].forEach((offset, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = i === 2 ? 880 : 660;
+          gain.gain.setValueAtTime(0.0001, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.22, now + offset + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.15);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.16);
+        });
+        setTimeout(() => ctx.close().catch(() => undefined), 800);
+      };
+      // Safari/iOS y Chrome crean el AudioContext suspendido hasta reanudarlo:
+      // sin esto el beep se agenda pero nunca suena.
+      if (ctx.state === "suspended") {
+        ctx.resume().then(schedule).catch(() => undefined);
+      } else {
+        schedule();
+      }
     } catch (_) {
       /* ignore */
     }
@@ -2896,7 +2907,11 @@
       if (!msg || msg.type !== "AF_PUSH") return;
       playAlertBeep();
       toast(`${msg.title || "Aviso"}: ${msg.body || ""}`);
-      if (document.visibilityState === "visible" && Notification.permission === "granted") {
+      if (
+        document.visibilityState === "visible" &&
+        "Notification" in window &&
+        Notification.permission === "granted"
+      ) {
         try {
           new Notification(msg.title || "Agenda Facturas", {
             body: msg.body || "",
