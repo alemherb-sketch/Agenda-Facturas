@@ -7,8 +7,23 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.database import Base, engine, ensure_schema
-from app.routers import agenda, auth_router, cajas, clientes, combustibles, comprobantes, consulta, contactos, cron, dashboard, notificaciones, productos
+from app.database import Base, SessionLocal, engine, ensure_schema
+from app.routers import (
+    adjuntos,
+    agenda,
+    auth_router,
+    cajas,
+    clientes,
+    combustibles,
+    comprobantes,
+    consulta,
+    contactos,
+    cron,
+    dashboard,
+    notificaciones,
+    productos,
+)
+from app.services.adjuntos import migrar_adjuntos_legados
 from app.services.reminders import procesar_recordatorios
 from app.services.seed import ensure_demo_user
 from app.services.vapid_keys import ensure_vapid_keys
@@ -19,6 +34,8 @@ STATIC_DIR = BASE_DIR / "static"
 
 Base.metadata.create_all(bind=engine)
 ensure_schema()
+with SessionLocal() as _db:
+    migrar_adjuntos_legados(_db)
 ensure_demo_user()
 ensure_vapid_keys(settings)
 
@@ -55,6 +72,7 @@ app.include_router(productos.router)
 app.include_router(cajas.router)
 app.include_router(combustibles.router)
 app.include_router(contactos.router)
+app.include_router(adjuntos.router)
 app.include_router(cron.router)
 
 

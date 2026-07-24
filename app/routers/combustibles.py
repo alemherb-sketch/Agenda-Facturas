@@ -12,12 +12,19 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import MovimientoCombustible, TipoMovimientoCombustible, Usuario
 from app.schemas import (
+    AdjuntoOut,
     CombustibleResumenOut,
     MovimientoCombustibleCreate,
     MovimientoCombustibleOut,
     MovimientoCombustibleUpdate,
 )
-from app.services.adjuntos import delete_file, file_response, save_upload
+from app.services.adjuntos import (
+    ENTIDAD_COMBUSTIBLE,
+    crear_adjunto,
+    eliminar_adjuntos_entidad,
+    listar_adjuntos,
+    map_adjuntos_por_entidad,
+)
 from app.services.pdf_service import generar_pdf_reporte_combustibles
 
 
@@ -47,6 +54,14 @@ def _get_owned(db: Session, user: Usuario, movimiento_id: int) -> MovimientoComb
     if not mov:
         raise HTTPException(status_code=404, detail="Movimiento de combustible no encontrado")
     return mov
+
+
+def _comb_out(db: Session, mov: MovimientoCombustible, adjuntos_rows=None) -> MovimientoCombustibleOut:
+    rows = adjuntos_rows if adjuntos_rows is not None else listar_adjuntos(db, ENTIDAD_COMBUSTIBLE, mov.id)
+    out = MovimientoCombustibleOut.model_validate(mov)
+    out.adjuntos = [AdjuntoOut.from_row(r) for r in rows]
+    out.tiene_adjunto = bool(out.adjuntos)
+    return out
 
 
 def _apply_filters(
@@ -190,6 +205,7 @@ def resumen(
         reverse=True,
     )[:8]
 
+    by_adj = map_adjuntos_por_entidad(db, ENTIDAD_COMBUSTIBLE, [m.id for m in movimientos])
     return CombustibleResumenOut(
         total_ingresos=ingresos,
         total_salidas=salidas,
@@ -199,7 +215,7 @@ def resumen(
         por_placa=por_placa,
         por_conductor=por_conductor,
         por_marca=por_marca,
-        movimientos=movimientos,
+        movimientos=[_comb_out(db, m, by_adj.get(m.id, [])) for m in movimientos],
     )
 
 
@@ -280,7 +296,13 @@ def listar(
     query = _apply_filters(
         query, tipo=tipo, q=q, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, placa=placa
     )
-    return query.order_by(MovimientoCombustible.fecha.desc(), MovimientoCombustible.id.desc()).limit(limit).all()
+    rows = (
+        query.order_by(MovimientoCombustible.fecha.desc(), MovimientoCombustible.id.desc())
+        .limit(limit)
+        .all()
+    )
+    by_adj = map_adjuntos_por_entidad(db, ENTIDAD_COMBUSTIBLE, [m.id for m in rows])
+    return [_comb_out(db, m, by_adj.get(m.id, [])) for m in rows]
 
 
 @router.post("", response_model=MovimientoCombustibleOut, status_code=201)
@@ -304,7 +326,7 @@ def crear(
     db.add(mov)
     db.commit()
     db.refresh(mov)
-    return mov
+    return _comb_out(db, mov)
 
 
 @router.put("/{movimiento_id}", response_model=MovimientoCombustibleOut)
@@ -328,53 +350,39 @@ def actualizar(
         setattr(mov, key, value)
     db.commit()
     db.refresh(mov)
-    return mov
+    return _comb_out(db, mov)
 
 
-@router.post("/{movimiento_id}/adjunto", response_model=MovimientoCombustibleOut)
-async def subir_adjunto(
+@router.post("/{movimiento_id}/adjuntos", response_model=MovimientoCombustibleOut)
+async def subir_adjuntos(
     movimiento_id: int,
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-    archivo: UploadFile = File(...),
+    archivos: list[UploadFile] = File(...),
 ):
     mov = _get_owned(db, user, movimiento_id)
-    delete_file(mov.adjunto_path)
-    rel, nombre, mime = await save_upload(
-        archivo, user_id=user.id, kind="combustibles", entity_id=mov.id
-    )
-    mov.adjunto_path = rel
-    mov.adjunto_nombre = nombre
-    mov.adjunto_mime = mime
-    db.commit()
-    db.refresh(mov)
-    return mov
+    if not archivos:
+        raise HTTPException(status_code=400, detail="Seleccione al menos un archivo")
+    for archivo in archivos:
+        await crear_adjunto(
+            db,
+            user=user,
+            entidad_tipo=ENTIDAD_COMBUSTIBLE,
+            entidad_id=mov.id,
+            kind="combustibles",
+            archivo=archivo,
+        )
+    return _comb_out(db, mov)
 
 
-@router.get("/{movimiento_id}/adjunto")
-def ver_adjunto(
-    movimiento_id: int,
-    user: Annotated[Usuario, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-):
-    mov = _get_owned(db, user, movimiento_id)
-    return file_response(mov.adjunto_path, mov.adjunto_nombre, mov.adjunto_mime)
-
-
-@router.delete("/{movimiento_id}/adjunto", response_model=MovimientoCombustibleOut)
-def quitar_adjunto(
+@router.get("/{movimiento_id}/adjuntos", response_model=list[AdjuntoOut])
+def listar_adjuntos_combustible(
     movimiento_id: int,
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    mov = _get_owned(db, user, movimiento_id)
-    delete_file(mov.adjunto_path)
-    mov.adjunto_path = None
-    mov.adjunto_nombre = None
-    mov.adjunto_mime = None
-    db.commit()
-    db.refresh(mov)
-    return mov
+    _get_owned(db, user, movimiento_id)
+    return [AdjuntoOut.from_row(r) for r in listar_adjuntos(db, ENTIDAD_COMBUSTIBLE, movimiento_id)]
 
 
 @router.delete("/{movimiento_id}")
@@ -384,7 +392,7 @@ def eliminar(
     db: Annotated[Session, Depends(get_db)],
 ):
     mov = _get_owned(db, user, movimiento_id)
-    delete_file(mov.adjunto_path)
+    eliminar_adjuntos_entidad(db, ENTIDAD_COMBUSTIBLE, mov.id)
     db.delete(mov)
     db.commit()
     return {"ok": True}

@@ -12,6 +12,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Caja, MovimientoCaja, TipoMovimientoCaja, Usuario
 from app.schemas import (
+    AdjuntoOut,
     CajaCreate,
     CajaDashboardOut,
     CajaOut,
@@ -20,7 +21,13 @@ from app.schemas import (
     MovimientoCajaOut,
     MovimientoCajaUpdate,
 )
-from app.services.adjuntos import delete_file, file_response, save_upload
+from app.services.adjuntos import (
+    ENTIDAD_CAJA,
+    crear_adjunto,
+    eliminar_adjuntos_entidad,
+    listar_adjuntos,
+    map_adjuntos_por_entidad,
+)
 from app.services.pdf_service import generar_pdf_reporte_cajas
 
 router = APIRouter(prefix="/api/cajas", tags=["cajas"])
@@ -72,7 +79,8 @@ def _clean_numero(value: str | None) -> str | None:
     return text or None
 
 
-def _mov_out(mov: MovimientoCaja) -> MovimientoCajaOut:
+def _mov_out(mov: MovimientoCaja, adjuntos_rows=None) -> MovimientoCajaOut:
+    rows = adjuntos_rows if adjuntos_rows is not None else []
     return MovimientoCajaOut(
         id=mov.id,
         caja_id=mov.caja_id,
@@ -82,10 +90,14 @@ def _mov_out(mov: MovimientoCaja) -> MovimientoCajaOut:
         numero_transaccion=mov.numero_transaccion,
         concepto=mov.concepto,
         fecha=mov.fecha,
-        adjunto_nombre=mov.adjunto_nombre if mov.adjunto_path else None,
-        tiene_adjunto=bool(mov.adjunto_path),
+        adjuntos=[AdjuntoOut.from_row(r) for r in rows],
+        tiene_adjunto=bool(rows),
         creado_en=mov.creado_en,
     )
+
+
+def _mov_out_db(db: Session, mov: MovimientoCaja) -> MovimientoCajaOut:
+    return _mov_out(mov, listar_adjuntos(db, ENTIDAD_CAJA, mov.id))
 
 
 def _apply_mov_filters(
@@ -269,6 +281,7 @@ def dashboard_cajas(
         for dia, vals in sorted(por_dia_map.items())
     ]
 
+    by_adj = map_adjuntos_por_entidad(db, ENTIDAD_CAJA, [m.id for m in movimientos])
     return CajaDashboardOut(
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
@@ -278,7 +291,7 @@ def dashboard_cajas(
         cantidad_movimientos=int(cantidad),
         por_caja=por_caja,
         por_dia=por_dia,
-        movimientos=[_mov_out(m) for m in movimientos],
+        movimientos=[_mov_out(m, by_adj.get(m.id, [])) for m in movimientos],
     )
 
 
@@ -427,7 +440,9 @@ def listar_movimientos(
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
     )
-    return [_mov_out(m) for m in query.limit(limit).all()]
+    rows = query.limit(limit).all()
+    by_adj = map_adjuntos_por_entidad(db, ENTIDAD_CAJA, [m.id for m in rows])
+    return [_mov_out(m, by_adj.get(m.id, [])) for m in rows]
 
 
 @router.post("/movimientos", response_model=MovimientoCajaOut, status_code=201)
@@ -457,7 +472,7 @@ def crear_movimiento(
         .filter(MovimientoCaja.id == mov.id)
         .first()
     )
-    return _mov_out(mov)
+    return _mov_out_db(db, mov)
 
 
 @router.put("/movimientos/{movimiento_id}", response_model=MovimientoCajaOut)
@@ -492,15 +507,15 @@ def actualizar_movimiento(
         .filter(MovimientoCaja.id == mov.id)
         .first()
     )
-    return _mov_out(mov)
+    return _mov_out_db(db, mov)
 
 
-@router.post("/movimientos/{movimiento_id}/adjunto", response_model=MovimientoCajaOut)
-async def subir_adjunto_movimiento(
+@router.post("/movimientos/{movimiento_id}/adjuntos", response_model=MovimientoCajaOut)
+async def subir_adjuntos_movimiento(
     movimiento_id: int,
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-    archivo: UploadFile = File(...),
+    archivos: list[UploadFile] = File(...),
 ):
     mov = (
         db.query(MovimientoCaja)
@@ -510,26 +525,28 @@ async def subir_adjunto_movimiento(
     )
     if not mov:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-    delete_file(mov.adjunto_path)
-    rel, nombre, mime = await save_upload(
-        archivo, user_id=user.id, kind="cajas", entity_id=mov.id
-    )
-    mov.adjunto_path = rel
-    mov.adjunto_nombre = nombre
-    mov.adjunto_mime = mime
-    db.commit()
-    db.refresh(mov)
+    if not archivos:
+        raise HTTPException(status_code=400, detail="Seleccione al menos un archivo")
+    for archivo in archivos:
+        await crear_adjunto(
+            db,
+            user=user,
+            entidad_tipo=ENTIDAD_CAJA,
+            entidad_id=mov.id,
+            kind="cajas",
+            archivo=archivo,
+        )
     mov = (
         db.query(MovimientoCaja)
         .options(joinedload(MovimientoCaja.caja))
         .filter(MovimientoCaja.id == mov.id)
         .first()
     )
-    return _mov_out(mov)
+    return _mov_out_db(db, mov)
 
 
-@router.get("/movimientos/{movimiento_id}/adjunto")
-def ver_adjunto_movimiento(
+@router.get("/movimientos/{movimiento_id}/adjuntos", response_model=list[AdjuntoOut])
+def listar_adjuntos_movimiento(
     movimiento_id: int,
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
@@ -541,36 +558,7 @@ def ver_adjunto_movimiento(
     )
     if not mov:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-    return file_response(mov.adjunto_path, mov.adjunto_nombre, mov.adjunto_mime)
-
-
-@router.delete("/movimientos/{movimiento_id}/adjunto", response_model=MovimientoCajaOut)
-def quitar_adjunto_movimiento(
-    movimiento_id: int,
-    user: Annotated[Usuario, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-):
-    mov = (
-        db.query(MovimientoCaja)
-        .options(joinedload(MovimientoCaja.caja))
-        .filter(MovimientoCaja.id == movimiento_id, MovimientoCaja.usuario_id == user.id)
-        .first()
-    )
-    if not mov:
-        raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-    delete_file(mov.adjunto_path)
-    mov.adjunto_path = None
-    mov.adjunto_nombre = None
-    mov.adjunto_mime = None
-    db.commit()
-    db.refresh(mov)
-    mov = (
-        db.query(MovimientoCaja)
-        .options(joinedload(MovimientoCaja.caja))
-        .filter(MovimientoCaja.id == mov.id)
-        .first()
-    )
-    return _mov_out(mov)
+    return [AdjuntoOut.from_row(r) for r in listar_adjuntos(db, ENTIDAD_CAJA, movimiento_id)]
 
 
 @router.delete("/movimientos/{movimiento_id}")
@@ -586,7 +574,7 @@ def eliminar_movimiento(
     )
     if not mov:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-    delete_file(mov.adjunto_path)
+    eliminar_adjuntos_entidad(db, ENTIDAD_CAJA, mov.id)
     db.delete(mov)
     db.commit()
     return {"ok": True}

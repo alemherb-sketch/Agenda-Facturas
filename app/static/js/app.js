@@ -64,35 +64,226 @@
     URL.revokeObjectURL(url);
   }
 
-  function adjuntoFieldHtml(entity) {
-    const has = Boolean(entity?.tiene_adjunto || entity?.adjunto_nombre);
+  const adjuntoWidgetState = new Map();
+
+  function adjuntoFieldHtml(entity, widgetKey) {
+    const count = (entity?.adjuntos || []).length;
     return `
-      <div class="field full">
-        <label>Adjunto (PDF o imagen)</label>
-        <input type="file" name="adjunto" accept=".pdf,image/jpeg,image/png,image/webp,image/gif,application/pdf" />
-        ${
-          has
-            ? `<small class="field-hint" style="display:block;margin-top:.35rem">
-                Actual: <strong>${escapeHtml(entity.adjunto_nombre || "archivo")}</strong>
-                · <label style="display:inline;font-weight:500"><input type="checkbox" name="quitar_adjunto" value="1" /> Quitar</label>
-              </small>`
-            : `<small class="field-hint">Opcional · PDF, JPG, PNG, WEBP o GIF · máx. 8 MB</small>`
-        }
+      <div class="field full adjuntos-field" data-adjuntos-key="${widgetKey}">
+        <label>Adjuntos (PDF o imagen)${count ? ` · ${count}` : ""}</label>
+        <div class="adjuntos-toolbar">
+          <label class="btn btn-secondary btn-sm adjuntos-pick">
+            ＋ Agregar archivos
+            <input type="file" multiple accept=".pdf,image/jpeg,image/png,image/webp,image/gif,application/pdf" hidden />
+          </label>
+        </div>
+        <div class="adjuntos-grid" data-adjuntos-grid></div>
+        <small class="field-hint">Uno o más archivos · PDF, JPG, PNG, WEBP o GIF · máx. 8 MB c/u</small>
       </div>`;
   }
 
-  async function syncAdjuntoAfterSave({ form, id, upload, remove }) {
-    if (!id || !form) return;
-    const quitar = Boolean(form.querySelector('[name="quitar_adjunto"]')?.checked);
-    const file = form.querySelector('[name="adjunto"]')?.files?.[0];
-    if (quitar) await remove(id);
-    else if (file) await upload(id, file);
+  function bindAdjuntosWidget(widgetKey, existing = []) {
+    const root = document.querySelector(`[data-adjuntos-key="${widgetKey}"]`);
+    if (!root) return;
+    const grid = root.querySelector("[data-adjuntos-grid]");
+    const input = root.querySelector('input[type="file"]');
+    const state = {
+      saved: (existing || []).map((a) => ({ ...a, previewUrl: null })),
+      pending: [],
+    };
+    adjuntoWidgetState.set(widgetKey, state);
+
+    const revokePending = () => {
+      state.pending.forEach((p) => {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      });
+    };
+
+    const render = () => {
+      const cards = [];
+      state.saved.forEach((a) => {
+        const isImg = a.es_imagen || (a.mime || "").startsWith("image/");
+        cards.push(`
+          <div class="adjunto-card" data-saved-id="${a.id}">
+            <div class="adjunto-preview">
+              ${
+                isImg && a.previewUrl
+                  ? `<img src="${a.previewUrl}" alt="" />`
+                  : `<span class="adjunto-icon">${isImg ? "🖼" : "PDF"}</span>`
+              }
+            </div>
+            <div class="adjunto-meta" title="${escapeHtml(a.nombre)}">${escapeHtml(a.nombre)}</div>
+            <div class="adjunto-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-adj-view="${a.id}">Ver</button>
+              <button type="button" class="btn btn-danger btn-sm" data-adj-del-saved="${a.id}" title="Eliminar">×</button>
+            </div>
+          </div>`);
+      });
+      state.pending.forEach((p, idx) => {
+        const isImg = (p.file.type || "").startsWith("image/");
+        cards.push(`
+          <div class="adjunto-card is-pending" data-pending-idx="${idx}">
+            <div class="adjunto-preview">
+              ${
+                isImg && p.previewUrl
+                  ? `<img src="${p.previewUrl}" alt="" />`
+                  : `<span class="adjunto-icon">${isImg ? "🖼" : "PDF"}</span>`
+              }
+            </div>
+            <div class="adjunto-meta" title="${escapeHtml(p.file.name)}">${escapeHtml(p.file.name)}</div>
+            <div class="adjunto-actions">
+              <button type="button" class="btn btn-danger btn-sm" data-adj-del-pending="${idx}" title="Quitar">×</button>
+            </div>
+          </div>`);
+      });
+      grid.innerHTML = cards.length
+        ? cards.join("")
+        : `<div class="adjuntos-empty">Sin archivos adjuntos</div>`;
+    };
+
+    const loadSavedPreviews = async () => {
+      await Promise.all(
+        state.saved.map(async (a) => {
+          if (!(a.es_imagen || (a.mime || "").startsWith("image/"))) return;
+          try {
+            const blob = await API.downloadAdjunto(a.id);
+            a.previewUrl = URL.createObjectURL(blob);
+          } catch (_) {
+            /* ignore */
+          }
+        })
+      );
+      render();
+    };
+
+    input?.addEventListener("change", () => {
+      const files = [...(input.files || [])];
+      input.value = "";
+      files.forEach((file) => {
+        const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+        state.pending.push({ file, previewUrl });
+      });
+      render();
+    });
+
+    grid.addEventListener("click", async (e) => {
+      const viewBtn = e.target.closest("[data-adj-view]");
+      const delSaved = e.target.closest("[data-adj-del-saved]");
+      const delPending = e.target.closest("[data-adj-del-pending]");
+      if (viewBtn) {
+        try {
+          const blob = await API.downloadAdjunto(viewBtn.dataset.adjView);
+          await openAdjunto(blob);
+        } catch (ex) {
+          toast(ex.message);
+        }
+        return;
+      }
+      if (delSaved) {
+        const id = Number(delSaved.dataset.adjDelSaved);
+        if (!confirm("¿Eliminar este archivo?")) return;
+        try {
+          await API.deleteAdjunto(id);
+          const gone = state.saved.find((a) => a.id === id);
+          if (gone?.previewUrl) URL.revokeObjectURL(gone.previewUrl);
+          state.saved = state.saved.filter((a) => a.id !== id);
+          render();
+          toast("Adjunto eliminado");
+        } catch (ex) {
+          toast(ex.message);
+        }
+        return;
+      }
+      if (delPending) {
+        const idx = Number(delPending.dataset.adjDelPending);
+        const [removed] = state.pending.splice(idx, 1);
+        if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+        render();
+      }
+    });
+
+    render();
+    loadSavedPreviews();
+    return { revokePending };
+  }
+
+  async function flushPendingAdjuntos(widgetKey, entityId, uploadFn) {
+    const state = adjuntoWidgetState.get(widgetKey);
+    if (!state?.pending?.length || !entityId) return;
+    const files = state.pending.map((p) => p.file);
+    await uploadFn(entityId, files);
+    state.pending.forEach((p) => {
+      if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+    });
+    state.pending = [];
   }
 
   async function openAdjunto(blob) {
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank", "noopener");
     setTimeout(() => URL.revokeObjectURL(url), 120000);
+  }
+
+  function openAdjuntosViewer(adjuntos = []) {
+    if (!adjuntos.length) {
+      toast("No hay adjuntos");
+      return;
+    }
+    let backdrop = document.getElementById("modal-adjuntos");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.id = "modal-adjuntos";
+      backdrop.className = "modal-backdrop";
+      document.body.appendChild(backdrop);
+    }
+    backdrop.classList.add("open");
+    backdrop.innerHTML = `
+      <div class="modal" style="max-width:720px">
+        <div class="modal-head">
+          <h2>Adjuntos (${adjuntos.length})</h2>
+          <button class="btn btn-ghost btn-sm" id="close-adjuntos">Cerrar</button>
+        </div>
+        <div class="adjuntos-grid" id="adjuntos-viewer-grid"></div>
+      </div>`;
+    const grid = $("#adjuntos-viewer-grid", backdrop);
+    grid.innerHTML = adjuntos
+      .map(
+        (a) => `
+      <div class="adjunto-card">
+        <div class="adjunto-preview"><span class="adjunto-icon">${a.es_imagen ? "🖼" : "PDF"}</span></div>
+        <div class="adjunto-meta">${escapeHtml(a.nombre)}</div>
+        <div class="adjunto-actions">
+          <button type="button" class="btn btn-secondary btn-sm" data-view-id="${a.id}">Ver</button>
+        </div>
+      </div>`
+      )
+      .join("");
+    adjuntos.forEach(async (a) => {
+      if (!a.es_imagen) return;
+      try {
+        const blob = await API.downloadAdjunto(a.id);
+        const url = URL.createObjectURL(blob);
+        const card = grid.querySelector(`[data-view-id="${a.id}"]`)?.closest(".adjunto-card");
+        const preview = card?.querySelector(".adjunto-preview");
+        if (preview) preview.innerHTML = `<img src="${url}" alt="" />`;
+      } catch (_) {
+        /* ignore */
+      }
+    });
+    $("#close-adjuntos", backdrop).onclick = () => backdrop.classList.remove("open");
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) backdrop.classList.remove("open");
+    };
+    grid.onclick = async (e) => {
+      const btn = e.target.closest("[data-view-id]");
+      if (!btn) return;
+      try {
+        const blob = await API.downloadAdjunto(btn.dataset.viewId);
+        await openAdjunto(blob);
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
   }
 
   function parseHash() {
@@ -800,8 +991,8 @@
                     <button type="button" class="btn btn-secondary btn-sm" data-edit="${d.id}">Editar</button>
                     <button type="button" class="btn btn-secondary btn-sm" data-pdf="${d.id}">PDF</button>
                     ${
-                      d.tiene_adjunto || d.adjunto_nombre
-                        ? `<button type="button" class="btn btn-secondary btn-sm" data-adjunto="${d.id}" title="${escapeHtml(d.adjunto_nombre || "Adjunto")}">📎</button>`
+                      d.tiene_adjunto || (d.adjuntos && d.adjuntos.length)
+                        ? `<button type="button" class="btn btn-secondary btn-sm" data-adjuntos-doc="${d.id}" title="Ver adjuntos (${d.adjuntos?.length || ""})">📎 ${d.adjuntos?.length || ""}</button>`
                         : ""
                     }
                     <button type="button" class="btn btn-secondary btn-sm" data-mail="${d.id}">Correo</button>
@@ -933,7 +1124,7 @@
             <label>Observaciones</label>
             <textarea name="observaciones" rows="2">${escapeHtml(doc?.observaciones || "")}</textarea>
           </div>
-          ${adjuntoFieldHtml(doc)}
+          ${adjuntoFieldHtml(doc, "comprobante")}
         </div>
 
         <h3 style="margin:1.2rem 0 .6rem;font-family:var(--font-display)">Detalle de productos / servicios</h3>
@@ -1408,8 +1599,8 @@
                   <td class="actions">
                     <button class="btn btn-secondary btn-sm" data-mov-edit="${m.id}">Editar</button>
                     ${
-                      m.tiene_adjunto || m.adjunto_nombre
-                        ? `<button class="btn btn-secondary btn-sm" data-mov-adjunto="${m.id}" title="${escapeHtml(m.adjunto_nombre || "Adjunto")}">📎</button>`
+                      m.tiene_adjunto || (m.adjuntos && m.adjuntos.length)
+                        ? `<button class="btn btn-secondary btn-sm" data-adjuntos-mov="${m.id}" title="Ver adjuntos">📎 ${m.adjuntos?.length || ""}</button>`
                         : ""
                     }
                     <button class="btn btn-danger btn-sm" data-mov-del="${m.id}">Eliminar</button>
@@ -1509,8 +1700,8 @@
                   <td class="actions">
                     <button class="btn btn-secondary btn-sm" data-comb-edit="${m.id}">Editar</button>
                     ${
-                      m.tiene_adjunto || m.adjunto_nombre
-                        ? `<button class="btn btn-secondary btn-sm" data-comb-adjunto="${m.id}" title="${escapeHtml(m.adjunto_nombre || "Adjunto")}">📎</button>`
+                      m.tiene_adjunto || (m.adjuntos && m.adjuntos.length)
+                        ? `<button class="btn btn-secondary btn-sm" data-adjuntos-comb="${m.id}" title="Ver adjuntos">📎 ${m.adjuntos?.length || ""}</button>`
                         : ""
                     }
                     <button class="btn btn-danger btn-sm" data-comb-del="${m.id}">Eliminar</button>
@@ -1568,7 +1759,7 @@
             <label>Notas (opcional)</label>
             <input name="notas" maxlength="300" value="${escapeHtml(mov?.notas || "")}" placeholder="Detalle adicional" />
           </div>
-          ${adjuntoFieldHtml(mov)}
+          ${adjuntoFieldHtml(mov, "combustible")}
           <div class="field full">
             <button class="btn btn-primary" type="submit">${mov ? "Guardar" : "Registrar"}</button>
           </div>
@@ -1578,12 +1769,11 @@
     modal.onclick = (e) => {
       if (e.target === modal) modal.classList.remove("open");
     };
+    bindAdjuntosWidget("combustible", mov?.adjuntos || []);
     $("#form-combustible").onsubmit = async (e) => {
       e.preventDefault();
       const form = e.target;
       const body = Object.fromEntries(new FormData(form).entries());
-      delete body.adjunto;
-      delete body.quitar_adjunto;
       body.galones = Number(body.galones);
       body.marca = (body.marca || "").trim() || null;
       body.placa = (body.placa || "").trim().toUpperCase() || null;
@@ -1592,12 +1782,7 @@
         const saved = mov
           ? await API.updateCombustible(mov.id, body)
           : await API.createCombustible(body);
-        await syncAdjuntoAfterSave({
-          form,
-          id: saved.id,
-          upload: API.uploadAdjuntoCombustible.bind(API),
-          remove: API.deleteAdjuntoCombustible.bind(API),
-        });
+        await flushPendingAdjuntos("combustible", saved.id, API.uploadAdjuntosCombustible.bind(API));
         toast(mov ? "Movimiento actualizado" : "Movimiento registrado");
         modal.classList.remove("open");
         renderApp();
@@ -1697,20 +1882,19 @@
             <label>Concepto de transacción</label>
             <input name="concepto" required maxlength="300" value="${escapeHtml(mov?.concepto || "")}" placeholder="Ej. Venta del día, pago proveedor, transferencia" />
           </div>
-          ${adjuntoFieldHtml(mov)}
+          ${adjuntoFieldHtml(mov, "caja")}
           <div class="field full">
             <button class="btn btn-primary" type="submit">${mov ? "Guardar" : "Registrar movimiento"}</button>
           </div>
         </form>
       </div>`;
     $("#close-mov").onclick = () => modal.classList.remove("open");
+    bindAdjuntosWidget("caja", mov?.adjuntos || []);
     $("#form-mov").onsubmit = async (e) => {
       e.preventDefault();
       const form = e.target;
       const fd = new FormData(form);
       const body = Object.fromEntries(fd.entries());
-      delete body.adjunto;
-      delete body.quitar_adjunto;
       body.caja_id = Number(body.caja_id);
       body.monto = Number(body.monto);
       body.numero_transaccion = (body.numero_transaccion || "").trim() || null;
@@ -1718,12 +1902,7 @@
         const saved = mov
           ? await API.updateMovimientoCaja(mov.id, body)
           : await API.createMovimientoCaja(body);
-        await syncAdjuntoAfterSave({
-          form,
-          id: saved.id,
-          upload: API.uploadAdjuntoCaja.bind(API),
-          remove: API.deleteAdjuntoCaja.bind(API),
-        });
+        await flushPendingAdjuntos("caja", saved.id, API.uploadAdjuntosCaja.bind(API));
         toast(mov ? "Movimiento actualizado" : "Movimiento registrado");
         modal.classList.remove("open");
         renderApp();
@@ -2295,14 +2474,10 @@
           }
         })
       );
-      $$("[data-adjunto]").forEach((b) =>
-        b.addEventListener("click", async () => {
-          try {
-            const blob = await API.downloadAdjuntoComprobante(b.dataset.adjunto);
-            await openAdjunto(blob);
-          } catch (ex) {
-            toast(ex.message);
-          }
+      $$("[data-adjuntos-doc]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const doc = state.docs.find((d) => d.id === Number(b.dataset.adjuntosDoc));
+          openAdjuntosViewer(doc?.adjuntos || []);
         })
       );
       $$("[data-mail]").forEach((b) =>
@@ -2358,13 +2533,12 @@
       bindItemEvents();
       syncItemIgvControls();
       recalcItems();
+      bindAdjuntosWidget("comprobante", state.editingDoc?.adjuntos || []);
       $("#form-comprobante")?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const form = e.target;
         const fd = new FormData(form);
         const body = Object.fromEntries(fd.entries());
-        delete body.adjunto;
-        delete body.quitar_adjunto;
         if (!body.fecha_vencimiento) body.fecha_vencimiento = null;
         body.zona = (body.zona || "").trim() || null;
         body.motivo = (body.motivo || "").trim() || null;
@@ -2386,12 +2560,7 @@
             saved = await API.createComprobante(body);
             toast("Comprobante registrado");
           }
-          await syncAdjuntoAfterSave({
-            form,
-            id: saved.id,
-            upload: API.uploadAdjuntoComprobante.bind(API),
-            remove: API.deleteAdjuntoComprobante.bind(API),
-          });
+          await flushPendingAdjuntos("comprobante", saved.id, API.uploadAdjuntosComprobante.bind(API));
           state.editingDoc = null;
           navigate("comprobantes");
         } catch (ex) {
@@ -2631,14 +2800,10 @@
           openMovimientoModal(mov);
         })
       );
-      $$("[data-mov-adjunto]").forEach((b) =>
-        b.addEventListener("click", async () => {
-          try {
-            const blob = await API.downloadAdjuntoCaja(b.dataset.movAdjunto);
-            await openAdjunto(blob);
-          } catch (ex) {
-            toast(ex.message);
-          }
+      $$("[data-adjuntos-mov]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.adjuntosMov));
+          openAdjuntosViewer(mov?.adjuntos || []);
         })
       );
       $$("[data-mov-del]").forEach((b) =>
@@ -2679,14 +2844,10 @@
           openCombustibleModal(mov);
         })
       );
-      $$("[data-comb-adjunto]").forEach((b) =>
-        b.addEventListener("click", async () => {
-          try {
-            const blob = await API.downloadAdjuntoCombustible(b.dataset.combAdjunto);
-            await openAdjunto(blob);
-          } catch (ex) {
-            toast(ex.message);
-          }
+      $$("[data-adjuntos-comb]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const mov = state.combustibles.find((m) => m.id === Number(b.dataset.adjuntosComb));
+          openAdjuntosViewer(mov?.adjuntos || []);
         })
       );
       $$("[data-comb-del]").forEach((b) =>

@@ -94,16 +94,16 @@ const API = {
   pdfComprobante(id) {
     return this.request(`/api/comprobantes/${id}/pdf`);
   },
-  uploadAdjuntoComprobante(id, file) {
+  uploadAdjuntosComprobante(id, files) {
     const fd = new FormData();
-    fd.append("archivo", file);
-    return this.request(`/api/comprobantes/${id}/adjunto`, { method: "POST", body: fd });
+    [...files].forEach((f) => fd.append("archivos", f));
+    return this.request(`/api/comprobantes/${id}/adjuntos`, { method: "POST", body: fd });
   },
-  downloadAdjuntoComprobante(id) {
-    return this.request(`/api/comprobantes/${id}/adjunto`, { asBlob: true });
+  downloadAdjunto(id) {
+    return this.request(`/api/adjuntos/${id}`, { asBlob: true });
   },
-  deleteAdjuntoComprobante(id) {
-    return this.request(`/api/comprobantes/${id}/adjunto`, { method: "DELETE" });
+  deleteAdjunto(id) {
+    return this.request(`/api/adjuntos/${id}`, { method: "DELETE" });
   },
   reporteComprobantes(params = {}) {
     const cleaned = Object.fromEntries(
@@ -237,16 +237,10 @@ const API = {
   deleteMovimientoCaja(id) {
     return this.request(`/api/cajas/movimientos/${id}`, { method: "DELETE" });
   },
-  uploadAdjuntoCaja(id, file) {
+  uploadAdjuntosCaja(id, files) {
     const fd = new FormData();
-    fd.append("archivo", file);
-    return this.request(`/api/cajas/movimientos/${id}/adjunto`, { method: "POST", body: fd });
-  },
-  downloadAdjuntoCaja(id) {
-    return this.request(`/api/cajas/movimientos/${id}/adjunto`, { asBlob: true });
-  },
-  deleteAdjuntoCaja(id) {
-    return this.request(`/api/cajas/movimientos/${id}/adjunto`, { method: "DELETE" });
+    [...files].forEach((f) => fd.append("archivos", f));
+    return this.request(`/api/cajas/movimientos/${id}/adjuntos`, { method: "POST", body: fd });
   },
   listContactos(params = {}) {
     const qs = new URLSearchParams(params).toString();
@@ -295,15 +289,9 @@ const API = {
   deleteCombustible(id) {
     return this.request(`/api/combustibles/${id}`, { method: "DELETE" });
   },
-  uploadAdjuntoCombustible(id, file) {
+  uploadAdjuntosCombustible(id, files) {
     const fd = new FormData();
-    fd.append("archivo", file);
-    return this.request(`/api/combustibles/${id}/adjunto`, { method: "POST", body: fd });
-  },
-  downloadAdjuntoCombustible(id) {
-    return this.request(`/api/combustibles/${id}/adjunto`, { asBlob: true });
-  },
-  deleteAdjuntoCombustible(id) {
-    return this.request(`/api/combustibles/${id}/adjunto`, { method: "DELETE" });
+    [...files].forEach((f) => fd.append("archivos", f));
+    return this.request(`/api/combustibles/${id}/adjuntos`, { method: "POST", body: fd });
   },
 };

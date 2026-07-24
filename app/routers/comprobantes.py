@@ -12,19 +12,34 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Comprobante, ComprobanteItem, Usuario
 from app.schemas import (
+    AdjuntoOut,
     ComprobanteCreate,
     ComprobanteOut,
     ComprobanteUpdate,
     EmailShareIn,
     WhatsAppShareOut,
 )
-from app.services.adjuntos import delete_file, file_response, save_upload
+from app.services.adjuntos import (
+    ENTIDAD_COMPROBANTE,
+    crear_adjunto,
+    eliminar_adjuntos_entidad,
+    listar_adjuntos,
+    map_adjuntos_por_entidad,
+)
 from app.services.catalogo import upsert_cliente, upsert_productos_desde_items
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS, calcular_totales
 from app.services.email_service import enviar_correo
 from app.services.pdf_service import generar_pdf_comprobante, generar_pdf_reporte_comprobantes
 
 router = APIRouter(prefix="/api/comprobantes", tags=["comprobantes"])
+
+
+def _doc_out(db: Session, doc: Comprobante, adjuntos_rows=None) -> ComprobanteOut:
+    rows = adjuntos_rows if adjuntos_rows is not None else listar_adjuntos(db, ENTIDAD_COMPROBANTE, doc.id)
+    out = ComprobanteOut.model_validate(doc)
+    out.adjuntos = [AdjuntoOut.from_row(r) for r in rows]
+    out.tiene_adjunto = bool(out.adjuntos)
+    return out
 
 
 def _get_owned(db: Session, user: Usuario, comprobante_id: int) -> Comprobante:
@@ -71,7 +86,9 @@ def listar(
         fecha_hasta=fecha_hasta,
         q=q,
     )
-    return query.limit(limit).all()
+    docs = query.limit(limit).all()
+    by_id = map_adjuntos_por_entidad(db, ENTIDAD_COMPROBANTE, [d.id for d in docs])
+    return [_doc_out(db, d, by_id.get(d.id, [])) for d in docs]
 
 
 def _filtrar_comprobantes(
@@ -191,7 +208,7 @@ def crear(
     _aplicar_items(doc, payload.items, payload.tipo)
     db.commit()
     db.refresh(doc)
-    return _get_owned(db, user, doc.id)
+    return _doc_out(db, _get_owned(db, user, doc.id))
 
 
 @router.get("/{comprobante_id}", response_model=ComprobanteOut)
@@ -200,7 +217,7 @@ def obtener(
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return _get_owned(db, user, comprobante_id)
+    return _doc_out(db, _get_owned(db, user, comprobante_id))
 
 
 @router.put("/{comprobante_id}", response_model=ComprobanteOut)
@@ -228,7 +245,7 @@ def actualizar(
         upsert_productos_desde_items(db, user.id, payload.items)
         _aplicar_items(doc, payload.items, doc.tipo)
     db.commit()
-    return _get_owned(db, user, doc.id)
+    return _doc_out(db, _get_owned(db, user, doc.id))
 
 
 @router.patch("/{comprobante_id}/estado", response_model=ComprobanteOut)
@@ -249,51 +266,39 @@ def cambiar_estado(
     doc = _get_owned(db, user, comprobante_id)
     doc.estado = nuevo
     db.commit()
-    return _get_owned(db, user, doc.id)
+    return _doc_out(db, _get_owned(db, user, doc.id))
 
 
-@router.post("/{comprobante_id}/adjunto", response_model=ComprobanteOut)
-async def subir_adjunto(
+@router.post("/{comprobante_id}/adjuntos", response_model=ComprobanteOut)
+async def subir_adjuntos(
     comprobante_id: int,
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-    archivo: UploadFile = File(...),
+    archivos: list[UploadFile] = File(...),
 ):
     doc = _get_owned(db, user, comprobante_id)
-    delete_file(doc.adjunto_path)
-    rel, nombre, mime = await save_upload(
-        archivo, user_id=user.id, kind="comprobantes", entity_id=doc.id
-    )
-    doc.adjunto_path = rel
-    doc.adjunto_nombre = nombre
-    doc.adjunto_mime = mime
-    db.commit()
-    return _get_owned(db, user, doc.id)
+    if not archivos:
+        raise HTTPException(status_code=400, detail="Seleccione al menos un archivo")
+    for archivo in archivos:
+        await crear_adjunto(
+            db,
+            user=user,
+            entidad_tipo=ENTIDAD_COMPROBANTE,
+            entidad_id=doc.id,
+            kind="comprobantes",
+            archivo=archivo,
+        )
+    return _doc_out(db, _get_owned(db, user, doc.id))
 
 
-@router.get("/{comprobante_id}/adjunto")
-def ver_adjunto(
-    comprobante_id: int,
-    user: Annotated[Usuario, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-):
-    doc = _get_owned(db, user, comprobante_id)
-    return file_response(doc.adjunto_path, doc.adjunto_nombre, doc.adjunto_mime)
-
-
-@router.delete("/{comprobante_id}/adjunto", response_model=ComprobanteOut)
-def quitar_adjunto(
+@router.get("/{comprobante_id}/adjuntos", response_model=list[AdjuntoOut])
+def listar_adjuntos_comprobante(
     comprobante_id: int,
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    doc = _get_owned(db, user, comprobante_id)
-    delete_file(doc.adjunto_path)
-    doc.adjunto_path = None
-    doc.adjunto_nombre = None
-    doc.adjunto_mime = None
-    db.commit()
-    return _get_owned(db, user, doc.id)
+    _get_owned(db, user, comprobante_id)
+    return [AdjuntoOut.from_row(r) for r in listar_adjuntos(db, ENTIDAD_COMPROBANTE, comprobante_id)]
 
 
 @router.delete("/{comprobante_id}")
@@ -303,7 +308,7 @@ def eliminar(
     db: Annotated[Session, Depends(get_db)],
 ):
     doc = _get_owned(db, user, comprobante_id)
-    delete_file(doc.adjunto_path)
+    eliminar_adjuntos_entidad(db, ENTIDAD_COMPROBANTE, doc.id)
     db.delete(doc)
     db.commit()
     return {"ok": True}

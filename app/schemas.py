@@ -8,6 +8,27 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from app.models import EstadoComprobante, TipoAgenda, TipoDocumento, TipoMovimientoCaja, TipoMovimientoCombustible
 
 
+class AdjuntoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nombre: str
+    mime: str
+    es_imagen: bool = False
+    creado_en: datetime | None = None
+
+    @classmethod
+    def from_row(cls, row) -> "AdjuntoOut":
+        mime = row.mime or ""
+        return cls(
+            id=row.id,
+            nombre=row.nombre,
+            mime=mime,
+            es_imagen=mime.startswith("image/"),
+            creado_en=getattr(row, "creado_en", None),
+        )
+
+
 class UsuarioCreate(BaseModel):
     nombre: str = Field(min_length=2, max_length=120)
     email: EmailStr
@@ -110,7 +131,7 @@ class ComprobanteOut(BaseModel):
     cliente_nombre: str
     cliente_documento: str | None
     items: list[ItemOut]
-    adjunto_nombre: str | None = None
+    adjuntos: list[AdjuntoOut] = []
     tiene_adjunto: bool = False
     creado_en: datetime
 
@@ -323,7 +344,7 @@ class MovimientoCajaOut(BaseModel):
     numero_transaccion: str | None = None
     concepto: str
     fecha: date
-    adjunto_nombre: str | None = None
+    adjuntos: list[AdjuntoOut] = []
     tiene_adjunto: bool = False
     creado_en: datetime
 
@@ -427,7 +448,7 @@ class MovimientoCombustibleOut(BaseModel):
     marca: str | None = None
     placa: str | None = None
     notas: str | None = None
-    adjunto_nombre: str | None = None
+    adjuntos: list[AdjuntoOut] = []
     tiene_adjunto: bool = False
     creado_en: datetime
 

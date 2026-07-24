@@ -278,6 +278,69 @@ a { color: inherit; }
 .field-hint.ok { color: var(--ok); }
 .field-hint.err { color: var(--danger); }
 
+.adjuntos-toolbar { margin-bottom: 0.55rem; }
+.adjuntos-pick { cursor: pointer; display: inline-flex; }
+.adjuntos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem;
+}
+.adjuntos-empty {
+  grid-column: 1 / -1;
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  background: #fafcfb;
+}
+.adjunto-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.adjunto-card.is-pending { border-style: dashed; border-color: #b7cfc2; }
+.adjunto-preview {
+  aspect-ratio: 4 / 3;
+  background: #f1f5f2;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.adjunto-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.adjunto-icon {
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #3f5f4f;
+  background: #e7f0ea;
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+}
+.adjunto-meta {
+  padding: 0.45rem 0.55rem 0.2rem;
+  font-size: 0.78rem;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.adjunto-actions {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.35rem 0.45rem 0.55rem;
+}
+.adjunto-actions .btn { flex: 1; }
+
 .table-wrap { overflow: auto; border-radius: 14px; border: 1px solid var(--line); }
 table { width: 100%; border-collapse: collapse; background: #fff; }
 th, td { padding: 0.75rem 0.8rem; text-align: left; border-bottom: 1px solid var(--line); font-size: 0.92rem; }

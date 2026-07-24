@@ -56,6 +56,21 @@ class TipoMovimientoCombustible(str, enum.Enum):
     SALIDA = "salida"
 
 
+class Adjunto(Base):
+    """Archivos PDF/imagen asociados a comprobante, caja o combustible."""
+
+    __tablename__ = "adjuntos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    entidad_tipo: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    entidad_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime: Mapped[str] = mapped_column(String(120), nullable=False)
+    path: Mapped[str] = mapped_column(String(500), nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -163,10 +178,6 @@ class Comprobante(Base):
     items: Mapped[list[ComprobanteItem]] = relationship(
         back_populates="comprobante", cascade="all, delete-orphan"
     )
-
-    @property
-    def tiene_adjunto(self) -> bool:
-        return bool(self.adjunto_path)
 
 
 class ComprobanteItem(Base):
@@ -278,10 +289,6 @@ class MovimientoCaja(Base):
     usuario: Mapped[Usuario] = relationship(back_populates="movimientos_caja")
     caja: Mapped[Caja] = relationship(back_populates="movimientos")
 
-    @property
-    def tiene_adjunto(self) -> bool:
-        return bool(self.adjunto_path)
-
 
 class Contacto(Base):
     """Agenda telefónica del usuario (manual o importada del teléfono)."""
@@ -328,7 +335,3 @@ class MovimientoCombustible(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     usuario: Mapped[Usuario] = relationship(back_populates="movimientos_combustible")
-
-    @property
-    def tiene_adjunto(self) -> bool:
-        return bool(self.adjunto_path)
