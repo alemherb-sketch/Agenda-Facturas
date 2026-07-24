@@ -247,10 +247,18 @@ const API = {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/combustibles/resumen${qs ? `?${qs}` : ""}`);
   },
+  reporteCombustibles(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/combustibles/reporte${qs ? `?${qs}` : ""}`);
+  },
   listCombustibles(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/combustibles${qs ? `?${qs}` : ""}`);
   },
+
   createCombustible(body) {
     return this.request("/api/combustibles", { method: "POST", body: JSON.stringify(body) });
   },

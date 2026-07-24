@@ -9,7 +9,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.models import Comprobante, MovimientoCaja, Usuario
+from app.models import Comprobante, MovimientoCaja, MovimientoCombustible, Usuario
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS
 
 # Datos fijos de empresa para todos los formatos de impresión
@@ -439,6 +439,93 @@ def generar_pdf_reporte_cajas(
     )
     style = _table_style_header()
     style.add("ALIGN", (-1, 1), (-1, -1), "RIGHT")
+    table.setStyle(style)
+    story.append(table)
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("Reporte filtrado — JAELIN E.I.R.L.", small))
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def generar_pdf_reporte_combustibles(
+    movimientos: list[MovimientoCombustible],
+    *,
+    filtros: dict | None = None,
+    total_ingresos: float = 0,
+    total_salidas: float = 0,
+) -> bytes:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=12 * mm,
+        rightMargin=12 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+    title_style, normal, small, subtitle = _styles()
+    story = []
+    _header_empresa(story, title_style, normal, small)
+    story.append(Paragraph("Reporte de movimientos de combustible", subtitle))
+
+    filtros = filtros or {}
+    filtros_txt = []
+    if filtros.get("fecha_desde") or filtros.get("fecha_hasta"):
+        filtros_txt.append(
+            f"Periodo: {filtros.get('fecha_desde') or '…'} — {filtros.get('fecha_hasta') or '…'}"
+        )
+    if filtros.get("tipo"):
+        tipo_lbl = "Ingreso" if filtros["tipo"] == "ingreso" else (
+            "Salida" if filtros["tipo"] == "salida" else filtros["tipo"]
+        )
+        filtros_txt.append(f"Tipo: {tipo_lbl}")
+    if filtros.get("q"):
+        filtros_txt.append(f"Búsqueda: {filtros['q']}")
+    if filtros.get("placa"):
+        filtros_txt.append(f"Placa: {filtros['placa']}")
+    if filtros_txt:
+        story.append(Paragraph(" · ".join(filtros_txt), small))
+    story.append(
+        Paragraph(
+            f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} · {len(movimientos)} movimiento(s)",
+            small,
+        )
+    )
+    story.append(Spacer(1, 6))
+    saldo = total_ingresos - total_salidas
+    story.append(
+        Paragraph(
+            f"<b>Ingresos:</b> {total_ingresos:,.3f} gal &nbsp;&nbsp; "
+            f"<b>Salidas:</b> {total_salidas:,.3f} gal &nbsp;&nbsp; "
+            f"<b>Saldo:</b> {saldo:,.3f} gal",
+            normal,
+        )
+    )
+    story.append(Spacer(1, 8))
+
+    rows = [["Fecha", "Tipo", "Galones", "Conductor", "Marca", "Placa", "Notas"]]
+    for m in movimientos:
+        tipo_val = str(getattr(m.tipo, "value", m.tipo))
+        es_salida = tipo_val == "salida"
+        g = float(m.galones or 0)
+        rows.append(
+            [
+                m.fecha.strftime("%d/%m/%Y") if isinstance(m.fecha, date) else str(m.fecha),
+                "Salida" if es_salida else "Ingreso",
+                f"{'−' if es_salida else '+'}{g:,.3f}",
+                (m.conductor or "")[:32],
+                (m.marca or "—")[:20],
+                (m.placa or "—")[:12],
+                (m.notas or "—")[:40],
+            ]
+        )
+
+    table = Table(
+        rows,
+        colWidths=[22 * mm, 22 * mm, 26 * mm, 48 * mm, 32 * mm, 28 * mm, 64 * mm],
+    )
+    style = _table_style_header()
+    style.add("ALIGN", (2, 1), (2, -1), "RIGHT")
     table.setStyle(style)
     story.append(table)
     story.append(Spacer(1, 12))

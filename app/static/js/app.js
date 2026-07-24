@@ -1400,7 +1400,10 @@
           <h1>Combustibles</h1>
           <p>Control de ingresos y salidas de combustible (galones) por vehículo.</p>
         </div>
-        <button class="btn btn-primary" id="btn-new-combustible">＋ Movimiento</button>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-secondary" id="btn-reporte-comb">🖨 Imprimir reporte</button>
+          <button class="btn btn-primary" id="btn-new-combustible">＋ Movimiento</button>
+        </div>
       </div>
       <div class="toolbar panel">
         <select id="f-comb-tipo">
@@ -2551,6 +2554,15 @@
 
     if (state.route === "combustibles") {
       $("#btn-new-combustible")?.addEventListener("click", () => openCombustibleModal());
+      $("#btn-reporte-comb")?.addEventListener("click", async () => {
+        try {
+          const blob = await API.reporteCombustibles({ ...state.filtersCombustible });
+          downloadBlob(blob, "reporte-combustibles.pdf");
+          toast("Reporte de combustibles generado");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
       $("#btn-filtrar-comb")?.addEventListener("click", () => {
         state.filtersCombustible.tipo = $("#f-comb-tipo")?.value || "";
         state.filtersCombustible.q = ($("#f-comb-q")?.value || "").trim();

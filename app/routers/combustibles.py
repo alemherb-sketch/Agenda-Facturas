@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,8 @@ from app.schemas import (
     MovimientoCombustibleOut,
     MovimientoCombustibleUpdate,
 )
+from app.services.pdf_service import generar_pdf_reporte_combustibles
+
 
 router = APIRouter(prefix="/api/combustibles", tags=["combustibles"])
 
@@ -196,6 +199,68 @@ def resumen(
         por_conductor=por_conductor,
         por_marca=por_marca,
         movimientos=movimientos,
+    )
+
+
+@router.get("/reporte")
+def reporte_pdf(
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    tipo: str | None = None,
+    q: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    placa: str | None = None,
+    limit: int = Query(500, le=1000),
+):
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
+
+    query = db.query(MovimientoCombustible).filter(MovimientoCombustible.usuario_id == user.id)
+    query = _apply_filters(
+        query, tipo=tipo, q=q, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, placa=placa
+    )
+    movimientos = (
+        query.order_by(MovimientoCombustible.fecha.desc(), MovimientoCombustible.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    totales = (
+        db.query(
+            MovimientoCombustible.tipo,
+            func.coalesce(func.sum(MovimientoCombustible.galones), 0),
+        )
+        .filter(MovimientoCombustible.usuario_id == user.id)
+    )
+    totales = _apply_filters(
+        totales, tipo=tipo, q=q, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, placa=placa
+    )
+    ingresos = Decimal("0.000")
+    salidas = Decimal("0.000")
+    for tipo_row, total in totales.group_by(MovimientoCombustible.tipo).all():
+        valor = Decimal(str(total))
+        if tipo_row == TipoMovimientoCombustible.INGRESO:
+            ingresos = valor
+        elif tipo_row == TipoMovimientoCombustible.SALIDA:
+            salidas = valor
+
+    pdf = generar_pdf_reporte_combustibles(
+        movimientos,
+        filtros={
+            "fecha_desde": fecha_desde.isoformat() if fecha_desde else None,
+            "fecha_hasta": fecha_hasta.isoformat() if fecha_hasta else None,
+            "tipo": tipo,
+            "q": q,
+            "placa": placa,
+        },
+        total_ingresos=float(ingresos),
+        total_salidas=float(salidas),
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="reporte-combustibles.pdf"'},
     )
 
 
