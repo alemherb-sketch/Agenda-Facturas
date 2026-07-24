@@ -4,7 +4,7 @@ from datetime import date
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session, joinedload
 
@@ -18,6 +18,7 @@ from app.schemas import (
     EmailShareIn,
     WhatsAppShareOut,
 )
+from app.services.adjuntos import delete_file, file_response, save_upload
 from app.services.catalogo import upsert_cliente, upsert_productos_desde_items
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS, calcular_totales
 from app.services.email_service import enviar_correo
@@ -251,6 +252,50 @@ def cambiar_estado(
     return _get_owned(db, user, doc.id)
 
 
+@router.post("/{comprobante_id}/adjunto", response_model=ComprobanteOut)
+async def subir_adjunto(
+    comprobante_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    archivo: UploadFile = File(...),
+):
+    doc = _get_owned(db, user, comprobante_id)
+    delete_file(doc.adjunto_path)
+    rel, nombre, mime = await save_upload(
+        archivo, user_id=user.id, kind="comprobantes", entity_id=doc.id
+    )
+    doc.adjunto_path = rel
+    doc.adjunto_nombre = nombre
+    doc.adjunto_mime = mime
+    db.commit()
+    return _get_owned(db, user, doc.id)
+
+
+@router.get("/{comprobante_id}/adjunto")
+def ver_adjunto(
+    comprobante_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    doc = _get_owned(db, user, comprobante_id)
+    return file_response(doc.adjunto_path, doc.adjunto_nombre, doc.adjunto_mime)
+
+
+@router.delete("/{comprobante_id}/adjunto", response_model=ComprobanteOut)
+def quitar_adjunto(
+    comprobante_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    doc = _get_owned(db, user, comprobante_id)
+    delete_file(doc.adjunto_path)
+    doc.adjunto_path = None
+    doc.adjunto_nombre = None
+    doc.adjunto_mime = None
+    db.commit()
+    return _get_owned(db, user, doc.id)
+
+
 @router.delete("/{comprobante_id}")
 def eliminar(
     comprobante_id: int,
@@ -258,6 +303,7 @@ def eliminar(
     db: Annotated[Session, Depends(get_db)],
 ):
     doc = _get_owned(db, user, comprobante_id)
+    delete_file(doc.adjunto_path)
     db.delete(doc)
     db.commit()
     return {"ok": True}

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     cron_secret: str = ""
     sunat_api_token: str = ""
     telegram_bot_token: str = ""
+    upload_dir: str = ""
 
     @property
     def sqlalchemy_url(self) -> str:

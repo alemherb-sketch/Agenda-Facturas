@@ -70,10 +70,23 @@ def ensure_schema() -> None:
                 row[1]
                 for row in conn.exec_driver_sql("PRAGMA table_info(movimientos_caja)").fetchall()
             }
-            if mov_cols and "numero_transaccion" not in mov_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE movimientos_caja ADD COLUMN numero_transaccion VARCHAR(80)"
-                )
+            if mov_cols:
+                if "numero_transaccion" not in mov_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_caja ADD COLUMN numero_transaccion VARCHAR(80)"
+                    )
+                if "adjunto_nombre" not in mov_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_caja ADD COLUMN adjunto_nombre VARCHAR(255)"
+                    )
+                if "adjunto_mime" not in mov_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_caja ADD COLUMN adjunto_mime VARCHAR(120)"
+                    )
+                if "adjunto_path" not in mov_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_caja ADD COLUMN adjunto_path VARCHAR(500)"
+                    )
 
             comp_cols = {
                 row[1]
@@ -84,6 +97,30 @@ def ensure_schema() -> None:
                     conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN zona VARCHAR(120)")
                 if "motivo" not in comp_cols:
                     conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN motivo VARCHAR(300)")
+                if "adjunto_nombre" not in comp_cols:
+                    conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN adjunto_nombre VARCHAR(255)")
+                if "adjunto_mime" not in comp_cols:
+                    conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN adjunto_mime VARCHAR(120)")
+                if "adjunto_path" not in comp_cols:
+                    conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN adjunto_path VARCHAR(500)")
+
+            comb_cols = {
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(movimientos_combustible)").fetchall()
+            }
+            if comb_cols:
+                if "adjunto_nombre" not in comb_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_combustible ADD COLUMN adjunto_nombre VARCHAR(255)"
+                    )
+                if "adjunto_mime" not in comb_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_combustible ADD COLUMN adjunto_mime VARCHAR(120)"
+                    )
+                if "adjunto_path" not in comb_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_combustible ADD COLUMN adjunto_path VARCHAR(500)"
+                    )
         else:
             conn.exec_driver_sql(
                 "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(32)"
@@ -103,3 +140,13 @@ def ensure_schema() -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS motivo VARCHAR(300)"
             )
+            for table in ("comprobantes", "movimientos_caja", "movimientos_combustible"):
+                conn.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS adjunto_nombre VARCHAR(255)"
+                )
+                conn.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS adjunto_mime VARCHAR(120)"
+                )
+                conn.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS adjunto_path VARCHAR(500)"
+                )

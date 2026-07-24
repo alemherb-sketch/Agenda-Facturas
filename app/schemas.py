@@ -110,6 +110,8 @@ class ComprobanteOut(BaseModel):
     cliente_nombre: str
     cliente_documento: str | None
     items: list[ItemOut]
+    adjunto_nombre: str | None = None
+    tiene_adjunto: bool = False
     creado_en: datetime
 
 
@@ -321,6 +323,8 @@ class MovimientoCajaOut(BaseModel):
     numero_transaccion: str | None = None
     concepto: str
     fecha: date
+    adjunto_nombre: str | None = None
+    tiene_adjunto: bool = False
     creado_en: datetime
 
 
@@ -423,6 +427,8 @@ class MovimientoCombustibleOut(BaseModel):
     marca: str | None = None
     placa: str | None = None
     notas: str | None = None
+    adjunto_nombre: str | None = None
+    tiene_adjunto: bool = False
     creado_en: datetime
 
 

@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from app.schemas import (
     MovimientoCombustibleOut,
     MovimientoCombustibleUpdate,
 )
+from app.services.adjuntos import delete_file, file_response, save_upload
 from app.services.pdf_service import generar_pdf_reporte_combustibles
 
 
@@ -330,6 +331,52 @@ def actualizar(
     return mov
 
 
+@router.post("/{movimiento_id}/adjunto", response_model=MovimientoCombustibleOut)
+async def subir_adjunto(
+    movimiento_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    archivo: UploadFile = File(...),
+):
+    mov = _get_owned(db, user, movimiento_id)
+    delete_file(mov.adjunto_path)
+    rel, nombre, mime = await save_upload(
+        archivo, user_id=user.id, kind="combustibles", entity_id=mov.id
+    )
+    mov.adjunto_path = rel
+    mov.adjunto_nombre = nombre
+    mov.adjunto_mime = mime
+    db.commit()
+    db.refresh(mov)
+    return mov
+
+
+@router.get("/{movimiento_id}/adjunto")
+def ver_adjunto(
+    movimiento_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    mov = _get_owned(db, user, movimiento_id)
+    return file_response(mov.adjunto_path, mov.adjunto_nombre, mov.adjunto_mime)
+
+
+@router.delete("/{movimiento_id}/adjunto", response_model=MovimientoCombustibleOut)
+def quitar_adjunto(
+    movimiento_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    mov = _get_owned(db, user, movimiento_id)
+    delete_file(mov.adjunto_path)
+    mov.adjunto_path = None
+    mov.adjunto_nombre = None
+    mov.adjunto_mime = None
+    db.commit()
+    db.refresh(mov)
+    return mov
+
+
 @router.delete("/{movimiento_id}")
 def eliminar(
     movimiento_id: int,
@@ -337,6 +384,7 @@ def eliminar(
     db: Annotated[Session, Depends(get_db)],
 ):
     mov = _get_owned(db, user, movimiento_id)
+    delete_file(mov.adjunto_path)
     db.delete(mov)
     db.commit()
     return {"ok": True}

@@ -9,3 +9,5 @@ __pycache__/
 .mypy_cache/
 app/data/vapid.json
 app/data/vapid_private.pem
+app/uploads/
+uploads/

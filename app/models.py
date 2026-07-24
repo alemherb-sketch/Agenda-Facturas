@@ -150,6 +150,9 @@ class Comprobante(Base):
     motivo: Mapped[str | None] = mapped_column(String(300))
     cliente_nombre: Mapped[str] = mapped_column(String(200), nullable=False)
     cliente_documento: Mapped[str | None] = mapped_column(String(15))
+    adjunto_nombre: Mapped[str | None] = mapped_column(String(255))
+    adjunto_mime: Mapped[str | None] = mapped_column(String(120))
+    adjunto_path: Mapped[str | None] = mapped_column(String(500))
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     actualizado_en: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -160,6 +163,10 @@ class Comprobante(Base):
     items: Mapped[list[ComprobanteItem]] = relationship(
         back_populates="comprobante", cascade="all, delete-orphan"
     )
+
+    @property
+    def tiene_adjunto(self) -> bool:
+        return bool(self.adjunto_path)
 
 
 class ComprobanteItem(Base):
@@ -263,10 +270,17 @@ class MovimientoCaja(Base):
     numero_transaccion: Mapped[str | None] = mapped_column(String(80))
     concepto: Mapped[str] = mapped_column(String(300), nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
+    adjunto_nombre: Mapped[str | None] = mapped_column(String(255))
+    adjunto_mime: Mapped[str | None] = mapped_column(String(120))
+    adjunto_path: Mapped[str | None] = mapped_column(String(500))
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     usuario: Mapped[Usuario] = relationship(back_populates="movimientos_caja")
     caja: Mapped[Caja] = relationship(back_populates="movimientos")
+
+    @property
+    def tiene_adjunto(self) -> bool:
+        return bool(self.adjunto_path)
 
 
 class Contacto(Base):
@@ -308,6 +322,13 @@ class MovimientoCombustible(Base):
     marca: Mapped[str | None] = mapped_column(String(80))
     placa: Mapped[str | None] = mapped_column(String(20))
     notas: Mapped[str | None] = mapped_column(String(300))
+    adjunto_nombre: Mapped[str | None] = mapped_column(String(255))
+    adjunto_mime: Mapped[str | None] = mapped_column(String(120))
+    adjunto_path: Mapped[str | None] = mapped_column(String(500))
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     usuario: Mapped[Usuario] = relationship(back_populates="movimientos_combustible")
+
+    @property
+    def tiene_adjunto(self) -> bool:
+        return bool(self.adjunto_path)

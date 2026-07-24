@@ -37,8 +37,13 @@ const API = {
     }
 
     const contentType = res.headers.get("content-type") || "";
-    if (contentType.includes("application/pdf")) {
-      if (!res.ok) throw new Error("No se pudo descargar el PDF");
+    const isBlob =
+      contentType.includes("application/pdf") ||
+      contentType.includes("image/") ||
+      contentType.includes("application/octet-stream") ||
+      options.asBlob;
+    if (isBlob) {
+      if (!res.ok) throw new Error("No se pudo descargar el archivo");
       return res.blob();
     }
 
@@ -88,6 +93,17 @@ const API = {
   },
   pdfComprobante(id) {
     return this.request(`/api/comprobantes/${id}/pdf`);
+  },
+  uploadAdjuntoComprobante(id, file) {
+    const fd = new FormData();
+    fd.append("archivo", file);
+    return this.request(`/api/comprobantes/${id}/adjunto`, { method: "POST", body: fd });
+  },
+  downloadAdjuntoComprobante(id) {
+    return this.request(`/api/comprobantes/${id}/adjunto`, { asBlob: true });
+  },
+  deleteAdjuntoComprobante(id) {
+    return this.request(`/api/comprobantes/${id}/adjunto`, { method: "DELETE" });
   },
   reporteComprobantes(params = {}) {
     const cleaned = Object.fromEntries(
@@ -221,6 +237,17 @@ const API = {
   deleteMovimientoCaja(id) {
     return this.request(`/api/cajas/movimientos/${id}`, { method: "DELETE" });
   },
+  uploadAdjuntoCaja(id, file) {
+    const fd = new FormData();
+    fd.append("archivo", file);
+    return this.request(`/api/cajas/movimientos/${id}/adjunto`, { method: "POST", body: fd });
+  },
+  downloadAdjuntoCaja(id) {
+    return this.request(`/api/cajas/movimientos/${id}/adjunto`, { asBlob: true });
+  },
+  deleteAdjuntoCaja(id) {
+    return this.request(`/api/cajas/movimientos/${id}/adjunto`, { method: "DELETE" });
+  },
   listContactos(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/contactos${qs ? `?${qs}` : ""}`);
@@ -267,5 +294,16 @@ const API = {
   },
   deleteCombustible(id) {
     return this.request(`/api/combustibles/${id}`, { method: "DELETE" });
+  },
+  uploadAdjuntoCombustible(id, file) {
+    const fd = new FormData();
+    fd.append("archivo", file);
+    return this.request(`/api/combustibles/${id}/adjunto`, { method: "POST", body: fd });
+  },
+  downloadAdjuntoCombustible(id) {
+    return this.request(`/api/combustibles/${id}/adjunto`, { asBlob: true });
+  },
+  deleteAdjuntoCombustible(id) {
+    return this.request(`/api/combustibles/${id}/adjunto`, { method: "DELETE" });
   },
 };

@@ -64,6 +64,37 @@
     URL.revokeObjectURL(url);
   }
 
+  function adjuntoFieldHtml(entity) {
+    const has = Boolean(entity?.tiene_adjunto || entity?.adjunto_nombre);
+    return `
+      <div class="field full">
+        <label>Adjunto (PDF o imagen)</label>
+        <input type="file" name="adjunto" accept=".pdf,image/jpeg,image/png,image/webp,image/gif,application/pdf" />
+        ${
+          has
+            ? `<small class="field-hint" style="display:block;margin-top:.35rem">
+                Actual: <strong>${escapeHtml(entity.adjunto_nombre || "archivo")}</strong>
+                · <label style="display:inline;font-weight:500"><input type="checkbox" name="quitar_adjunto" value="1" /> Quitar</label>
+              </small>`
+            : `<small class="field-hint">Opcional · PDF, JPG, PNG, WEBP o GIF · máx. 8 MB</small>`
+        }
+      </div>`;
+  }
+
+  async function syncAdjuntoAfterSave({ form, id, upload, remove }) {
+    if (!id || !form) return;
+    const quitar = Boolean(form.querySelector('[name="quitar_adjunto"]')?.checked);
+    const file = form.querySelector('[name="adjunto"]')?.files?.[0];
+    if (quitar) await remove(id);
+    else if (file) await upload(id, file);
+  }
+
+  async function openAdjunto(blob) {
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  }
+
   function parseHash() {
     const hash = location.hash.replace(/^#\/?/, "");
     const [route, query = ""] = hash.split("?");
@@ -768,6 +799,11 @@
                   <td class="actions">
                     <button type="button" class="btn btn-secondary btn-sm" data-edit="${d.id}">Editar</button>
                     <button type="button" class="btn btn-secondary btn-sm" data-pdf="${d.id}">PDF</button>
+                    ${
+                      d.tiene_adjunto || d.adjunto_nombre
+                        ? `<button type="button" class="btn btn-secondary btn-sm" data-adjunto="${d.id}" title="${escapeHtml(d.adjunto_nombre || "Adjunto")}">📎</button>`
+                        : ""
+                    }
                     <button type="button" class="btn btn-secondary btn-sm" data-mail="${d.id}">Correo</button>
                     <button type="button" class="btn btn-accent btn-sm" data-wa="${d.id}">WhatsApp</button>
                     <button type="button" class="btn btn-danger btn-sm" data-del="${d.id}">Eliminar</button>
@@ -897,6 +933,7 @@
             <label>Observaciones</label>
             <textarea name="observaciones" rows="2">${escapeHtml(doc?.observaciones || "")}</textarea>
           </div>
+          ${adjuntoFieldHtml(doc)}
         </div>
 
         <h3 style="margin:1.2rem 0 .6rem;font-family:var(--font-display)">Detalle de productos / servicios</h3>
@@ -1370,6 +1407,11 @@
                   <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
                   <td class="actions">
                     <button class="btn btn-secondary btn-sm" data-mov-edit="${m.id}">Editar</button>
+                    ${
+                      m.tiene_adjunto || m.adjunto_nombre
+                        ? `<button class="btn btn-secondary btn-sm" data-mov-adjunto="${m.id}" title="${escapeHtml(m.adjunto_nombre || "Adjunto")}">📎</button>`
+                        : ""
+                    }
                     <button class="btn btn-danger btn-sm" data-mov-del="${m.id}">Eliminar</button>
                   </td>
                 </tr>`
@@ -1466,6 +1508,11 @@
                   <td><strong>${escapeHtml(m.placa || "—")}</strong></td>
                   <td class="actions">
                     <button class="btn btn-secondary btn-sm" data-comb-edit="${m.id}">Editar</button>
+                    ${
+                      m.tiene_adjunto || m.adjunto_nombre
+                        ? `<button class="btn btn-secondary btn-sm" data-comb-adjunto="${m.id}" title="${escapeHtml(m.adjunto_nombre || "Adjunto")}">📎</button>`
+                        : ""
+                    }
                     <button class="btn btn-danger btn-sm" data-comb-del="${m.id}">Eliminar</button>
                   </td>
                 </tr>`
@@ -1521,6 +1568,7 @@
             <label>Notas (opcional)</label>
             <input name="notas" maxlength="300" value="${escapeHtml(mov?.notas || "")}" placeholder="Detalle adicional" />
           </div>
+          ${adjuntoFieldHtml(mov)}
           <div class="field full">
             <button class="btn btn-primary" type="submit">${mov ? "Guardar" : "Registrar"}</button>
           </div>
@@ -1532,14 +1580,24 @@
     };
     $("#form-combustible").onsubmit = async (e) => {
       e.preventDefault();
-      const body = Object.fromEntries(new FormData(e.target).entries());
+      const form = e.target;
+      const body = Object.fromEntries(new FormData(form).entries());
+      delete body.adjunto;
+      delete body.quitar_adjunto;
       body.galones = Number(body.galones);
       body.marca = (body.marca || "").trim() || null;
       body.placa = (body.placa || "").trim().toUpperCase() || null;
       body.notas = (body.notas || "").trim() || null;
       try {
-        if (mov) await API.updateCombustible(mov.id, body);
-        else await API.createCombustible(body);
+        const saved = mov
+          ? await API.updateCombustible(mov.id, body)
+          : await API.createCombustible(body);
+        await syncAdjuntoAfterSave({
+          form,
+          id: saved.id,
+          upload: API.uploadAdjuntoCombustible.bind(API),
+          remove: API.deleteAdjuntoCombustible.bind(API),
+        });
         toast(mov ? "Movimiento actualizado" : "Movimiento registrado");
         modal.classList.remove("open");
         renderApp();
@@ -1639,6 +1697,7 @@
             <label>Concepto de transacción</label>
             <input name="concepto" required maxlength="300" value="${escapeHtml(mov?.concepto || "")}" placeholder="Ej. Venta del día, pago proveedor, transferencia" />
           </div>
+          ${adjuntoFieldHtml(mov)}
           <div class="field full">
             <button class="btn btn-primary" type="submit">${mov ? "Guardar" : "Registrar movimiento"}</button>
           </div>
@@ -1647,14 +1706,24 @@
     $("#close-mov").onclick = () => modal.classList.remove("open");
     $("#form-mov").onsubmit = async (e) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
+      const form = e.target;
+      const fd = new FormData(form);
       const body = Object.fromEntries(fd.entries());
+      delete body.adjunto;
+      delete body.quitar_adjunto;
       body.caja_id = Number(body.caja_id);
       body.monto = Number(body.monto);
       body.numero_transaccion = (body.numero_transaccion || "").trim() || null;
       try {
-        if (mov) await API.updateMovimientoCaja(mov.id, body);
-        else await API.createMovimientoCaja(body);
+        const saved = mov
+          ? await API.updateMovimientoCaja(mov.id, body)
+          : await API.createMovimientoCaja(body);
+        await syncAdjuntoAfterSave({
+          form,
+          id: saved.id,
+          upload: API.uploadAdjuntoCaja.bind(API),
+          remove: API.deleteAdjuntoCaja.bind(API),
+        });
         toast(mov ? "Movimiento actualizado" : "Movimiento registrado");
         modal.classList.remove("open");
         renderApp();
@@ -2226,6 +2295,16 @@
           }
         })
       );
+      $$("[data-adjunto]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          try {
+            const blob = await API.downloadAdjuntoComprobante(b.dataset.adjunto);
+            await openAdjunto(blob);
+          } catch (ex) {
+            toast(ex.message);
+          }
+        })
+      );
       $$("[data-mail]").forEach((b) =>
         b.addEventListener("click", () => openShareModal(b.dataset.mail, "mail"))
       );
@@ -2281,8 +2360,11 @@
       recalcItems();
       $("#form-comprobante")?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const fd = new FormData(e.target);
+        const form = e.target;
+        const fd = new FormData(form);
         const body = Object.fromEntries(fd.entries());
+        delete body.adjunto;
+        delete body.quitar_adjunto;
         if (!body.fecha_vencimiento) body.fecha_vencimiento = null;
         body.zona = (body.zona || "").trim() || null;
         body.motivo = (body.motivo || "").trim() || null;
@@ -2296,13 +2378,20 @@
           aplica_igv: permiteIgv && Boolean($('[data-k="aplica_igv"]', row)?.checked),
         }));
         try {
+          let saved;
           if (state.editingDoc) {
-            await API.updateComprobante(state.editingDoc.id, body);
+            saved = await API.updateComprobante(state.editingDoc.id, body);
             toast("Comprobante actualizado");
           } else {
-            await API.createComprobante(body);
+            saved = await API.createComprobante(body);
             toast("Comprobante registrado");
           }
+          await syncAdjuntoAfterSave({
+            form,
+            id: saved.id,
+            upload: API.uploadAdjuntoComprobante.bind(API),
+            remove: API.deleteAdjuntoComprobante.bind(API),
+          });
           state.editingDoc = null;
           navigate("comprobantes");
         } catch (ex) {
@@ -2542,6 +2631,16 @@
           openMovimientoModal(mov);
         })
       );
+      $$("[data-mov-adjunto]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          try {
+            const blob = await API.downloadAdjuntoCaja(b.dataset.movAdjunto);
+            await openAdjunto(blob);
+          } catch (ex) {
+            toast(ex.message);
+          }
+        })
+      );
       $$("[data-mov-del]").forEach((b) =>
         b.addEventListener("click", async () => {
           if (!confirm("¿Eliminar este movimiento?")) return;
@@ -2578,6 +2677,16 @@
         b.addEventListener("click", () => {
           const mov = state.combustibles.find((m) => m.id === Number(b.dataset.combEdit));
           openCombustibleModal(mov);
+        })
+      );
+      $$("[data-comb-adjunto]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          try {
+            const blob = await API.downloadAdjuntoCombustible(b.dataset.combAdjunto);
+            await openAdjunto(blob);
+          } catch (ex) {
+            toast(ex.message);
+          }
         })
       );
       $$("[data-comb-del]").forEach((b) =>
