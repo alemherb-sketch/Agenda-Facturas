@@ -1059,7 +1059,10 @@
       <div class="panel" style="padding:0;overflow:hidden">
         ${
           state.docs.length
-            ? `<div class="table-wrap"><table>
+            ? `<div class="table-wrap"><table class="table-fit">
+              <colgroup>
+                <col class="c-doc"><col class="c-cli"><col class="c-zona"><col class="c-mot"><col class="c-desc"><col class="c-fecha"><col class="c-total"><col class="c-estado"><col class="c-act">
+              </colgroup>
               <thead><tr>
                 <th>Documento</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th><th>Fecha</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
               </tr></thead>
@@ -1068,11 +1071,11 @@
                 .map((d) => {
                   const desc = itemsDescripcion(d);
                   return `<tr>
-                  <td><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></td>
-                  <td>${escapeHtml(d.cliente_nombre)}<br><span style="color:var(--muted);font-size:.8rem">${d.cliente_documento || ""}</span></td>
-                  <td>${escapeHtml(d.zona || "—")}</td>
-                  <td class="cell-clip" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</td>
-                  <td class="cell-clip" title="${escapeHtml(desc)}">${escapeHtml(desc || "—")}</td>
+                  <td><span class="clip-lines" title="${escapeHtml(tipoLabel(d.tipo))} ${d.serie}-${d.numero}"><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></span></td>
+                  <td><span class="clip-lines" title="${escapeHtml(d.cliente_nombre)}">${escapeHtml(d.cliente_nombre)}</span><span class="cell-clip" style="color:var(--muted);font-size:.8rem">${escapeHtml(d.cliente_documento || "")}</span></td>
+                  <td><span class="cell-clip" title="${escapeHtml(d.zona || "")}">${escapeHtml(d.zona || "—")}</span></td>
+                  <td><span class="cell-clip" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</span></td>
+                  <td><span class="cell-clip" title="${escapeHtml(desc)}">${escapeHtml(desc || "—")}</span></td>
                   <td>${fmtDate(d.fecha_emision)}</td>
                   <td>${money(d.total)}</td>
                   <td>
@@ -1088,7 +1091,7 @@
                       </select>
                     </label>
                   </td>
-                  <td class="actions">
+                  <td class="actions actions-wrap">
                     ${iconBtn(`data-edit="${d.id}"`, "Editar", "edit")}
                     ${iconBtn(`data-pdf="${d.id}"`, "PDF", "pdf")}
                     ${adjuntoBtnHtml(d.id, d.adjuntos, "adjuntos-doc")}
