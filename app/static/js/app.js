@@ -1028,6 +1028,7 @@
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-comp">🖨 Imprimir reporte</button>
+          <button class="btn btn-secondary" id="btn-excel-comp">Exportar Excel</button>
           <button class="btn btn-primary" data-go="nuevo">＋ Nuevo</button>
         </div>
       </div>
@@ -1652,6 +1653,7 @@
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-caja">🖨 Imprimir reporte</button>
+          <button class="btn btn-secondary" id="btn-excel-caja">Exportar Excel</button>
           <button class="btn btn-secondary" id="btn-new-caja">＋ Nueva caja</button>
           <button class="btn btn-primary" id="btn-new-mov">＋ Movimiento</button>
         </div>
@@ -1795,6 +1797,7 @@
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-comb">🖨 Imprimir reporte</button>
+          <button class="btn btn-secondary" id="btn-excel-comb">Exportar Excel</button>
           <button class="btn btn-primary" id="btn-new-combustible">＋ Movimiento</button>
         </div>
       </div>
@@ -2896,6 +2899,15 @@
           toast(ex.message);
         }
       });
+      $("#btn-excel-comp")?.addEventListener("click", async () => {
+        try {
+          const blob = await API.reporteComprobantesExcel({ ...state.filters });
+          downloadBlob(blob, "reporte-comprobantes.xlsx");
+          toast("Excel generado");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
       $$("[data-edit]").forEach((b) =>
         b.addEventListener("click", (e) => {
           e.preventDefault();
@@ -3271,6 +3283,15 @@
           toast(ex.message);
         }
       });
+      $("#btn-excel-caja")?.addEventListener("click", async () => {
+        try {
+          const blob = await API.reporteCajasExcel({ ...state.filtersCaja });
+          downloadBlob(blob, "reporte-cajas.xlsx");
+          toast("Excel generado");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
       $("#btn-filtrar-caja")?.addEventListener("click", () => {
         state.filtersCaja.q = ($("#f-caja-q")?.value || "").trim();
         state.filtersCaja.caja_id = $("#f-caja-id")?.value || "";
@@ -3349,6 +3370,15 @@
           const blob = await API.reporteCombustibles({ ...state.filtersCombustible });
           downloadBlob(blob, "reporte-combustibles.pdf");
           toast("Reporte de combustibles generado");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      });
+      $("#btn-excel-comb")?.addEventListener("click", async () => {
+        try {
+          const blob = await API.reporteCombustiblesExcel({ ...state.filtersCombustible });
+          downloadBlob(blob, "reporte-combustibles.xlsx");
+          toast("Excel generado");
         } catch (ex) {
           toast(ex.message);
         }

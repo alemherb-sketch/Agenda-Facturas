@@ -25,6 +25,7 @@ from app.services.adjuntos import (
     listar_adjuntos,
     map_adjuntos_por_entidad,
 )
+from app.services.excel_service import generar_excel_reporte_combustibles
 from app.services.pdf_service import generar_pdf_reporte_combustibles
 
 
@@ -278,6 +279,37 @@ def reporte_pdf(
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="reporte-combustibles.pdf"'},
+    )
+
+
+@router.get("/reporte-excel")
+def reporte_excel(
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    tipo: str | None = None,
+    q: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    placa: str | None = None,
+    limit: int = Query(1000, le=5000),
+):
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
+
+    query = db.query(MovimientoCombustible).filter(MovimientoCombustible.usuario_id == user.id)
+    query = _apply_filters(
+        query, tipo=tipo, q=q, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, placa=placa
+    )
+    movimientos = (
+        query.order_by(MovimientoCombustible.fecha.desc(), MovimientoCombustible.id.desc())
+        .limit(limit)
+        .all()
+    )
+    content = generar_excel_reporte_combustibles(movimientos)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="reporte-combustibles.xlsx"'},
     )
 
 

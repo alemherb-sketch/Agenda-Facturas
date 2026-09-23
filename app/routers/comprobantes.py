@@ -29,6 +29,7 @@ from app.services.adjuntos import (
 from app.services.catalogo import upsert_cliente, upsert_productos_desde_items
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS, calcular_totales
 from app.services.email_service import enviar_correo
+from app.services.excel_service import generar_excel_reporte_comprobantes
 from app.services.pdf_service import generar_pdf_comprobante, generar_pdf_reporte_comprobantes
 
 router = APIRouter(prefix="/api/comprobantes", tags=["comprobantes"])
@@ -168,6 +169,36 @@ def reporte_pdf(
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="reporte-comprobantes.pdf"'},
+    )
+
+
+@router.get("/reporte-excel")
+def reporte_excel(
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    estado: str | None = None,
+    tipo: str | None = None,
+    zona: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    q: str | None = None,
+    limit: int = Query(1000, le=5000),
+):
+    docs = _filtrar_comprobantes(
+        db,
+        user,
+        estado=estado,
+        tipo=tipo,
+        zona=zona,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        q=q,
+    ).limit(limit).all()
+    content = generar_excel_reporte_comprobantes(docs)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="reporte-comprobantes.xlsx"'},
     )
 
 

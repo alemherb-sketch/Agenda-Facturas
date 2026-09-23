@@ -117,6 +117,13 @@ const API = {
     const qs = new URLSearchParams(cleaned).toString();
     return this.request(`/api/comprobantes/reporte${qs ? `?${qs}` : ""}`);
   },
+  reporteComprobantesExcel(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/comprobantes/reporte-excel${qs ? `?${qs}` : ""}`, { asBlob: true });
+  },
   emailComprobante(id, body) {
     return this.request(`/api/comprobantes/${id}/enviar-correo`, {
       method: "POST",
@@ -251,6 +258,13 @@ const API = {
     const qs = new URLSearchParams(cleaned).toString();
     return this.request(`/api/cajas/reporte${qs ? `?${qs}` : ""}`);
   },
+  reporteCajasExcel(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/cajas/reporte-excel${qs ? `?${qs}` : ""}`, { asBlob: true });
+  },
   listMovimientosCaja(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/cajas/movimientos${qs ? `?${qs}` : ""}`);
@@ -306,6 +320,13 @@ const API = {
     );
     const qs = new URLSearchParams(cleaned).toString();
     return this.request(`/api/combustibles/reporte${qs ? `?${qs}` : ""}`);
+  },
+  reporteCombustiblesExcel(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/combustibles/reporte-excel${qs ? `?${qs}` : ""}`, { asBlob: true });
   },
   listCombustibles(params = {}) {
     const qs = new URLSearchParams(params).toString();

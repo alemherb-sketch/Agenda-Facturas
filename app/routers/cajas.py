@@ -28,6 +28,7 @@ from app.services.adjuntos import (
     listar_adjuntos,
     map_adjuntos_por_entidad,
 )
+from app.services.excel_service import generar_excel_reporte_cajas
 from app.services.pdf_service import generar_pdf_reporte_cajas
 
 router = APIRouter(prefix="/api/cajas", tags=["cajas"])
@@ -371,6 +372,47 @@ def reporte_pdf(
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="reporte-cajas.pdf"'},
+    )
+
+
+@router.get("/reporte-excel")
+def reporte_excel(
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    caja_id: int | None = None,
+    tipo: str | None = None,
+    q: str | None = None,
+    limit: int = Query(1000, le=5000),
+):
+    hoy = date.today()
+    if fecha_hasta is None:
+        fecha_hasta = hoy
+    if fecha_desde is None:
+        fecha_desde = fecha_hasta.replace(day=1)
+    if fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
+
+    query = (
+        db.query(MovimientoCaja)
+        .options(joinedload(MovimientoCaja.caja))
+        .filter(MovimientoCaja.usuario_id == user.id)
+    )
+    query = _apply_mov_filters(
+        query,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
+    movimientos = query.order_by(MovimientoCaja.fecha.desc(), MovimientoCaja.id.desc()).limit(limit).all()
+    content = generar_excel_reporte_cajas(movimientos)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="reporte-cajas.xlsx"'},
     )
 
 
