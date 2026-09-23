@@ -144,9 +144,16 @@ def _descripcion_items(comprobante: Comprobante) -> str:
     partes = []
     for item in getattr(comprobante, "items", None) or []:
         desc = (getattr(item, "descripcion", None) or "").strip()
-        if desc:
-            partes.append(desc)
-    return " · ".join(partes)
+        if not desc:
+            continue
+        precio = float(getattr(item, "precio_unitario", 0) or 0)
+        cant = float(getattr(item, "cantidad", 1) or 1)
+        qty = ""
+        if abs(cant - 1) > 0.0001:
+            qty_txt = f"{cant:,.3f}".rstrip("0").rstrip(".")
+            qty = f" x {qty_txt}"
+        partes.append(f"{_xml(desc)} - S/ {precio:,.2f}{qty}")
+    return "<br/>".join(partes) if partes else "—"
 
 
 def _header_empresa(story, title_style=None, normal=None, small=None, *, logo_mm: float | None = None) -> None:
@@ -366,7 +373,7 @@ def generar_pdf_reporte_comprobantes(
                 Paragraph(_xml(c.cliente_nombre), cell),
                 Paragraph(_xml(getattr(c, "zona", None)), cell),
                 Paragraph(_xml(getattr(c, "motivo", None)), cell),
-                Paragraph(_xml(_descripcion_items(c)), cell),
+                Paragraph(_descripcion_items(c), cell),
                 ESTADO_LABELS.get(c.estado.value, c.estado.value),
                 f"S/ {float(c.total):,.2f}",
             ]
