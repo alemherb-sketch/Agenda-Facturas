@@ -112,9 +112,22 @@
     return "FILE";
   }
 
+  function actionIcon(name) {
+    const paths = {
+      edit: '<path d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1L16.6 5.5a1.5 1.5 0 0 0-2.1 0L4 16v4z"/><path d="M13.2 6.8l4 4"/>',
+      pdf: '<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/>',
+      mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="1.5"/><path d="M4 7l8 6 8-6"/>',
+      whatsapp: '<path d="M12 4a8 8 0 0 0-6.9 12L4 20l4.2-1.1A8 8 0 1 0 12 4z"/><path d="M9 10.2c.2 1.6 1.8 3.2 3.4 3.6.5.1.9 0 1.2-.3l.6-.7c.2-.2 0-.4-.2-.5l-1-.4c-.2-.1-.4 0-.5.2l-.2.3c-.8-.3-1.4-.9-1.7-1.6l.3-.2c.2-.1.2-.3.1-.5l-.4-1c-.1-.2-.3-.3-.5-.2l-.7.6c-.3.3-.4.7-.4 1.1z"/>',
+      delete: '<path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M8 7l.8 12h6.4L16 7"/>',
+      archive: '<path d="M4 7h16v3H4z"/><path d="M6 10v9h12v-9"/><path d="M10 14h4"/>',
+      clip: '<path d="M8 12.5l6.2-6.2a2.2 2.2 0 0 1 3.1 3.1L9.2 17.5a3.4 3.4 0 0 1-4.8-4.8l7.4-7.4"/>',
+    };
+    return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ""}</svg>`;
+  }
+
   function iconBtn(attrs, label, icon, variant = "btn-secondary") {
     const safe = escapeHtml(label);
-    return `<button type="button" class="btn ${variant} btn-icon" ${attrs} title="${safe}" aria-label="${safe}">${icon}</button>`;
+    return `<button type="button" class="btn ${variant} btn-icon" ${attrs} title="${safe}" aria-label="${safe}">${actionIcon(icon)}</button>`;
   }
 
   function adjuntoBtnHtml(id, adjuntos, attrName) {
@@ -122,7 +135,7 @@
     const n = list.length;
     if (!n) return "";
     const label = `Adjuntos (${n})`;
-    return `<button type="button" class="btn btn-secondary btn-icon" data-${attrName}="${id}" title="${label}" aria-label="${label}">📎<span class="btn-count">${n}</span></button>`;
+    return `<button type="button" class="btn btn-secondary btn-icon" data-${attrName}="${id}" title="${label}" aria-label="${label}">${actionIcon("clip")}<span class="btn-count">${n}</span></button>`;
   }
 
   function itemsDescripcion(doc) {
@@ -1076,12 +1089,12 @@
                     </label>
                   </td>
                   <td class="actions">
-                    ${iconBtn(`data-edit="${d.id}"`, "Editar", "✎")}
-                    ${iconBtn(`data-pdf="${d.id}"`, "PDF", "📄")}
+                    ${iconBtn(`data-edit="${d.id}"`, "Editar", "edit")}
+                    ${iconBtn(`data-pdf="${d.id}"`, "PDF", "pdf")}
                     ${adjuntoBtnHtml(d.id, d.adjuntos, "adjuntos-doc")}
-                    ${iconBtn(`data-mail="${d.id}"`, "Correo", "✉")}
-                    ${iconBtn(`data-wa="${d.id}"`, "WhatsApp", "💬", "btn-accent")}
-                    ${iconBtn(`data-del="${d.id}"`, "Eliminar", "✕", "btn-danger")}
+                    ${iconBtn(`data-mail="${d.id}"`, "Correo", "mail")}
+                    ${iconBtn(`data-wa="${d.id}"`, "WhatsApp", "whatsapp", "btn-accent")}
+                    ${iconBtn(`data-del="${d.id}"`, "Eliminar", "delete", "btn-danger")}
                   </td>
                 </tr>`;
                 })
@@ -1442,9 +1455,9 @@
                   <td>${escapeHtml(c.tipo_documento || "")} ${escapeHtml(c.documento || "—")}</td>
                   <td>${escapeHtml(c.email || "—")}<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.telefono || "")}</span></td>
                   <td class="actions">
-                    ${iconBtn(`data-cli-edit="${c.id}"`, "Editar", "✎")}
+                    ${iconBtn(`data-cli-edit="${c.id}"`, "Editar", "edit")}
                     ${adjuntoBtnHtml(c.id, c.adjuntos, "adjuntos-cli")}
-                    ${iconBtn(`data-cli-del="${c.id}"`, "Eliminar", "✕", "btn-danger")}
+                    ${iconBtn(`data-cli-del="${c.id}"`, "Eliminar", "delete", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1594,9 +1607,9 @@
                   <td>${escapeHtml(p.unidad || "NIU")}</td>
                   <td>${money(p.precio_unitario)}</td>
                   <td class="actions">
-                    ${iconBtn(`data-prod-edit="${p.id}"`, "Editar", "✎")}
+                    ${iconBtn(`data-prod-edit="${p.id}"`, "Editar", "edit")}
                     ${adjuntoBtnHtml(p.id, p.adjuntos, "adjuntos-prod")}
-                    ${iconBtn(`data-prod-del="${p.id}"`, "Eliminar", "✕", "btn-danger")}
+                    ${iconBtn(`data-prod-del="${p.id}"`, "Eliminar", "delete", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1690,9 +1703,9 @@
                   <td style="color:var(--danger)">${money(c.total_egresos)}</td>
                   <td><strong>${money(c.saldo)}</strong></td>
                   <td class="actions">
-                    ${iconBtn(`data-caja-edit="${c.id}"`, "Editar", "✎")}
-                    ${iconBtn(`data-caja-arch="${c.id}"`, "Archivar", "📦")}
-                    ${iconBtn(`data-caja-del="${c.id}"`, "Eliminar", "✕", "btn-danger")}
+                    ${iconBtn(`data-caja-edit="${c.id}"`, "Editar", "edit")}
+                    ${iconBtn(`data-caja-arch="${c.id}"`, "Archivar", "archive")}
+                    ${iconBtn(`data-caja-del="${c.id}"`, "Eliminar", "delete", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1745,9 +1758,9 @@
                   <td>${escapeHtml(m.concepto)}</td>
                   <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
                   <td class="actions">
-                    ${iconBtn(`data-mov-edit="${m.id}"`, "Editar", "✎")}
+                    ${iconBtn(`data-mov-edit="${m.id}"`, "Editar", "edit")}
                     ${adjuntoBtnHtml(m.id, m.adjuntos, "adjuntos-mov")}
-                    ${iconBtn(`data-mov-del="${m.id}"`, "Eliminar", "✕", "btn-danger")}
+                    ${iconBtn(`data-mov-del="${m.id}"`, "Eliminar", "delete", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1842,9 +1855,9 @@
                   <td>${escapeHtml(m.marca || "—")}</td>
                   <td><strong>${escapeHtml(m.placa || "—")}</strong></td>
                   <td class="actions">
-                    ${iconBtn(`data-comb-edit="${m.id}"`, "Editar", "✎")}
+                    ${iconBtn(`data-comb-edit="${m.id}"`, "Editar", "edit")}
                     ${adjuntoBtnHtml(m.id, m.adjuntos, "adjuntos-comb")}
-                    ${iconBtn(`data-comb-del="${m.id}"`, "Eliminar", "✕", "btn-danger")}
+                    ${iconBtn(`data-comb-del="${m.id}"`, "Eliminar", "delete", "btn-danger")}
                   </td>
                 </tr>`
                 )
