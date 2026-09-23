@@ -121,6 +121,17 @@ def ensure_schema() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE movimientos_combustible ADD COLUMN adjunto_path VARCHAR(500)"
                     )
+
+            agenda_cols = {
+                row[1] for row in conn.exec_driver_sql("PRAGMA table_info(agendas)").fetchall()
+            }
+            if agenda_cols and "estado" not in agenda_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE agendas ADD COLUMN estado VARCHAR(20) DEFAULT 'programado'"
+                )
+                conn.exec_driver_sql(
+                    "UPDATE agendas SET estado = CASE WHEN completado = 1 THEN 'finalizado' ELSE 'programado' END"
+                )
         else:
             conn.exec_driver_sql(
                 "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(32)"
@@ -150,3 +161,10 @@ def ensure_schema() -> None:
                 conn.exec_driver_sql(
                     f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS adjunto_path VARCHAR(500)"
                 )
+            conn.exec_driver_sql(
+                "ALTER TABLE agendas ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'programado'"
+            )
+            conn.exec_driver_sql(
+                "UPDATE agendas SET estado = 'finalizado' "
+                "WHERE completado IS TRUE AND (estado IS NULL OR estado = '' OR estado = 'programado')"
+            )

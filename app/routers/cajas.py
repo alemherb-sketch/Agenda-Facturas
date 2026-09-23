@@ -408,11 +408,31 @@ def eliminar_caja(
     caja_id: int,
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
+    permanente: bool = Query(False, description="True = borrar definitiva; False = archivar"),
 ):
     caja = _get_caja(db, user, caja_id)
-    caja.activo = False
+    if not permanente:
+        caja.activo = False
+        db.commit()
+        return {"ok": True, "archivada": True}
+
+    n_movs = (
+        db.query(func.count(MovimientoCaja.id))
+        .filter(MovimientoCaja.caja_id == caja.id)
+        .scalar()
+        or 0
+    )
+    if n_movs:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No se puede eliminar: tiene movimientos. "
+                "Archívala o elimina los movimientos primero."
+            ),
+        )
+    db.delete(caja)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "eliminada": True}
 
 
 @router.get("/movimientos", response_model=list[MovimientoCajaOut])

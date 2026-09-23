@@ -102,6 +102,11 @@ def meta():
             {"value": "cita", "label": "Cita"},
             {"value": "nota", "label": "Nota"},
         ],
+        "estados_agenda": [
+            {"value": "programado", "label": "Programado"},
+            {"value": "finalizado", "label": "Finalizado"},
+            {"value": "anulado", "label": "Anulado"},
+        ],
         "tipos_movimiento_caja": [
             {"value": "ingreso", "label": "Ingreso"},
             {"value": "egreso", "label": "Egreso"},

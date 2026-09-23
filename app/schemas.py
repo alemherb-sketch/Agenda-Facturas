@@ -5,7 +5,14 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models import EstadoComprobante, TipoAgenda, TipoDocumento, TipoMovimientoCaja, TipoMovimientoCombustible
+from app.models import (
+    EstadoAgenda,
+    EstadoComprobante,
+    TipoAgenda,
+    TipoDocumento,
+    TipoMovimientoCaja,
+    TipoMovimientoCombustible,
+)
 
 
 class AdjuntoOut(BaseModel):
@@ -15,16 +22,40 @@ class AdjuntoOut(BaseModel):
     nombre: str
     mime: str
     es_imagen: bool = False
+    tipo_icono: str = "file"  # image | pdf | word | excel | file
     creado_en: datetime | None = None
 
     @classmethod
     def from_row(cls, row) -> "AdjuntoOut":
-        mime = row.mime or ""
+        mime = (row.mime or "").lower()
+        nombre = (row.nombre or "").lower()
+        es_imagen = mime.startswith("image/")
+        if es_imagen:
+            tipo = "image"
+        elif mime == "application/pdf" or nombre.endswith(".pdf"):
+            tipo = "pdf"
+        elif (
+            "word" in mime
+            or "msword" in mime
+            or nombre.endswith(".doc")
+            or nombre.endswith(".docx")
+        ):
+            tipo = "word"
+        elif (
+            "excel" in mime
+            or "spreadsheet" in mime
+            or nombre.endswith(".xls")
+            or nombre.endswith(".xlsx")
+        ):
+            tipo = "excel"
+        else:
+            tipo = "file"
         return cls(
             id=row.id,
             nombre=row.nombre,
-            mime=mime,
-            es_imagen=mime.startswith("image/"),
+            mime=mime or row.mime or "",
+            es_imagen=es_imagen,
+            tipo_icono=tipo,
             creado_en=getattr(row, "creado_en", None),
         )
 
@@ -144,6 +175,7 @@ class AgendaCreate(BaseModel):
     fecha_fin: datetime | None = None
     ubicacion: str | None = None
     participantes: str | None = None
+    estado: EstadoAgenda = EstadoAgenda.PROGRAMADO
     recordatorio_minutos: int = 30
 
 
@@ -156,7 +188,13 @@ class AgendaUpdate(BaseModel):
     ubicacion: str | None = None
     participantes: str | None = None
     completado: bool | None = None
+    estado: EstadoAgenda | None = None
     recordatorio_minutos: int | None = None
+
+
+class AgendaReprogramarIn(BaseModel):
+    fecha_inicio: datetime
+    fecha_fin: datetime | None = None
 
 
 class AgendaOut(BaseModel):
@@ -171,7 +209,10 @@ class AgendaOut(BaseModel):
     ubicacion: str | None
     participantes: str | None
     completado: bool
+    estado: EstadoAgenda = EstadoAgenda.PROGRAMADO
     recordatorio_minutos: int
+    adjuntos: list[AdjuntoOut] = []
+    tiene_adjunto: bool = False
     creado_en: datetime
 
 
@@ -235,6 +276,8 @@ class ClienteOut(BaseModel):
     telefono: str | None = None
     direccion: str | None = None
     activo: bool = True
+    adjuntos: list[AdjuntoOut] = []
+    tiene_adjunto: bool = False
 
 
 class ProductoCreate(BaseModel):
@@ -264,6 +307,8 @@ class ProductoOut(BaseModel):
     unidad: str
     precio_unitario: Decimal
     activo: bool = True
+    adjuntos: list[AdjuntoOut] = []
+    tiene_adjunto: bool = False
 
 
 class EmailShareIn(BaseModel):
@@ -394,6 +439,8 @@ class ContactoOut(BaseModel):
     origen: str = "manual"
     cliente_id: int | None = None
     activo: bool = True
+    adjuntos: list[AdjuntoOut] = []
+    tiene_adjunto: bool = False
     creado_en: datetime | None = None
 
 

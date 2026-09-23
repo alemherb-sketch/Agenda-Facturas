@@ -32,10 +32,17 @@ def _agendas_pendientes(db: Session) -> None:
     ahora = ahora_lima()
     agendas = (
         db.query(Agenda)
-        .filter(Agenda.completado.is_(False), Agenda.notificado.is_(False))
+        .filter(
+            Agenda.completado.is_(False),
+            Agenda.notificado.is_(False),
+        )
         .all()
     )
     for agenda in agendas:
+        estado = getattr(agenda, "estado", None)
+        estado_val = getattr(estado, "value", estado) if estado is not None else None
+        if estado_val in ("finalizado", "anulado"):
+            continue
         minutos = agenda.recordatorio_minutos if agenda.recordatorio_minutos is not None else 30
         momento = agenda.fecha_inicio - timedelta(minutes=minutos)
         # Ventana: desde el recordatorio hasta 2 h después del inicio

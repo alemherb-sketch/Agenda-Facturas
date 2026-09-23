@@ -1,4 +1,4 @@
-"""Guardado y validación de adjuntos (PDF / imágenes) — uno o varios por entidad."""
+"""Guardado y validación de adjuntos (PDF, imágenes, Word, Excel) — uno o varios por entidad."""
 
 from __future__ import annotations
 
@@ -20,6 +20,26 @@ ALLOWED_MIME = {
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    # Algunos navegadores envían Office con estos tipos
+    "application/x-msword": ".doc",
+    "application/x-msexcel": ".xls",
+    "application/excel": ".xls",
+}
+ALLOWED_EXT = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 MAX_BYTES = 8 * 1024 * 1024  # 8 MB
 MAX_POR_ENTIDAD = 12
@@ -27,6 +47,10 @@ MAX_POR_ENTIDAD = 12
 ENTIDAD_COMPROBANTE = "comprobante"
 ENTIDAD_CAJA = "caja"
 ENTIDAD_COMBUSTIBLE = "combustible"
+ENTIDAD_AGENDA = "agenda"
+ENTIDAD_CLIENTE = "cliente"
+ENTIDAD_PRODUCTO = "producto"
+ENTIDAD_CONTACTO = "contacto"
 
 
 def uploads_root() -> Path:
@@ -43,6 +67,28 @@ def _safe_original_name(name: str | None) -> str:
     return (base or "archivo")[:200]
 
 
+def _resolve_mime_and_ext(filename: str | None, content_type: str | None) -> tuple[str, str]:
+    """Devuelve (mime canónico, extensión). Acepta MIME conocido o extensión válida."""
+    mime = (content_type or "").lower().split(";")[0].strip()
+    name = _safe_original_name(filename)
+    ext_from_name = Path(name).suffix.lower()
+
+    if mime in ALLOWED_MIME:
+        return mime, ALLOWED_MIME[mime]
+
+    if ext_from_name in ALLOWED_EXT:
+        return ALLOWED_EXT[ext_from_name], ext_from_name
+
+    # Octet-stream u vacío: solo por extensión
+    if mime in {"", "application/octet-stream", "binary/octet-stream"} and ext_from_name in ALLOWED_EXT:
+        return ALLOWED_EXT[ext_from_name], ext_from_name
+
+    raise HTTPException(
+        status_code=400,
+        detail="Solo se permiten PDF, imágenes (JPG, PNG, WEBP, GIF), Word (.doc/.docx) o Excel (.xls/.xlsx)",
+    )
+
+
 async def save_upload(
     file: UploadFile,
     *,
@@ -51,12 +97,7 @@ async def save_upload(
     entity_id: int,
 ) -> tuple[str, str, str]:
     """Guarda el archivo y devuelve (path relativo, nombre original, mime)."""
-    mime = (file.content_type or "").lower().split(";")[0].strip()
-    if mime not in ALLOWED_MIME:
-        raise HTTPException(
-            status_code=400,
-            detail="Solo se permiten PDF o imágenes (JPG, PNG, WEBP, GIF)",
-        )
+    mime, ext = _resolve_mime_and_ext(file.filename, file.content_type)
 
     data = await file.read()
     if not data:
@@ -64,7 +105,6 @@ async def save_upload(
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=400, detail="El archivo supera el máximo de 8 MB")
 
-    ext = ALLOWED_MIME[mime]
     folder = uploads_root() / str(user_id) / kind
     folder.mkdir(parents=True, exist_ok=True)
     stored = f"{entity_id}_{uuid.uuid4().hex}{ext}"

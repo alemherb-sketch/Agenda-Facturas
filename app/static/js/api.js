@@ -105,6 +105,11 @@ const API = {
   deleteAdjunto(id) {
     return this.request(`/api/adjuntos/${id}`, { method: "DELETE" });
   },
+  uploadAdjuntosAgenda(id, files) {
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append("archivos", f));
+    return this.request(`/api/agenda/${id}/adjuntos`, { method: "POST", body: fd });
+  },
   reporteComprobantes(params = {}) {
     const cleaned = Object.fromEntries(
       Object.entries(params).filter(([, v]) => v !== "" && v != null)
@@ -131,6 +136,17 @@ const API = {
   },
   updateAgenda(id, body) {
     return this.request(`/api/agenda/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  reprogramarAgenda(id, body) {
+    return this.request(`/api/agenda/${id}/reprogramar`, { method: "POST", body: JSON.stringify(body) });
+  },
+  cambiarEstadoAgenda(id, estado) {
+    return this.request(`/api/agenda/${id}/estado?estado=${encodeURIComponent(estado)}`, {
+      method: "PATCH",
+    });
+  },
+  pdfAgenda(id) {
+    return this.request(`/api/agenda/${id}/pdf`, { asBlob: true });
   },
   deleteAgenda(id) {
     return this.request(`/api/agenda/${id}`, { method: "DELETE" });
@@ -187,6 +203,11 @@ const API = {
   deleteCliente(id) {
     return this.request(`/api/clientes/${id}`, { method: "DELETE" });
   },
+  uploadAdjuntosCliente(id, files) {
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append("archivos", f));
+    return this.request(`/api/clientes/${id}/adjuntos`, { method: "POST", body: fd });
+  },
   listProductos(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/productos${qs ? `?${qs}` : ""}`);
@@ -200,6 +221,11 @@ const API = {
   deleteProducto(id) {
     return this.request(`/api/productos/${id}`, { method: "DELETE" });
   },
+  uploadAdjuntosProducto(id, files) {
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append("archivos", f));
+    return this.request(`/api/productos/${id}/adjuntos`, { method: "POST", body: fd });
+  },
   listCajas(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/cajas${qs ? `?${qs}` : ""}`);
@@ -210,8 +236,9 @@ const API = {
   updateCaja(id, body) {
     return this.request(`/api/cajas/${id}`, { method: "PUT", body: JSON.stringify(body) });
   },
-  deleteCaja(id) {
-    return this.request(`/api/cajas/${id}`, { method: "DELETE" });
+  deleteCaja(id, { permanente = false } = {}) {
+    const qs = permanente ? "?permanente=1" : "";
+    return this.request(`/api/cajas/${id}${qs}`, { method: "DELETE" });
   },
   dashboardCajas(params = {}) {
     const qs = new URLSearchParams(params).toString();
@@ -254,6 +281,11 @@ const API = {
   },
   deleteContacto(id) {
     return this.request(`/api/contactos/${id}`, { method: "DELETE" });
+  },
+  uploadAdjuntosContacto(id, files) {
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append("archivos", f));
+    return this.request(`/api/contactos/${id}/adjuntos`, { method: "POST", body: fd });
   },
   importarContactos(contactos) {
     return this.request("/api/contactos/importar", {

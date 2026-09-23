@@ -38,8 +38,41 @@
     state.meta?.tipos_movimiento_caja?.find((t) => t.value === v)?.label || v;
   const movCombustibleLabel = (v) =>
     state.meta?.tipos_movimiento_combustible?.find((t) => t.value === v)?.label || v;
+  const estadoAgendaLabel = (v) =>
+    state.meta?.estados_agenda?.find((t) => t.value === v)?.label ||
+    ({ programado: "Programado", finalizado: "Finalizado", anulado: "Anulado" }[v] || v);
+  const agendaEstado = (a) =>
+    a?.estado || (a?.completado ? "finalizado" : "programado");
   const galones = (n) =>
     `${Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} gal`;
+
+  function parseAgendaDescItems(desc) {
+    if (!desc) return [""];
+    const lines = String(desc)
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^\s*[•\-*]\s*/, "").trim())
+      .filter(Boolean);
+    return lines.length ? lines : [""];
+  }
+
+  function collectAgendaDescItems(root = document) {
+    return [...root.querySelectorAll("[data-agenda-desc-item]")]
+      .map((inp) => (inp.value || "").trim())
+      .filter(Boolean);
+  }
+
+  function agendaDescFromItems(items) {
+    return items.map((t) => `• ${t}`).join("\n");
+  }
+
+  function agendaDescItemRowHtml(text = "") {
+    return `
+      <div class="agenda-desc-row" style="display:flex;gap:.4rem;align-items:center;margin-bottom:.4rem">
+        <span style="color:var(--muted)">•</span>
+        <input data-agenda-desc-item type="text" maxlength="500" value="${escapeHtml(text)}" placeholder="Detalle o punto de la agenda" style="flex:1;min-width:0" />
+        <button type="button" class="btn btn-ghost btn-sm btn-remove-agenda-desc" title="Quitar">✕</button>
+      </div>`;
+  }
 
   function toast(msg) {
     let wrap = $(".toast-wrap");
@@ -66,19 +99,52 @@
 
   const adjuntoWidgetState = new Map();
 
+  const ADJ_ACCEPT =
+    ".pdf,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,image/webp,image/gif,application/pdf," +
+    "application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
+    "application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+  function adjuntoTipoIcono(mime, nombre, tipoIcono) {
+    if (tipoIcono === "image" || (mime || "").startsWith("image/")) return "🖼";
+    if (tipoIcono === "pdf" || (mime || "") === "application/pdf" || /\.pdf$/i.test(nombre || "")) return "PDF";
+    if (tipoIcono === "word" || /word|msword/i.test(mime || "") || /\.docx?$/i.test(nombre || "")) return "DOC";
+    if (tipoIcono === "excel" || /excel|spreadsheet/i.test(mime || "") || /\.xlsx?$/i.test(nombre || "")) return "XLS";
+    return "FILE";
+  }
+
+  function iconBtn(attrs, label, icon, variant = "btn-secondary") {
+    const safe = escapeHtml(label);
+    return `<button type="button" class="btn ${variant} btn-icon" ${attrs} title="${safe}" aria-label="${safe}">${icon}</button>`;
+  }
+
+  function adjuntoBtnHtml(id, adjuntos, attrName) {
+    const list = adjuntos || [];
+    const n = list.length;
+    if (!n) return "";
+    const label = `Adjuntos (${n})`;
+    return `<button type="button" class="btn btn-secondary btn-icon" data-${attrName}="${id}" title="${label}" aria-label="${label}">📎<span class="btn-count">${n}</span></button>`;
+  }
+
+  function itemsDescripcion(doc) {
+    return (doc?.items || [])
+      .map((it) => (it.descripcion || "").trim())
+      .filter(Boolean)
+      .join(" · ");
+  }
+
   function adjuntoFieldHtml(entity, widgetKey) {
     const count = (entity?.adjuntos || []).length;
     return `
       <div class="field full adjuntos-field" data-adjuntos-key="${widgetKey}">
-        <label>Adjuntos (PDF o imagen)${count ? ` · ${count}` : ""}</label>
+        <label>Adjuntos${count ? ` · ${count}` : ""}</label>
         <div class="adjuntos-toolbar">
           <label class="btn btn-secondary btn-sm adjuntos-pick">
             ＋ Agregar archivos
-            <input type="file" multiple accept=".pdf,image/jpeg,image/png,image/webp,image/gif,application/pdf" hidden />
+            <input type="file" multiple accept="${ADJ_ACCEPT}" hidden />
           </label>
         </div>
         <div class="adjuntos-grid" data-adjuntos-grid></div>
-        <small class="field-hint">Uno o más archivos · PDF, JPG, PNG, WEBP o GIF · máx. 8 MB c/u</small>
+        <small class="field-hint">PDF, imágenes, Word o Excel · máx. 8 MB c/u · hasta 12 archivos</small>
       </div>`;
   }
 
@@ -93,41 +159,38 @@
     };
     adjuntoWidgetState.set(widgetKey, state);
 
-    const revokePending = () => {
-      state.pending.forEach((p) => {
-        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-      });
-    };
-
     const render = () => {
       const cards = [];
       state.saved.forEach((a) => {
         const isImg = a.es_imagen || (a.mime || "").startsWith("image/");
+        const icon = adjuntoTipoIcono(a.mime, a.nombre, a.tipo_icono);
         cards.push(`
           <div class="adjunto-card" data-saved-id="${a.id}">
             <div class="adjunto-preview">
               ${
                 isImg && a.previewUrl
                   ? `<img src="${a.previewUrl}" alt="" />`
-                  : `<span class="adjunto-icon">${isImg ? "🖼" : "PDF"}</span>`
+                  : `<span class="adjunto-icon">${icon}</span>`
               }
             </div>
             <div class="adjunto-meta" title="${escapeHtml(a.nombre)}">${escapeHtml(a.nombre)}</div>
             <div class="adjunto-actions">
               <button type="button" class="btn btn-secondary btn-sm" data-adj-view="${a.id}">Ver</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-adj-dl="${a.id}" data-adj-name="${escapeHtml(a.nombre)}" title="Descargar">↓</button>
               <button type="button" class="btn btn-danger btn-sm" data-adj-del-saved="${a.id}" title="Eliminar">×</button>
             </div>
           </div>`);
       });
       state.pending.forEach((p, idx) => {
         const isImg = (p.file.type || "").startsWith("image/");
+        const icon = adjuntoTipoIcono(p.file.type, p.file.name);
         cards.push(`
           <div class="adjunto-card is-pending" data-pending-idx="${idx}">
             <div class="adjunto-preview">
               ${
                 isImg && p.previewUrl
                   ? `<img src="${p.previewUrl}" alt="" />`
-                  : `<span class="adjunto-icon">${isImg ? "🖼" : "PDF"}</span>`
+                  : `<span class="adjunto-icon">${icon}</span>`
               }
             </div>
             <div class="adjunto-meta" title="${escapeHtml(p.file.name)}">${escapeHtml(p.file.name)}</div>
@@ -168,12 +231,22 @@
 
     grid.addEventListener("click", async (e) => {
       const viewBtn = e.target.closest("[data-adj-view]");
+      const dlBtn = e.target.closest("[data-adj-dl]");
       const delSaved = e.target.closest("[data-adj-del-saved]");
       const delPending = e.target.closest("[data-adj-del-pending]");
       if (viewBtn) {
         try {
           const blob = await API.downloadAdjunto(viewBtn.dataset.adjView);
           await openAdjunto(blob);
+        } catch (ex) {
+          toast(ex.message);
+        }
+        return;
+      }
+      if (dlBtn) {
+        try {
+          const blob = await API.downloadAdjunto(dlBtn.dataset.adjDl);
+          downloadBlob(blob, dlBtn.dataset.adjName || "adjunto");
         } catch (ex) {
           toast(ex.message);
         }
@@ -204,7 +277,7 @@
 
     render();
     loadSavedPreviews();
-    return { revokePending };
+    return {};
   }
 
   async function flushPendingAdjuntos(widgetKey, entityId, uploadFn) {
@@ -250,10 +323,11 @@
       .map(
         (a) => `
       <div class="adjunto-card">
-        <div class="adjunto-preview"><span class="adjunto-icon">${a.es_imagen ? "🖼" : "PDF"}</span></div>
+        <div class="adjunto-preview"><span class="adjunto-icon">${adjuntoTipoIcono(a.mime, a.nombre, a.tipo_icono)}</span></div>
         <div class="adjunto-meta">${escapeHtml(a.nombre)}</div>
         <div class="adjunto-actions">
           <button type="button" class="btn btn-secondary btn-sm" data-view-id="${a.id}">Ver</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-dl-id="${a.id}" data-dl-name="${escapeHtml(a.nombre)}">Descargar</button>
         </div>
       </div>`
       )
@@ -275,13 +349,24 @@
       if (e.target === backdrop) backdrop.classList.remove("open");
     };
     grid.onclick = async (e) => {
-      const btn = e.target.closest("[data-view-id]");
-      if (!btn) return;
-      try {
-        const blob = await API.downloadAdjunto(btn.dataset.viewId);
-        await openAdjunto(blob);
-      } catch (ex) {
-        toast(ex.message);
+      const viewBtn = e.target.closest("[data-view-id]");
+      const dlBtn = e.target.closest("[data-dl-id]");
+      if (viewBtn) {
+        try {
+          const blob = await API.downloadAdjunto(viewBtn.dataset.viewId);
+          await openAdjunto(blob);
+        } catch (ex) {
+          toast(ex.message);
+        }
+        return;
+      }
+      if (dlBtn) {
+        try {
+          const blob = await API.downloadAdjunto(dlBtn.dataset.dlId);
+          downloadBlob(blob, dlBtn.dataset.dlName || "adjunto");
+        } catch (ex) {
+          toast(ex.message);
+        }
       }
     };
   }
@@ -963,15 +1048,18 @@
           state.docs.length
             ? `<div class="table-wrap"><table>
               <thead><tr>
-                <th>Documento</th><th>Cliente</th><th>Zona</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Acciones</th>
+                <th>Documento</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th><th>Fecha</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
               </tr></thead>
               <tbody>
               ${state.docs
-                .map(
-                  (d) => `<tr>
+                .map((d) => {
+                  const desc = itemsDescripcion(d);
+                  return `<tr>
                   <td><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></td>
                   <td>${escapeHtml(d.cliente_nombre)}<br><span style="color:var(--muted);font-size:.8rem">${d.cliente_documento || ""}</span></td>
                   <td>${escapeHtml(d.zona || "—")}</td>
+                  <td class="cell-clip" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</td>
+                  <td class="cell-clip" title="${escapeHtml(desc)}">${escapeHtml(desc || "—")}</td>
                   <td>${fmtDate(d.fecha_emision)}</td>
                   <td>${money(d.total)}</td>
                   <td>
@@ -988,19 +1076,15 @@
                     </label>
                   </td>
                   <td class="actions">
-                    <button type="button" class="btn btn-secondary btn-sm" data-edit="${d.id}">Editar</button>
-                    <button type="button" class="btn btn-secondary btn-sm" data-pdf="${d.id}">PDF</button>
-                    ${
-                      d.tiene_adjunto || (d.adjuntos && d.adjuntos.length)
-                        ? `<button type="button" class="btn btn-secondary btn-sm" data-adjuntos-doc="${d.id}" title="Ver adjuntos (${d.adjuntos?.length || ""})">📎 ${d.adjuntos?.length || ""}</button>`
-                        : ""
-                    }
-                    <button type="button" class="btn btn-secondary btn-sm" data-mail="${d.id}">Correo</button>
-                    <button type="button" class="btn btn-accent btn-sm" data-wa="${d.id}">WhatsApp</button>
-                    <button type="button" class="btn btn-danger btn-sm" data-del="${d.id}">Eliminar</button>
+                    ${iconBtn(`data-edit="${d.id}"`, "Editar", "✎")}
+                    ${iconBtn(`data-pdf="${d.id}"`, "PDF", "📄")}
+                    ${adjuntoBtnHtml(d.id, d.adjuntos, "adjuntos-doc")}
+                    ${iconBtn(`data-mail="${d.id}"`, "Correo", "✉")}
+                    ${iconBtn(`data-wa="${d.id}"`, "WhatsApp", "💬", "btn-accent")}
+                    ${iconBtn(`data-del="${d.id}"`, "Eliminar", "✕", "btn-danger")}
                   </td>
-                </tr>`
-                )
+                </tr>`;
+                })
                 .join("")}
               </tbody></table></div>`
             : `<div class="empty"><strong>No hay comprobantes</strong>Registra facturas, boletas u otros documentos.</div>`
@@ -1233,11 +1317,16 @@
 
   async function viewAgenda() {
     state.agendas = await API.listAgenda();
+    const estadoOpts = state.meta?.estados_agenda || [
+      { value: "programado", label: "Programado" },
+      { value: "finalizado", label: "Finalizado" },
+      { value: "anulado", label: "Anulado" },
+    ];
     return `
       <div class="page-head">
         <div>
           <h1>Agenda</h1>
-          <p>Reuniones, citas detalladas y notas. Recibirás avisos en el celular.</p>
+          <p>Reuniones, citas y notas. Reprograma, genera PDF y controla el estado.</p>
         </div>
         <button class="btn btn-primary" id="btn-new-agenda">＋ Programar</button>
       </div>
@@ -1246,24 +1335,77 @@
           state.agendas.length
             ? state.agendas
                 .map((a) => {
+                  const est = agendaEstado(a);
+                  const badgeClass =
+                    est === "finalizado" ? "pagado" : est === "anulado" ? "anulado" : "emitido";
                   const dt = new Date(a.fecha_inicio);
-                  const day = dt.getDate();
-                  const mon = dt.toLocaleDateString("es-PE", { month: "short" });
+                  const day = Number.isNaN(dt.getTime()) ? "—" : dt.getDate();
+                  const mon = Number.isNaN(dt.getTime())
+                    ? ""
+                    : dt.toLocaleDateString("es-PE", { month: "short" }).replace(".", "");
+                  const weekday = Number.isNaN(dt.getTime())
+                    ? ""
+                    : dt.toLocaleDateString("es-PE", { weekday: "short" });
+                  const hour = Number.isNaN(dt.getTime())
+                    ? ""
+                    : dt.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
+                  const items = parseAgendaDescItems(a.descripcion).filter(Boolean);
+                  const adjCount = Array.isArray(a.adjuntos) ? a.adjuntos.length : 0;
                   return `
-                  <article class="agenda-card">
-                    <div class="agenda-date"><div class="d">${day}</div><div class="m">${mon}</div></div>
-                    <div>
-                      <span class="badge ${a.tipo}">${agendaLabel(a.tipo)}</span>
-                      <h3>${escapeHtml(a.titulo)} ${a.completado ? "✓" : ""}</h3>
-                      <p>${fmtDateTime(a.fecha_inicio)}${a.ubicacion ? " · " + escapeHtml(a.ubicacion) : ""}</p>
-                      <p>${escapeHtml(a.descripcion || "Sin descripción")}</p>
-                      ${a.participantes ? `<p><strong>Participantes:</strong> ${escapeHtml(a.participantes)}</p>` : ""}
-                      <p style="margin-top:.35rem">Recordatorio: ${a.recordatorio_minutos} min antes</p>
+                  <article class="agenda-card ${est === "anulado" ? "is-anulada" : ""} ${est === "finalizado" ? "is-finalizada" : ""}">
+                    <div class="agenda-date" title="${escapeHtml(fmtDateTime(a.fecha_inicio))}">
+                      <div class="wd">${escapeHtml(weekday)}</div>
+                      <div class="d">${day}</div>
+                      <div class="m">${escapeHtml(mon)}</div>
+                      <div class="h">${escapeHtml(hour)}</div>
                     </div>
-                    <div class="actions" style="flex-direction:column">
-                      <button class="btn btn-secondary btn-sm" data-a-edit="${a.id}">Editar</button>
-                      <button class="btn btn-secondary btn-sm" data-a-done="${a.id}">${a.completado ? "Reabrir" : "Completar"}</button>
-                      <button class="btn btn-danger btn-sm" data-a-del="${a.id}">Eliminar</button>
+                    <div class="agenda-body">
+                      <div class="agenda-top">
+                        <span class="badge ${a.tipo}">${agendaLabel(a.tipo)}</span>
+                        <span class="badge ${badgeClass}">${estadoAgendaLabel(est)}</span>
+                      </div>
+                      <h3>${escapeHtml(a.titulo)}</h3>
+                      <div class="agenda-meta">
+                        ${a.ubicacion ? `<span title="Ubicación">📍 ${escapeHtml(a.ubicacion)}</span>` : ""}
+                        ${a.participantes ? `<span title="Participantes">👥 ${escapeHtml(a.participantes)}</span>` : ""}
+                        <span>⏱ ${a.recordatorio_minutos ?? 30} min</span>
+                        ${adjCount ? `<span>📎 ${adjCount}</span>` : ""}
+                      </div>
+                      ${
+                        items.length
+                          ? `<ul class="agenda-items-preview">${items
+                              .slice(0, 4)
+                              .map((t) => `<li>${escapeHtml(t)}</li>`)
+                              .join("")}${
+                              items.length > 4
+                                ? `<li class="more">+${items.length - 4} más</li>`
+                                : ""
+                            }</ul>`
+                          : `<p class="agenda-empty-desc">Sin ítems de descripción</p>`
+                      }
+                      <div class="agenda-actions">
+                        <div class="agenda-actions-main">
+                          <button type="button" class="btn btn-secondary btn-sm" data-a-ver="${a.id}">Ver</button>
+                          <button type="button" class="btn btn-secondary btn-sm" data-a-edit="${a.id}">Editar</button>
+                          <button type="button" class="btn btn-secondary btn-sm" data-a-reprog="${a.id}" ${est === "anulado" ? "disabled" : ""}>Reprogramar</button>
+                          <button type="button" class="btn btn-secondary btn-sm" data-a-pdf="${a.id}">PDF</button>
+                          ${adjuntoBtnHtml(a.id, a.adjuntos, "adjuntos-agenda")}
+                        </div>
+                        <div class="agenda-actions-status">
+                          <label class="agenda-estado-label">
+                            <span>Estado</span>
+                            <select data-a-estado="${a.id}" ${est === "anulado" ? "" : ""}>
+                              ${estadoOpts
+                                .map(
+                                  (e) =>
+                                    `<option value="${e.value}" ${est === e.value ? "selected" : ""}>${e.label}</option>`
+                                )
+                                .join("")}
+                            </select>
+                          </label>
+                          <button type="button" class="btn btn-danger btn-sm" data-a-anular="${a.id}" ${est === "anulado" ? "disabled" : ""}>Anular</button>
+                        </div>
+                      </div>
                     </div>
                   </article>`;
                 })
@@ -1271,7 +1413,9 @@
             : `<div class="panel empty"><strong>Agenda vacía</strong>Programa tu primera reunión o cita.</div>`
         }
       </div>
-      <div class="modal-backdrop" id="modal-agenda"></div>`;
+      <div class="modal-backdrop" id="modal-agenda"></div>
+      <div class="modal-backdrop" id="modal-agenda-reprog"></div>
+      <div class="modal-backdrop" id="modal-agenda-ver"></div>`;
   }
 
   async function viewClientes() {
@@ -1288,7 +1432,7 @@
         ${
           state.clientes.length
             ? `<div class="table-wrap"><table>
-              <thead><tr><th>Cliente</th><th>Documento</th><th>Contacto</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Cliente</th><th>Documento</th><th>Contacto</th><th class="col-actions">Acciones</th></tr></thead>
               <tbody>
               ${state.clientes
                 .map(
@@ -1298,8 +1442,9 @@
                   <td>${escapeHtml(c.tipo_documento || "")} ${escapeHtml(c.documento || "—")}</td>
                   <td>${escapeHtml(c.email || "—")}<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.telefono || "")}</span></td>
                   <td class="actions">
-                    <button class="btn btn-secondary btn-sm" data-cli-edit="${c.id}">Editar</button>
-                    <button class="btn btn-danger btn-sm" data-cli-del="${c.id}">Eliminar</button>
+                    ${iconBtn(`data-cli-edit="${c.id}"`, "Editar", "✎")}
+                    ${adjuntoBtnHtml(c.id, c.adjuntos, "adjuntos-cli")}
+                    ${iconBtn(`data-cli-del="${c.id}"`, "Eliminar", "✕", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1407,6 +1552,7 @@
                     <div class="contact-actions">
                       ${tel ? `<a class="btn btn-secondary btn-sm" href="tel:${escapeHtml(tel)}">Llamar</a>` : ""}
                       ${wa ? `<a class="btn btn-secondary btn-sm" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
+                      ${adjuntoBtnHtml(c.id, c.adjuntos, "adjuntos-ct")}
                       <button class="btn btn-secondary btn-sm" data-ct-cliente="${c.id}">A cliente</button>
                       <button class="btn btn-secondary btn-sm" data-ct-factura="${c.id}">Comprobante</button>
                       <button class="btn btn-secondary btn-sm" data-ct-agenda="${c.id}">Agendar</button>
@@ -1437,7 +1583,7 @@
         ${
           state.productos.length
             ? `<div class="table-wrap"><table>
-              <thead><tr><th>Nombre</th><th>Tipo</th><th>Unidad</th><th>P. unitario</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Tipo</th><th>Unidad</th><th>P. unitario</th><th class="col-actions">Acciones</th></tr></thead>
               <tbody>
               ${state.productos
                 .map(
@@ -1448,8 +1594,9 @@
                   <td>${escapeHtml(p.unidad || "NIU")}</td>
                   <td>${money(p.precio_unitario)}</td>
                   <td class="actions">
-                    <button class="btn btn-secondary btn-sm" data-prod-edit="${p.id}">Editar</button>
-                    <button class="btn btn-danger btn-sm" data-prod-del="${p.id}">Eliminar</button>
+                    ${iconBtn(`data-prod-edit="${p.id}"`, "Editar", "✎")}
+                    ${adjuntoBtnHtml(p.id, p.adjuntos, "adjuntos-prod")}
+                    ${iconBtn(`data-prod-del="${p.id}"`, "Eliminar", "✕", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1532,7 +1679,7 @@
         ${
           cajas.length
             ? `<div class="table-wrap"><table>
-              <thead><tr><th>Caja</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Caja</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th class="col-actions">Acciones</th></tr></thead>
               <tbody>
               ${cajas
                 .map(
@@ -1543,8 +1690,9 @@
                   <td style="color:var(--danger)">${money(c.total_egresos)}</td>
                   <td><strong>${money(c.saldo)}</strong></td>
                   <td class="actions">
-                    <button class="btn btn-secondary btn-sm" data-caja-edit="${c.id}">Editar</button>
-                    <button class="btn btn-danger btn-sm" data-caja-del="${c.id}">Archivar</button>
+                    ${iconBtn(`data-caja-edit="${c.id}"`, "Editar", "✎")}
+                    ${iconBtn(`data-caja-arch="${c.id}"`, "Archivar", "📦")}
+                    ${iconBtn(`data-caja-del="${c.id}"`, "Eliminar", "✕", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1585,7 +1733,7 @@
         ${
           state.movimientosCaja.length
             ? `<div class="table-wrap"><table>
-              <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>N° transacción</th><th>Concepto</th><th>Monto</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>N° transacción</th><th>Concepto</th><th>Monto</th><th class="col-actions">Acciones</th></tr></thead>
               <tbody>
               ${state.movimientosCaja
                 .map(
@@ -1597,13 +1745,9 @@
                   <td>${escapeHtml(m.concepto)}</td>
                   <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
                   <td class="actions">
-                    <button class="btn btn-secondary btn-sm" data-mov-edit="${m.id}">Editar</button>
-                    ${
-                      m.tiene_adjunto || (m.adjuntos && m.adjuntos.length)
-                        ? `<button class="btn btn-secondary btn-sm" data-adjuntos-mov="${m.id}" title="Ver adjuntos">📎 ${m.adjuntos?.length || ""}</button>`
-                        : ""
-                    }
-                    <button class="btn btn-danger btn-sm" data-mov-del="${m.id}">Eliminar</button>
+                    ${iconBtn(`data-mov-edit="${m.id}"`, "Editar", "✎")}
+                    ${adjuntoBtnHtml(m.id, m.adjuntos, "adjuntos-mov")}
+                    ${iconBtn(`data-mov-del="${m.id}"`, "Eliminar", "✕", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1685,7 +1829,7 @@
           state.combustibles.length
             ? `<div class="table-wrap"><table>
               <thead><tr>
-                <th>Fecha</th><th>Tipo</th><th>Galones</th><th>Conductor</th><th>Marca</th><th>Placa</th><th>Acciones</th>
+                <th>Fecha</th><th>Tipo</th><th>Galones</th><th>Conductor</th><th>Marca</th><th>Placa</th><th class="col-actions">Acciones</th>
               </tr></thead>
               <tbody>
               ${state.combustibles
@@ -1698,13 +1842,9 @@
                   <td>${escapeHtml(m.marca || "—")}</td>
                   <td><strong>${escapeHtml(m.placa || "—")}</strong></td>
                   <td class="actions">
-                    <button class="btn btn-secondary btn-sm" data-comb-edit="${m.id}">Editar</button>
-                    ${
-                      m.tiene_adjunto || (m.adjuntos && m.adjuntos.length)
-                        ? `<button class="btn btn-secondary btn-sm" data-adjuntos-comb="${m.id}" title="Ver adjuntos">📎 ${m.adjuntos?.length || ""}</button>`
-                        : ""
-                    }
-                    <button class="btn btn-danger btn-sm" data-comb-del="${m.id}">Eliminar</button>
+                    ${iconBtn(`data-comb-edit="${m.id}"`, "Editar", "✎")}
+                    ${adjuntoBtnHtml(m.id, m.adjuntos, "adjuntos-comb")}
+                    ${iconBtn(`data-comb-del="${m.id}"`, "Eliminar", "✕", "btn-danger")}
                   </td>
                 </tr>`
                 )
@@ -1832,6 +1972,123 @@
     };
   }
 
+  function ensureComprobantePicker() {
+    let el = $("#modal-comp-picker");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "modal-comp-picker";
+      el.className = "modal-backdrop modal-stack";
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function applyComprobanteToMovForm(doc) {
+    const form = $("#form-mov");
+    if (!form || !doc) return;
+    const serieNum = `${doc.serie || ""}-${doc.numero || ""}`.replace(/^-|-$/g, "");
+    const numero = serieNum.slice(0, 80);
+    const concepto = `${tipoLabel(doc.tipo)} ${serieNum} · ${doc.cliente_nombre || ""}`.trim().slice(0, 300);
+    const setVal = (name, value) => {
+      const input = form.elements.namedItem(name);
+      if (input && "value" in input) input.value = value ?? "";
+    };
+    setVal("numero_transaccion", numero);
+    setVal("concepto", concepto);
+    if (doc.total != null && doc.total !== "") setVal("monto", Number(doc.total).toFixed(2));
+    if (doc.fecha_emision) setVal("fecha", String(doc.fecha_emision).slice(0, 10));
+    // Cobros por comprobante se registran como ingreso por defecto
+    const tipoSel = form.elements.namedItem("tipo");
+    if (tipoSel && "value" in tipoSel) tipoSel.value = "ingreso";
+    const hint = $("#comp-pick-hint");
+    if (hint) hint.textContent = `Seleccionado: ${serieNum}`;
+    toast(`Comprobante ${serieNum} aplicado al movimiento`);
+  }
+
+  async function openComprobantePickerForCaja() {
+    const modal = ensureComprobantePicker();
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal modal-wide">
+        <div class="modal-head">
+          <h2>Buscar comprobante</h2>
+          <button class="btn btn-ghost btn-sm" type="button" id="close-comp-picker">Cerrar</button>
+        </div>
+        <div class="toolbar" style="padding:0;margin:0;border:0;box-shadow:none;background:transparent;display:flex;gap:.5rem;flex-wrap:wrap">
+          <input id="comp-picker-q" type="search" placeholder="Serie, número, cliente o RUC/DNI..." style="flex:1;min-width:180px" autocomplete="off" />
+          <select id="comp-picker-estado" title="Estado">
+            <option value="">Todos los estados</option>
+            <option value="pagado">Pagado</option>
+            <option value="no_pagado" selected>No pagado</option>
+            <option value="emitido">Emitido</option>
+            <option value="anulado">Anulado</option>
+          </select>
+          <button class="btn btn-secondary" type="button" id="comp-picker-buscar">Buscar</button>
+        </div>
+        <div id="comp-picker-list" class="picker-list">
+          <div class="empty" style="padding:1rem 0"><strong>Cargando…</strong></div>
+        </div>
+      </div>`;
+
+    const close = () => modal.classList.remove("open");
+    $("#close-comp-picker", modal).onclick = close;
+    modal.onclick = (ev) => {
+      if (ev.target === modal) close();
+    };
+
+    const listEl = $("#comp-picker-list", modal);
+    const renderList = (docs) => {
+      if (!docs?.length) {
+        listEl.innerHTML = `<div class="empty" style="padding:1rem 0"><strong>Sin resultados</strong>Prueba con otra búsqueda o estado.</div>`;
+        return;
+      }
+      listEl.innerHTML = docs
+        .map(
+          (d) => `
+          <button type="button" class="picker-row" data-comp-id="${d.id}">
+            <span>
+              <strong>${escapeHtml(tipoLabel(d.tipo))} ${escapeHtml(d.serie)}-${escapeHtml(d.numero)}</strong>
+              <small>${escapeHtml(d.cliente_nombre || "—")} · ${escapeHtml(d.fecha_emision || "")} · ${escapeHtml(estadoLabel(d.estado))}</small>
+            </span>
+            <span class="picker-amt">${money(d.total)}</span>
+          </button>`
+        )
+        .join("");
+      $$("[data-comp-id]", listEl).forEach((btn) => {
+        btn.onclick = () => {
+          const doc = docs.find((x) => String(x.id) === String(btn.dataset.compId));
+          applyComprobanteToMovForm(doc);
+          close();
+        };
+      });
+    };
+
+    const load = async () => {
+      listEl.innerHTML = `<div class="empty" style="padding:1rem 0"><strong>Buscando…</strong></div>`;
+      const q = ($("#comp-picker-q", modal)?.value || "").trim();
+      const estado = $("#comp-picker-estado", modal)?.value || "";
+      const params = { limit: 80 };
+      if (q) params.q = q;
+      if (estado) params.estado = estado;
+      try {
+        const docs = await API.listComprobantes(params);
+        renderList(docs);
+      } catch (ex) {
+        listEl.innerHTML = `<div class="empty" style="padding:1rem 0"><strong>Error</strong>${escapeHtml(ex.message)}</div>`;
+      }
+    };
+
+    $("#comp-picker-buscar", modal).onclick = load;
+    $("#comp-picker-q", modal).addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        load();
+      }
+    });
+    $("#comp-picker-estado", modal).addEventListener("change", load);
+    await load();
+  }
+
   function openMovimientoModal(mov = null) {
     const modal = $("#modal-mov");
     if (!modal) return;
@@ -1874,9 +2131,13 @@
             <label>Fecha</label>
             <input name="fecha" type="date" required value="${mov?.fecha || today}" />
           </div>
-          <div class="field">
+          <div class="field full">
             <label>N° de transacción</label>
-            <input name="numero_transaccion" maxlength="80" value="${escapeHtml(mov?.numero_transaccion || "")}" placeholder="Ej. OP-123456, Yape ref." />
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+              <input name="numero_transaccion" maxlength="80" value="${escapeHtml(mov?.numero_transaccion || "")}" placeholder="Ej. OP-123456, Yape ref." style="flex:1;min-width:160px" />
+              <button class="btn btn-secondary" type="button" id="btn-pick-comprobante">Comprobantes</button>
+            </div>
+            <p class="field-hint" id="comp-pick-hint">Puedes buscar un comprobante y rellenar el movimiento.</p>
           </div>
           <div class="field full">
             <label>Concepto de transacción</label>
@@ -1889,6 +2150,7 @@
         </form>
       </div>`;
     $("#close-mov").onclick = () => modal.classList.remove("open");
+    $("#btn-pick-comprobante").onclick = () => openComprobantePickerForCaja();
     bindAdjuntosWidget("caja", mov?.adjuntos || []);
     $("#form-mov").onsubmit = async (e) => {
       e.preventDefault();
@@ -1905,6 +2167,7 @@
         await flushPendingAdjuntos("caja", saved.id, API.uploadAdjuntosCaja.bind(API));
         toast(mov ? "Movimiento actualizado" : "Movimiento registrado");
         modal.classList.remove("open");
+        ensureComprobantePicker().classList.remove("open");
         renderApp();
       } catch (ex) {
         toast(ex.message);
@@ -1951,6 +2214,7 @@
             <label>Dirección</label>
             <input name="direccion" value="${escapeHtml(cliente?.direccion || "")}" />
           </div>
+          ${adjuntoFieldHtml(cliente, "cliente")}
           <div class="field full">
             <button class="btn btn-primary" type="submit">Guardar</button>
           </div>
@@ -1960,12 +2224,15 @@
     modal.onclick = (e) => {
       if (e.target === modal) modal.classList.remove("open");
     };
+    bindAdjuntosWidget("cliente", cliente?.adjuntos || []);
     $("#form-cliente").onsubmit = async (e) => {
       e.preventDefault();
       const body = Object.fromEntries(new FormData(e.target).entries());
       try {
-        if (cliente) await API.updateCliente(cliente.id, body);
-        else await API.createCliente(body);
+        const saved = cliente
+          ? await API.updateCliente(cliente.id, body)
+          : await API.createCliente(body);
+        await flushPendingAdjuntos("cliente", saved.id, API.uploadAdjuntosCliente.bind(API));
         toast("Cliente guardado");
         modal.classList.remove("open");
         renderApp();
@@ -2010,6 +2277,7 @@
             <label>Notas</label>
             <input name="notas" maxlength="500" value="${escapeHtml(contacto?.notas || "")}" placeholder="Referencia, cargo, etc." />
           </div>
+          ${adjuntoFieldHtml(contacto, "contacto")}
           <div class="field full">
             <button class="btn btn-primary" type="submit">Guardar</button>
           </div>
@@ -2019,13 +2287,16 @@
     modal.onclick = (e) => {
       if (e.target === modal) modal.classList.remove("open");
     };
+    bindAdjuntosWidget("contacto", contacto?.adjuntos || []);
     $("#form-contacto").onsubmit = async (e) => {
       e.preventDefault();
       const body = Object.fromEntries(new FormData(e.target).entries());
       body.origen = contacto?.origen || "manual";
       try {
-        if (contacto) await API.updateContacto(contacto.id, body);
-        else await API.createContacto(body);
+        const saved = contacto
+          ? await API.updateContacto(contacto.id, body)
+          : await API.createContacto(body);
+        await flushPendingAdjuntos("contacto", saved.id, API.uploadAdjuntosContacto.bind(API));
         toast("Contacto guardado");
         modal.classList.remove("open");
         renderApp();
@@ -2069,6 +2340,7 @@
             <label>Precio unitario</label>
             <input name="precio_unitario" type="number" min="0" step="0.01" required value="${producto?.precio_unitario ?? 0}" />
           </div>
+          ${adjuntoFieldHtml(producto, "producto")}
           <div class="field full">
             <button class="btn btn-primary" type="submit">Guardar</button>
           </div>
@@ -2078,14 +2350,17 @@
     modal.onclick = (e) => {
       if (e.target === modal) modal.classList.remove("open");
     };
+    bindAdjuntosWidget("producto", producto?.adjuntos || []);
     $("#form-producto").onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const body = Object.fromEntries(fd.entries());
       body.precio_unitario = Number(body.precio_unitario);
       try {
-        if (producto) await API.updateProducto(producto.id, body);
-        else await API.createProducto(body);
+        const saved = producto
+          ? await API.updateProducto(producto.id, body)
+          : await API.createProducto(body);
+        await flushPendingAdjuntos("producto", saved.id, API.uploadAdjuntosProducto.bind(API));
         toast("Producto guardado");
         modal.classList.remove("open");
         renderApp();
@@ -2216,6 +2491,8 @@
         ? [draft.nombre, draft.telefono || draft.telefono_alt, draft.email].filter(Boolean).join(" · ")
         : "");
     if (draft && !agenda) state.draftFromContact = null;
+    const descItems = parseAgendaDescItems(agenda?.descripcion);
+    const est = agendaEstado(agenda);
     modal.classList.add("open");
     modal.innerHTML = `
       <div class="modal">
@@ -2229,6 +2506,21 @@
             <select name="tipo" required>
               ${(state.meta?.tipos_agenda || [])
                 .map((t) => `<option value="${t.value}" ${agenda?.tipo === t.value ? "selected" : ""}>${t.label}</option>`)
+                .join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label>Estado</label>
+            <select name="estado">
+              ${(state.meta?.estados_agenda || [
+                { value: "programado", label: "Programado" },
+                { value: "finalizado", label: "Finalizado" },
+                { value: "anulado", label: "Anulado" },
+              ])
+                .map(
+                  (e) =>
+                    `<option value="${e.value}" ${(!agenda && e.value === "programado") || est === e.value ? "selected" : ""}>${e.label}</option>`
+                )
                 .join("")}
             </select>
           </div>
@@ -2258,8 +2550,13 @@
           </div>
           <div class="field full">
             <label>Descripción detallada</label>
-            <textarea name="descripcion" rows="4">${escapeHtml(agenda?.descripcion || "")}</textarea>
+            <div id="agenda-desc-items">
+              ${descItems.map((t) => agendaDescItemRowHtml(t)).join("")}
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-add-agenda-desc" style="margin-top:.35rem">＋ Agregar ítem</button>
+            <p class="field-hint">Cada ítem es un punto de la descripción de la agenda (no productos).</p>
           </div>
+          ${adjuntoFieldHtml(agenda, "agenda")}
           <div class="field full">
             <button class="btn btn-primary" type="submit">Guardar</button>
           </div>
@@ -2269,17 +2566,153 @@
     modal.onclick = (e) => {
       if (e.target === modal) modal.classList.remove("open");
     };
+    const descBox = $("#agenda-desc-items");
+    $("#btn-add-agenda-desc").onclick = () => {
+      descBox.insertAdjacentHTML("beforeend", agendaDescItemRowHtml(""));
+      descBox.querySelector("[data-agenda-desc-item]:last-of-type")?.focus();
+    };
+    descBox.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".btn-remove-agenda-desc");
+      if (!btn) return;
+      const row = btn.closest(".agenda-desc-row");
+      const rows = descBox.querySelectorAll(".agenda-desc-row");
+      if (rows.length <= 1) {
+        const input = row?.querySelector("[data-agenda-desc-item]");
+        if (input) input.value = "";
+        return;
+      }
+      row?.remove();
+    });
+    bindAdjuntosWidget("agenda", agenda?.adjuntos || []);
     $("#form-agenda").onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const body = Object.fromEntries(fd.entries());
       body.recordatorio_minutos = Number(body.recordatorio_minutos || 30);
       if (!body.fecha_fin) delete body.fecha_fin;
+      const items = collectAgendaDescItems(e.target);
+      body.descripcion = items.length ? agendaDescFromItems(items) : null;
       try {
-        if (agenda) await API.updateAgenda(agenda.id, body);
-        else await API.createAgenda(body);
+        const saved = agenda
+          ? await API.updateAgenda(agenda.id, body)
+          : await API.createAgenda(body);
+        await flushPendingAdjuntos("agenda", saved.id, API.uploadAdjuntosAgenda.bind(API));
         toast("Agenda guardada");
         modal.classList.remove("open");
+        renderApp();
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
+  }
+
+  function openAgendaVerModal(agenda) {
+    if (!agenda) return;
+    const modal = $("#modal-agenda-ver");
+    if (!modal) return;
+    const est = agendaEstado(agenda);
+    const items = parseAgendaDescItems(agenda.descripcion).filter(Boolean);
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head">
+          <h2>Ver agenda</h2>
+          <button class="btn btn-ghost btn-sm" id="close-agenda-ver">Cerrar</button>
+        </div>
+        <div class="form-grid" style="gap:.7rem">
+          <div class="field"><label>Tipo</label><p style="margin:0">${agendaLabel(agenda.tipo)}</p></div>
+          <div class="field"><label>Estado</label><p style="margin:0"><span class="badge ${est === "finalizado" ? "pagado" : est === "anulado" ? "anulado" : "emitido"}">${estadoAgendaLabel(est)}</span></p></div>
+          <div class="field full"><label>Título</label><p style="margin:0;font-weight:600">${escapeHtml(agenda.titulo)}</p></div>
+          <div class="field"><label>Inicio</label><p style="margin:0">${fmtDateTime(agenda.fecha_inicio)}</p></div>
+          <div class="field"><label>Fin</label><p style="margin:0">${agenda.fecha_fin ? fmtDateTime(agenda.fecha_fin) : "—"}</p></div>
+          <div class="field full"><label>Ubicación</label><p style="margin:0">${escapeHtml(agenda.ubicacion || "—")}</p></div>
+          <div class="field full"><label>Participantes</label><p style="margin:0">${escapeHtml(agenda.participantes || "—")}</p></div>
+          <div class="field full">
+            <label>Descripción / ítems</label>
+            ${
+              items.length
+                ? `<ul style="margin:.2rem 0 0;padding-left:1.1rem">${items
+                    .map((t) => `<li>${escapeHtml(t)}</li>`)
+                    .join("")}</ul>`
+                : `<p style="margin:0;color:var(--muted)">Sin descripción</p>`
+            }
+          </div>
+          <div class="field full" style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <button type="button" class="btn btn-secondary btn-sm" id="ver-a-edit">Editar</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="ver-a-pdf">PDF</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="ver-a-reprog" ${est === "anulado" ? "disabled" : ""}>Reprogramar</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => modal.classList.remove("open");
+    $("#close-agenda-ver").onclick = close;
+    modal.onclick = (e) => {
+      if (e.target === modal) close();
+    };
+    $("#ver-a-edit").onclick = () => {
+      close();
+      openAgendaModal(agenda);
+    };
+    $("#ver-a-pdf").onclick = async () => {
+      try {
+        const blob = await API.pdfAgenda(agenda.id);
+        downloadBlob(blob, `agenda-${agenda.id}.pdf`);
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
+    $("#ver-a-reprog").onclick = () => {
+      close();
+      openAgendaReprogramarModal(agenda);
+    };
+  }
+
+  function openAgendaReprogramarModal(agenda) {
+    if (!agenda) return;
+    const modal = $("#modal-agenda-reprog");
+    if (!modal) return;
+    const start = agenda.fecha_inicio ? agenda.fecha_inicio.slice(0, 16) : "";
+    const fin = agenda.fecha_fin ? agenda.fecha_fin.slice(0, 16) : "";
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head">
+          <h2>Reprogramar</h2>
+          <button class="btn btn-ghost btn-sm" id="close-reprog">Cerrar</button>
+        </div>
+        <p style="margin:0 0 .8rem;color:var(--muted)">${escapeHtml(agenda.titulo)}</p>
+        <form id="form-reprog" class="form-grid">
+          <div class="field">
+            <label>Nueva fecha / hora de inicio</label>
+            <input type="datetime-local" name="fecha_inicio" required value="${start}" />
+          </div>
+          <div class="field">
+            <label>Nueva fecha / hora de fin (opcional)</label>
+            <input type="datetime-local" name="fecha_fin" value="${fin}" />
+          </div>
+          <div class="field full">
+            <p class="field-hint">Al reprogramar el estado vuelve a <strong>Programado</strong> y se reinician los recordatorios.</p>
+            <button class="btn btn-primary" type="submit">Guardar nueva fecha</button>
+          </div>
+        </form>
+      </div>`;
+    const close = () => modal.classList.remove("open");
+    $("#close-reprog").onclick = close;
+    modal.onclick = (e) => {
+      if (e.target === modal) close();
+    };
+    $("#form-reprog").onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        fecha_inicio: fd.get("fecha_inicio"),
+      };
+      const fe = (fd.get("fecha_fin") || "").toString().trim();
+      if (fe) body.fecha_fin = fe;
+      try {
+        await API.reprogramarAgenda(agenda.id, body);
+        toast("Agenda reprogramada");
+        close();
         renderApp();
       } catch (ex) {
         toast(ex.message);
@@ -2577,19 +3010,57 @@
           openAgendaModal(ag);
         })
       );
-      $$("[data-a-done]").forEach((b) =>
-        b.addEventListener("click", async () => {
-          const ag = state.agendas.find((a) => a.id === Number(b.dataset.aDone));
-          await API.updateAgenda(ag.id, { completado: !ag.completado });
-          renderApp();
+      $$("[data-a-ver]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const ag = state.agendas.find((a) => a.id === Number(b.dataset.aVer));
+          openAgendaVerModal(ag);
         })
       );
-      $$("[data-a-del]").forEach((b) =>
+      $$("[data-a-reprog]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const ag = state.agendas.find((a) => a.id === Number(b.dataset.aReprog));
+          openAgendaReprogramarModal(ag);
+        })
+      );
+      $$("[data-a-pdf]").forEach((b) =>
         b.addEventListener("click", async () => {
-          if (!confirm("¿Eliminar este evento?")) return;
-          await API.deleteAgenda(b.dataset.aDel);
-          toast("Evento eliminado");
-          renderApp();
+          try {
+            const blob = await API.pdfAgenda(b.dataset.aPdf);
+            downloadBlob(blob, `agenda-${b.dataset.aPdf}.pdf`);
+            toast("PDF generado");
+          } catch (ex) {
+            toast(ex.message);
+          }
+        })
+      );
+      $$("[data-a-estado]").forEach((sel) =>
+        sel.addEventListener("change", async () => {
+          try {
+            await API.cambiarEstadoAgenda(sel.dataset.aEstado, sel.value);
+            toast(`Estado: ${estadoAgendaLabel(sel.value)}`);
+            renderApp();
+          } catch (ex) {
+            toast(ex.message);
+            renderApp();
+          }
+        })
+      );
+      $$("[data-a-anular]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (!confirm("¿Anular esta agenda?")) return;
+          try {
+            await API.cambiarEstadoAgenda(b.dataset.aAnular, "anulado");
+            toast("Agenda anulada");
+            renderApp();
+          } catch (ex) {
+            toast(ex.message);
+          }
+        })
+      );
+      $$("[data-adjuntos-agenda]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const ag = state.agendas.find((a) => a.id === Number(b.dataset.adjuntosAgenda));
+          openAdjuntosViewer(ag?.adjuntos || []);
         })
       );
     }
@@ -2657,6 +3128,12 @@
           openClienteModal(cli);
         })
       );
+      $$("[data-adjuntos-cli]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const cli = state.clientes.find((c) => c.id === Number(b.dataset.adjuntosCli));
+          openAdjuntosViewer(cli?.adjuntos || []);
+        })
+      );
       $$("[data-cli-del]").forEach((b) =>
         b.addEventListener("click", async () => {
           if (!confirm("¿Eliminar este cliente del catálogo?")) return;
@@ -2691,6 +3168,12 @@
         b.addEventListener("click", () => {
           const ct = state.contactos.find((c) => c.id === Number(b.dataset.ctEdit));
           openContactoModal(ct);
+        })
+      );
+      $$("[data-adjuntos-ct]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const ct = state.contactos.find((c) => c.id === Number(b.dataset.adjuntosCt));
+          openAdjuntosViewer(ct?.adjuntos || []);
         })
       );
       $$("[data-ct-del]").forEach((b) =>
@@ -2744,6 +3227,12 @@
           openProductoModal(prod);
         })
       );
+      $$("[data-adjuntos-prod]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const prod = state.productos.find((p) => p.id === Number(b.dataset.adjuntosProd));
+          openAdjuntosViewer(prod?.adjuntos || []);
+        })
+      );
       $$("[data-prod-del]").forEach((b) =>
         b.addEventListener("click", async () => {
           if (!confirm("¿Eliminar este producto del catálogo?")) return;
@@ -2786,12 +3275,33 @@
           openCajaModal(caja);
         })
       );
-      $$("[data-caja-del]").forEach((b) =>
+      $$("[data-caja-arch]").forEach((b) =>
         b.addEventListener("click", async () => {
           if (!confirm("¿Archivar esta caja? Los movimientos se conservan.")) return;
-          await API.deleteCaja(b.dataset.cajaDel);
-          toast("Caja archivada");
-          renderApp();
+          try {
+            await API.deleteCaja(b.dataset.cajaArch);
+            toast("Caja archivada");
+            renderApp();
+          } catch (ex) {
+            toast(ex.message);
+          }
+        })
+      );
+      $$("[data-caja-del]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (
+            !confirm(
+              "¿Eliminar permanentemente esta caja?\nSolo se permite si no tiene movimientos. Si tiene, archívala o elimina los movimientos primero."
+            )
+          )
+            return;
+          try {
+            await API.deleteCaja(b.dataset.cajaDel, { permanente: true });
+            toast("Caja eliminada");
+            renderApp();
+          } catch (ex) {
+            toast(ex.message);
+          }
         })
       );
       $$("[data-mov-edit]").forEach((b) =>

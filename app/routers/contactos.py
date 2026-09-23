@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -8,12 +8,19 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Contacto, Usuario
 from app.schemas import (
+    AdjuntoOut,
     ClienteOut,
     ContactoCreate,
     ContactoImportIn,
     ContactoImportOut,
     ContactoOut,
     ContactoUpdate,
+)
+from app.services.adjuntos import (
+    ENTIDAD_CONTACTO,
+    crear_adjunto,
+    listar_adjuntos,
+    map_adjuntos_por_entidad,
 )
 from app.services.catalogo import upsert_cliente
 
@@ -47,6 +54,18 @@ def _get_owned(db: Session, user: Usuario, contacto_id: int) -> Contacto:
     if not item:
         raise HTTPException(status_code=404, detail="Contacto no encontrado")
     return item
+
+
+def _contacto_out(item: Contacto, adjuntos_rows=None) -> ContactoOut:
+    rows = adjuntos_rows if adjuntos_rows is not None else []
+    out = ContactoOut.model_validate(item)
+    out.adjuntos = [AdjuntoOut.from_row(r) for r in rows]
+    out.tiene_adjunto = bool(out.adjuntos)
+    return out
+
+
+def _contacto_out_db(db: Session, item: Contacto) -> ContactoOut:
+    return _contacto_out(item, listar_adjuntos(db, ENTIDAD_CONTACTO, item.id))
 
 
 def _find_by_phone(db: Session, user_id: int, telefono: str | None) -> Contacto | None:
@@ -93,7 +112,9 @@ def listar(
                 Contacto.empresa.ilike(like),
             )
         )
-    return query.limit(limit).all()
+    items = query.limit(limit).all()
+    by_adj = map_adjuntos_por_entidad(db, ENTIDAD_CONTACTO, [i.id for i in items])
+    return [_contacto_out(i, by_adj.get(i.id, [])) for i in items]
 
 
 @router.post("", response_model=ContactoOut, status_code=201)
@@ -115,7 +136,7 @@ def crear(
             existing.notas = _clean(payload.notas, 500) or existing.notas
             db.commit()
             db.refresh(existing)
-            return existing
+            return _contacto_out_db(db, existing)
 
     contacto = Contacto(
         usuario_id=user.id,
@@ -130,7 +151,7 @@ def crear(
     db.add(contacto)
     db.commit()
     db.refresh(contacto)
-    return contacto
+    return _contacto_out_db(db, contacto)
 
 
 @router.post("/importar", response_model=ContactoImportOut)
@@ -213,12 +234,13 @@ def importar(
     for c in result:
         db.refresh(c)
 
+    by_adj = map_adjuntos_por_entidad(db, ENTIDAD_CONTACTO, [c.id for c in result[:50]])
     return ContactoImportOut(
         creados=creados,
         actualizados=actualizados,
         omitidos=omitidos,
         total=creados + actualizados,
-        contactos=result[:50],
+        contactos=[_contacto_out(c, by_adj.get(c.id, [])) for c in result[:50]],
     )
 
 
@@ -244,7 +266,39 @@ def actualizar(
         setattr(contacto, key, value)
     db.commit()
     db.refresh(contacto)
-    return contacto
+    return _contacto_out_db(db, contacto)
+
+
+@router.post("/{contacto_id}/adjuntos", response_model=ContactoOut)
+async def subir_adjuntos(
+    contacto_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    archivos: list[UploadFile] = File(...),
+):
+    contacto = _get_owned(db, user, contacto_id)
+    if not archivos:
+        raise HTTPException(status_code=400, detail="Seleccione al menos un archivo")
+    for archivo in archivos:
+        await crear_adjunto(
+            db,
+            user=user,
+            entidad_tipo=ENTIDAD_CONTACTO,
+            entidad_id=contacto.id,
+            kind="contactos",
+            archivo=archivo,
+        )
+    return _contacto_out_db(db, _get_owned(db, user, contacto.id))
+
+
+@router.get("/{contacto_id}/adjuntos", response_model=list[AdjuntoOut])
+def listar_adjuntos_contacto(
+    contacto_id: int,
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    _get_owned(db, user, contacto_id)
+    return [AdjuntoOut.from_row(r) for r in listar_adjuntos(db, ENTIDAD_CONTACTO, contacto_id)]
 
 
 @router.delete("/{contacto_id}")

@@ -46,6 +46,12 @@ class TipoAgenda(str, enum.Enum):
     NOTA = "nota"
 
 
+class EstadoAgenda(str, enum.Enum):
+    PROGRAMADO = "programado"
+    FINALIZADO = "finalizado"
+    ANULADO = "anulado"
+
+
 class TipoMovimientoCaja(str, enum.Enum):
     INGRESO = "ingreso"
     EGRESO = "egreso"
@@ -57,7 +63,7 @@ class TipoMovimientoCombustible(str, enum.Enum):
 
 
 class Adjunto(Base):
-    """Archivos PDF/imagen asociados a comprobante, caja o combustible."""
+    """Archivos (PDF, imagen, Word, Excel) asociados a entidades del sistema."""
 
     __tablename__ = "adjuntos"
 
@@ -208,6 +214,11 @@ class Agenda(Base):
     ubicacion: Mapped[str | None] = mapped_column(String(250))
     participantes: Mapped[str | None] = mapped_column(Text)
     completado: Mapped[bool] = mapped_column(Boolean, default=False)
+    estado: Mapped[EstadoAgenda] = mapped_column(
+        Enum(EstadoAgenda, native_enum=False),
+        default=EstadoAgenda.PROGRAMADO,
+        nullable=False,
+    )
     recordatorio_minutos: Mapped[int] = mapped_column(Integer, default=30)
     notificado: Mapped[bool] = mapped_column(Boolean, default=False)
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

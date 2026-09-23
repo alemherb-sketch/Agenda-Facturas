@@ -57,3 +57,22 @@ GET https://tu-app.up.railway.app/api/cron/recordatorios?secret=TU_CRON_SECRET
 ```
 
 Variable de entorno opcional: `CRON_SECRET`.
+
+## Despliegue en VPS (Docker)
+
+Producción objetivo: **https://agenda.erpgestapp.com**
+
+Guía completa: [deploy/README-VPS.md](deploy/README-VPS.md)
+
+Resumen:
+
+```bash
+# En el VPS
+git clone https://github.com/alemherb-sketch/Agenda-Facturas.git
+cd Agenda-Facturas
+cp .env.vps.example .env   # editar secretos
+bash scripts/deploy-vps.sh
+bash scripts/init-ssl.sh tu-email@dominio.com
+# (opcional) restaurar dump de Railway
+bash scripts/migrate-from-railway.sh railway.dump
+```

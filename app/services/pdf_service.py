@@ -9,7 +9,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.models import Comprobante, MovimientoCaja, MovimientoCombustible, Usuario
+from app.models import Agenda, Comprobante, MovimientoCaja, MovimientoCombustible, Usuario
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS
 
 # Datos fijos de empresa para todos los formatos de impresión
@@ -133,6 +133,20 @@ class EmpresaHeader(Flowable):
         self._ruc.drawOn(c, self._x_text, y)
         y += self._hu + self._gap_y
         self._razon.drawOn(c, self._x_text, y)
+
+
+def _xml(text: str | None) -> str:
+    raw = (text or "").strip() or "—"
+    return raw.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _descripcion_items(comprobante: Comprobante) -> str:
+    partes = []
+    for item in getattr(comprobante, "items", None) or []:
+        desc = (getattr(item, "descripcion", None) or "").strip()
+        if desc:
+            partes.append(desc)
+    return " · ".join(partes)
 
 
 def _header_empresa(story, title_style=None, normal=None, small=None, *, logo_mm: float | None = None) -> None:
@@ -332,28 +346,39 @@ def generar_pdf_reporte_comprobantes(
     )
     story.append(Spacer(1, 8))
 
-    rows = [["Fecha", "Tipo", "Serie-Nº", "Cliente", "Zona", "Estado", "Total"]]
+    cell = ParagraphStyle(
+        "RepCompCell",
+        parent=small,
+        fontName="Helvetica",
+        fontSize=7.5,
+        leading=9,
+        textColor=colors.HexColor("#1f2933"),
+    )
+    rows = [["Fecha", "Tipo", "Serie-Nº", "Cliente", "Zona", "Motivo", "Descripción", "Estado", "Total"]]
     total_general = 0.0
     for c in docs:
         total_general += float(c.total or 0)
         rows.append(
             [
                 c.fecha_emision.strftime("%d/%m/%Y"),
-                TIPO_LABELS.get(c.tipo, str(c.tipo))[:18],
+                Paragraph(_xml(TIPO_LABELS.get(c.tipo, str(c.tipo))), cell),
                 f"{c.serie}-{c.numero}",
-                (c.cliente_nombre or "")[:36],
-                getattr(c, "zona", None) or "—",
+                Paragraph(_xml(c.cliente_nombre), cell),
+                Paragraph(_xml(getattr(c, "zona", None)), cell),
+                Paragraph(_xml(getattr(c, "motivo", None)), cell),
+                Paragraph(_xml(_descripcion_items(c)), cell),
                 ESTADO_LABELS.get(c.estado.value, c.estado.value),
                 f"S/ {float(c.total):,.2f}",
             ]
         )
-    rows.append(["", "", "", "", "", "TOTAL", f"S/ {total_general:,.2f}"])
+    rows.append(["", "", "", "", "", "", "", "TOTAL", f"S/ {total_general:,.2f}"])
 
     table = Table(
         rows,
-        colWidths=[22 * mm, 38 * mm, 28 * mm, 70 * mm, 32 * mm, 24 * mm, 28 * mm],
+        colWidths=[18 * mm, 24 * mm, 22 * mm, 36 * mm, 22 * mm, 40 * mm, 63 * mm, 22 * mm, 26 * mm],
     )
     style = _table_style_header()
+    style.add("VALIGN", (0, 1), (-1, -2), "TOP")
     style.add("ALIGN", (-1, 1), (-1, -1), "RIGHT")
     style.add("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold")
     style.add("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#ecfdf5"))
@@ -530,5 +555,85 @@ def generar_pdf_reporte_combustibles(
     story.append(table)
     story.append(Spacer(1, 12))
     story.append(Paragraph("Reporte filtrado — JAELIN E.I.R.L.", small))
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def generar_pdf_agenda(agenda, emisor=None):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=15 * mm,
+        rightMargin=15 * mm,
+        topMargin=12 * mm,
+        bottomMargin=12 * mm,
+    )
+    title_style, normal, small, subtitle = _styles()
+    story = []
+    _header_empresa(story, title_style, normal, small)
+
+    tipo_val = getattr(agenda.tipo, "value", agenda.tipo)
+    tipo_labels = {"reunion": "Reunión", "cita": "Cita", "nota": "Nota"}
+    estado_attr = getattr(agenda, "estado", None)
+    if estado_attr is not None:
+        estado_val = getattr(estado_attr, "value", estado_attr)
+    else:
+        estado_val = "finalizado" if agenda.completado else "programado"
+    estado_labels = {
+        "programado": "Programado",
+        "finalizado": "Finalizado",
+        "anulado": "Anulado",
+    }
+
+    story.append(Paragraph(f"AGENDA — {tipo_labels.get(str(tipo_val), str(tipo_val))}", subtitle))
+    story.append(Paragraph(f"<b>{agenda.titulo or 'Sin título'}</b>", title_style))
+    story.append(Spacer(1, 8))
+
+    fi = agenda.fecha_inicio
+    ff = agenda.fecha_fin
+    fecha_ini = fi.strftime("%d/%m/%Y %H:%M") if isinstance(fi, datetime) else str(fi or "—")
+    fecha_fin = ff.strftime("%d/%m/%Y %H:%M") if isinstance(ff, datetime) else (str(ff) if ff else "—")
+
+    meta_rows = [
+        [Paragraph("<b>Estado</b>", normal), Paragraph(estado_labels.get(str(estado_val), str(estado_val)), normal)],
+        [Paragraph("<b>Inicio</b>", normal), Paragraph(fecha_ini, normal)],
+        [Paragraph("<b>Fin</b>", normal), Paragraph(fecha_fin, normal)],
+        [Paragraph("<b>Ubicación</b>", normal), Paragraph(agenda.ubicacion or "—", normal)],
+        [Paragraph("<b>Participantes</b>", normal), Paragraph(agenda.participantes or "—", normal)],
+        [
+            Paragraph("<b>Recordatorio</b>", normal),
+            Paragraph(f"{agenda.recordatorio_minutos or 0} min antes", normal),
+        ],
+    ]
+    meta = Table(meta_rows, colWidths=[40 * mm, 130 * mm])
+    meta.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
+    story.append(meta)
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("<b>Descripción / ítems</b>", normal))
+    story.append(Spacer(1, 4))
+    desc = (agenda.descripcion or "").strip()
+    if desc:
+        for line in desc.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            clean = line.lstrip("•-* ").strip()
+            story.append(Paragraph(f"• {clean}", normal))
+            story.append(Spacer(1, 2))
+    else:
+        story.append(Paragraph("Sin descripción", small))
+
+    story.append(Spacer(1, 14))
+    story.append(Paragraph("Documento generado por Agenda Facturas — JAELIN E.I.R.L.", small))
     doc.build(story)
     return buffer.getvalue()
