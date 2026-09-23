@@ -138,36 +138,11 @@
     return `<button type="button" class="btn btn-secondary btn-icon" data-${attrName}="${id}" title="${label}" aria-label="${label}">${actionIcon("clip")}<span class="btn-count">${n}</span></button>`;
   }
 
-  function itemLineas(doc) {
-    return (doc?.items || [])
-      .map((it) => {
-        const desc = (it.descripcion || "").trim();
-        if (!desc) return null;
-        const cant = Number(it.cantidad || 1);
-        const qty =
-          Number.isFinite(cant) && Math.abs(cant - 1) > 0.0001
-            ? ` × ${String(cant).replace(/\.0+$/, "")}`
-            : "";
-        return { desc, precio: money(it.precio_unitario), qty };
-      })
-      .filter(Boolean);
-  }
-
   function itemsDescripcion(doc) {
-    const lineas = itemLineas(doc);
-    if (!lineas.length) return "";
-    return lineas.map((it) => `${it.desc} — ${it.precio}${it.qty}`).join(" | ");
-  }
-
-  function itemsDescripcionHtml(doc) {
-    const lineas = itemLineas(doc);
-    if (!lineas.length) return "—";
-    return `<ul class="item-list">${lineas
-      .map(
-        (it) =>
-          `<li><span class="item-name">${escapeHtml(it.desc)}</span><span class="item-price">${escapeHtml(it.precio)}${escapeHtml(it.qty)}</span></li>`
-      )
-      .join("")}</ul>`;
+    return (doc?.items || [])
+      .map((it) => (it.descripcion || "").trim())
+      .filter(Boolean)
+      .join(" · ");
   }
 
   function adjuntoFieldHtml(entity, widgetKey) {
@@ -1100,7 +1075,7 @@
                   <td><span class="clip-lines" title="${escapeHtml(d.cliente_nombre)}">${escapeHtml(d.cliente_nombre)}</span><span class="cell-clip" style="color:var(--muted);font-size:.8rem">${escapeHtml(d.cliente_documento || "")}</span></td>
                   <td><span class="cell-clip" title="${escapeHtml(d.zona || "")}">${escapeHtml(d.zona || "—")}</span></td>
                   <td><span class="cell-clip" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</span></td>
-                  <td class="desc-cell" title="${escapeHtml(desc)}">${itemsDescripcionHtml(d)}</td>
+                  <td><span class="cell-clip" title="${escapeHtml(desc)}">${escapeHtml(desc || "—")}</span></td>
                   <td>${fmtDate(d.fecha_emision)}</td>
                   <td>${money(d.total)}</td>
                   <td>

@@ -384,8 +384,8 @@ td.actions .btn + .btn { margin-left: 0.25rem; }
 .table-fit .c-doc { width: 12%; }
 .table-fit .c-cli { width: 14%; }
 .table-fit .c-zona { width: 9%; }
-.table-fit .c-mot { width: 13%; }
-.table-fit .c-desc { width: 18%; }
+.table-fit .c-mot { width: 15%; }
+.table-fit .c-desc { width: 16%; }
 .table-fit .c-fecha { width: 96px; }
 .table-fit .c-total { width: 96px; }
 .table-fit .c-estado { width: 108px; }
@@ -400,28 +400,6 @@ td.actions .btn + .btn { margin-left: 0.25rem; }
 .table-fit td:nth-child(7),
 .table-fit th:nth-child(6),
 .table-fit th:nth-child(7) { white-space: nowrap; }
-.table-fit td.desc-cell { overflow: visible; white-space: normal; }
-.item-list { list-style: none; margin: 0; padding: 0; }
-.item-list li {
-  display: flex;
-  flex-direction: column;
-  gap: 0.05rem;
-  padding: 0.28rem 0;
-  border-bottom: 1px dashed rgba(15, 61, 46, 0.22);
-}
-.item-list li:first-child { padding-top: 0; }
-.item-list li:last-child { border-bottom: 0; padding-bottom: 0; }
-.item-list .item-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.item-list .item-price {
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: var(--brand);
-  white-space: nowrap;
-}
 .table-fit td.actions-wrap {
   overflow: visible;
   white-space: normal;
