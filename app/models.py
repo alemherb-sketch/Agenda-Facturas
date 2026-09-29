@@ -271,6 +271,7 @@ class Caja(Base):
     nombre: Mapped[str] = mapped_column(String(120), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(String(250))
     monto_apertura: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
+    fecha_apertura: Mapped[date | None] = mapped_column(Date)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -290,6 +291,7 @@ class MovimientoCaja(Base):
         Enum(TipoMovimientoCaja, native_enum=False), nullable=False
     )
     monto: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    metodo_pago: Mapped[str] = mapped_column(String(20), default="efectivo", nullable=False)
     numero_transaccion: Mapped[str | None] = mapped_column(String(80))
     concepto: Mapped[str] = mapped_column(String(300), nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)

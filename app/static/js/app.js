@@ -31,11 +31,24 @@
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
   const money = (n) =>
     `S/ ${Number(n || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const localIsoDate = () => {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
   const tipoLabel = (v) => state.meta?.tipos_documento.find((t) => t.value === v)?.label || v;
   const estadoLabel = (v) => state.meta?.estados.find((t) => t.value === v)?.label || v;
   const agendaLabel = (v) => state.meta?.tipos_agenda.find((t) => t.value === v)?.label || v;
   const movCajaLabel = (v) =>
     state.meta?.tipos_movimiento_caja?.find((t) => t.value === v)?.label || v;
+  const METODOS_PAGO_CAJA = [
+    { value: "efectivo", label: "Efectivo" },
+    { value: "deposito", label: "Depósito" },
+    { value: "yape", label: "Yape" },
+    { value: "plin", label: "Plin" },
+  ];
+  const metodoPagoLabel = (v) =>
+    METODOS_PAGO_CAJA.find((m) => m.value === (v || "efectivo"))?.label || v;
   const movCombustibleLabel = (v) =>
     state.meta?.tipos_movimiento_combustible?.find((t) => t.value === v)?.label || v;
   const estadoAgendaLabel = (v) =>
@@ -1704,7 +1717,7 @@
                   (c) => `<tr>
                   <td><strong>${escapeHtml(c.nombre)}</strong>
                     ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
-                  <td>${money(c.monto_apertura || 0)}</td>
+                  <td>${money(c.monto_apertura || 0)}${c.fecha_apertura ? `<br><span style="color:var(--muted);font-size:.8rem">${fmtDate(String(c.fecha_apertura).slice(0, 10))}</span>` : ""}</td>
                   <td style="color:var(--ok)">${money(c.total_ingresos)}</td>
                   <td style="color:var(--danger)">${money(c.total_egresos)}</td>
                   <td><strong>${money(c.saldo)}</strong></td>
@@ -1752,7 +1765,7 @@
         ${
           state.movimientosCaja.length
             ? `<div class="table-wrap"><table>
-              <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>N° transacción</th><th>Concepto</th><th>Monto</th><th class="col-actions">Acciones</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>Método</th><th>N° transacción</th><th>Concepto</th><th>Monto</th><th class="col-actions">Acciones</th></tr></thead>
               <tbody>
               ${state.movimientosCaja
                 .map(
@@ -1760,6 +1773,7 @@
                   <td>${fmtDate(m.fecha)}</td>
                   <td>${escapeHtml(m.caja_nombre)}</td>
                   <td><span class="badge ${m.tipo === "ingreso" ? "pagado" : "anulado"}">${movCajaLabel(m.tipo)}</span></td>
+                  <td>${escapeHtml(metodoPagoLabel(m.metodo_pago))}</td>
                   <td>${escapeHtml(m.numero_transaccion || "—")}</td>
                   <td>${escapeHtml(m.concepto)}</td>
                   <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
@@ -1972,6 +1986,10 @@
             <input name="descripcion" maxlength="250" value="${escapeHtml(caja?.descripcion || "")}" placeholder="Detalle de la caja" />
           </div>
           <div class="field full">
+            <label>Fecha de apertura</label>
+            <input name="fecha_apertura" type="date" required value="${escapeHtml(String(caja?.fecha_apertura || localIsoDate()).slice(0, 10))}" />
+          </div>
+          <div class="field full">
             <label>Monto de apertura</label>
             <input name="monto_apertura" type="number" min="0" step="0.01" inputmode="decimal" value="${caja ? Number(caja.monto_apertura || 0).toFixed(2) : ""}" placeholder="0.00" />
             <span style="color:var(--muted);font-size:.8rem">Saldo inicial con el que abre la caja. Se suma al saldo y no cuenta como ingreso.</span>
@@ -1992,6 +2010,10 @@
         return;
       }
       body.descripcion = (body.descripcion || "").trim() || null;
+      if (!body.fecha_apertura) {
+        toast("Indica la fecha de apertura");
+        return;
+      }
       try {
         if (caja) await API.updateCaja(caja.id, body);
         else await API.createCaja(body);
@@ -2162,6 +2184,15 @@
           <div class="field">
             <label>Fecha</label>
             <input name="fecha" type="date" required value="${mov?.fecha || today}" />
+          </div>
+          <div class="field full">
+            <label>Método de pago</label>
+            <select name="metodo_pago" required>
+              ${METODOS_PAGO_CAJA.map(
+                (m) =>
+                  `<option value="${m.value}" ${(mov?.metodo_pago || "efectivo") === m.value ? "selected" : ""}>${m.label}</option>`
+              ).join("")}
+            </select>
           </div>
           <div class="field full">
             <label>N° de transacción</label>

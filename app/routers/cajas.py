@@ -1,5 +1,6 @@
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Annotated
 
@@ -67,6 +68,7 @@ def _caja_out(db: Session, caja: Caja) -> CajaOut:
         nombre=caja.nombre,
         descripcion=caja.descripcion,
         monto_apertura=apertura,
+        fecha_apertura=caja.fecha_apertura,
         activo=caja.activo,
         saldo=saldo + apertura,
         total_ingresos=ingresos,
@@ -90,6 +92,7 @@ def _mov_out(mov: MovimientoCaja, adjuntos_rows=None) -> MovimientoCajaOut:
         caja_nombre=mov.caja.nombre if mov.caja else "",
         tipo=mov.tipo,
         monto=mov.monto,
+        metodo_pago=mov.metodo_pago or "efectivo",
         numero_transaccion=mov.numero_transaccion,
         concepto=mov.concepto,
         fecha=mov.fecha,
@@ -163,6 +166,7 @@ def crear_caja(
         nombre=nombre,
         descripcion=payload.descripcion,
         monto_apertura=payload.monto_apertura,
+        fecha_apertura=payload.fecha_apertura or datetime.now(ZoneInfo("America/Lima")).date(),
     )
     db.add(caja)
     db.commit()
@@ -528,6 +532,7 @@ def crear_movimiento(
         caja_id=caja.id,
         tipo=payload.tipo,
         monto=payload.monto,
+        metodo_pago=payload.metodo_pago,
         numero_transaccion=_clean_numero(payload.numero_transaccion),
         concepto=payload.concepto.strip(),
         fecha=payload.fecha,
@@ -566,6 +571,8 @@ def actualizar_movimiento(
         data["concepto"] = data["concepto"].strip()
     if "numero_transaccion" in data:
         data["numero_transaccion"] = _clean_numero(data["numero_transaccion"])
+    if "metodo_pago" in data and data["metodo_pago"] is None:
+        data.pop("metodo_pago")
     for key, value in data.items():
         setattr(mov, key, value)
     db.commit()

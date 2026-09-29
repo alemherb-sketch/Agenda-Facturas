@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -340,12 +341,14 @@ class CajaCreate(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     descripcion: str | None = None
     monto_apertura: Decimal = Field(default=Decimal("0.00"), ge=0)
+    fecha_apertura: date | None = None
 
 
 class CajaUpdate(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     descripcion: str | None = None
     monto_apertura: Decimal | None = Field(default=None, ge=0)
+    fecha_apertura: date | None = None
     activo: bool | None = None
 
 
@@ -356,6 +359,7 @@ class CajaOut(BaseModel):
     nombre: str
     descripcion: str | None = None
     monto_apertura: Decimal = Decimal("0.00")
+    fecha_apertura: date | None = None
     activo: bool = True
     saldo: Decimal = Decimal("0.00")
     total_ingresos: Decimal = Decimal("0.00")
@@ -363,10 +367,14 @@ class CajaOut(BaseModel):
     creado_en: datetime | None = None
 
 
+MetodoPagoCaja = Literal["efectivo", "deposito", "yape", "plin"]
+
+
 class MovimientoCajaCreate(BaseModel):
     caja_id: int
     tipo: TipoMovimientoCaja
     monto: Decimal = Field(gt=0)
+    metodo_pago: MetodoPagoCaja = "efectivo"
     numero_transaccion: str | None = Field(default=None, max_length=80)
     concepto: str = Field(min_length=1, max_length=300)
     fecha: date
@@ -376,6 +384,7 @@ class MovimientoCajaUpdate(BaseModel):
     caja_id: int | None = None
     tipo: TipoMovimientoCaja | None = None
     monto: Decimal | None = Field(default=None, gt=0)
+    metodo_pago: MetodoPagoCaja | None = None
     numero_transaccion: str | None = Field(default=None, max_length=80)
     concepto: str | None = Field(default=None, min_length=1, max_length=300)
     fecha: date | None = None
@@ -389,6 +398,7 @@ class MovimientoCajaOut(BaseModel):
     caja_nombre: str
     tipo: TipoMovimientoCaja
     monto: Decimal
+    metodo_pago: str = "efectivo"
     numero_transaccion: str | None = None
     concepto: str
     fecha: date

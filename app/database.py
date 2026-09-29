@@ -87,6 +87,10 @@ def ensure_schema() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE movimientos_caja ADD COLUMN adjunto_path VARCHAR(500)"
                     )
+                if "metodo_pago" not in mov_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_caja ADD COLUMN metodo_pago VARCHAR(20) NOT NULL DEFAULT 'efectivo'"
+                    )
 
             comp_cols = {
                 row[1]
@@ -129,6 +133,8 @@ def ensure_schema() -> None:
                 conn.exec_driver_sql(
                     "ALTER TABLE cajas ADD COLUMN monto_apertura NUMERIC(12, 2) NOT NULL DEFAULT 0"
                 )
+            if caja_cols and "fecha_apertura" not in caja_cols:
+                conn.exec_driver_sql("ALTER TABLE cajas ADD COLUMN fecha_apertura DATE")
 
             agenda_cols = {
                 row[1] for row in conn.exec_driver_sql("PRAGMA table_info(agendas)").fetchall()
@@ -174,6 +180,12 @@ def ensure_schema() -> None:
             )
             conn.exec_driver_sql(
                 "ALTER TABLE cajas ADD COLUMN IF NOT EXISTS monto_apertura NUMERIC(12, 2) NOT NULL DEFAULT 0"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE cajas ADD COLUMN IF NOT EXISTS fecha_apertura DATE"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(20) NOT NULL DEFAULT 'efectivo'"
             )
             conn.exec_driver_sql(
                 "UPDATE agendas SET estado = 'finalizado' "

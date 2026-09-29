@@ -111,6 +111,12 @@ def meta():
             {"value": "ingreso", "label": "Ingreso"},
             {"value": "egreso", "label": "Egreso"},
         ],
+        "metodos_pago_caja": [
+            {"value": "efectivo", "label": "Efectivo"},
+            {"value": "deposito", "label": "Depósito"},
+            {"value": "yape", "label": "Yape"},
+            {"value": "plin", "label": "Plin"},
+        ],
         "tipos_movimiento_combustible": [
             {"value": "ingreso", "label": "Ingreso"},
             {"value": "salida", "label": "Salida"},
