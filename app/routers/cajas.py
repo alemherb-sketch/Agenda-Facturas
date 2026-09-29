@@ -61,12 +61,14 @@ def _totales_caja(db: Session, caja_id: int) -> tuple[Decimal, Decimal, Decimal]
 
 def _caja_out(db: Session, caja: Caja) -> CajaOut:
     saldo, ingresos, egresos = _totales_caja(db, caja.id)
+    apertura = Decimal(str(caja.monto_apertura or 0))
     return CajaOut(
         id=caja.id,
         nombre=caja.nombre,
         descripcion=caja.descripcion,
+        monto_apertura=apertura,
         activo=caja.activo,
-        saldo=saldo,
+        saldo=saldo + apertura,
         total_ingresos=ingresos,
         total_egresos=egresos,
         creado_en=caja.creado_en,
@@ -156,7 +158,12 @@ def crear_caja(
     )
     if existe:
         raise HTTPException(status_code=400, detail="Ya existe una caja con ese nombre")
-    caja = Caja(usuario_id=user.id, nombre=nombre, descripcion=payload.descripcion)
+    caja = Caja(
+        usuario_id=user.id,
+        nombre=nombre,
+        descripcion=payload.descripcion,
+        monto_apertura=payload.monto_apertura,
+    )
     db.add(caja)
     db.commit()
     db.refresh(caja)

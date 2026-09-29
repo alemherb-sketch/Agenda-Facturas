@@ -339,11 +339,13 @@ class DashboardOut(BaseModel):
 class CajaCreate(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     descripcion: str | None = None
+    monto_apertura: Decimal = Field(default=Decimal("0.00"), ge=0)
 
 
 class CajaUpdate(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     descripcion: str | None = None
+    monto_apertura: Decimal | None = Field(default=None, ge=0)
     activo: bool | None = None
 
 
@@ -353,6 +355,7 @@ class CajaOut(BaseModel):
     id: int
     nombre: str
     descripcion: str | None = None
+    monto_apertura: Decimal = Decimal("0.00")
     activo: bool = True
     saldo: Decimal = Decimal("0.00")
     total_ingresos: Decimal = Decimal("0.00")

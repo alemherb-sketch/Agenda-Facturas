@@ -1697,13 +1697,14 @@
         ${
           cajas.length
             ? `<div class="table-wrap"><table>
-              <thead><tr><th>Caja</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th class="col-actions">Acciones</th></tr></thead>
+              <thead><tr><th>Caja</th><th>Apertura</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th class="col-actions">Acciones</th></tr></thead>
               <tbody>
               ${cajas
                 .map(
                   (c) => `<tr>
                   <td><strong>${escapeHtml(c.nombre)}</strong>
                     ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
+                  <td>${money(c.monto_apertura || 0)}</td>
                   <td style="color:var(--ok)">${money(c.total_ingresos)}</td>
                   <td style="color:var(--danger)">${money(c.total_egresos)}</td>
                   <td><strong>${money(c.saldo)}</strong></td>
@@ -1971,6 +1972,11 @@
             <input name="descripcion" maxlength="250" value="${escapeHtml(caja?.descripcion || "")}" placeholder="Detalle de la caja" />
           </div>
           <div class="field full">
+            <label>Monto de apertura</label>
+            <input name="monto_apertura" type="number" min="0" step="0.01" inputmode="decimal" value="${caja ? Number(caja.monto_apertura || 0).toFixed(2) : ""}" placeholder="0.00" />
+            <span style="color:var(--muted);font-size:.8rem">Saldo inicial con el que abre la caja. Se suma al saldo y no cuenta como ingreso.</span>
+          </div>
+          <div class="field full">
             <button class="btn btn-primary" type="submit">${caja ? "Guardar" : "Crear caja"}</button>
           </div>
         </form>
@@ -1979,6 +1985,13 @@
     $("#form-caja").onsubmit = async (e) => {
       e.preventDefault();
       const body = Object.fromEntries(new FormData(e.target).entries());
+      const apertura = String(body.monto_apertura ?? "").trim();
+      body.monto_apertura = apertura === "" ? 0 : Number(apertura);
+      if (!Number.isFinite(body.monto_apertura) || body.monto_apertura < 0) {
+        toast("El monto de apertura debe ser un número mayor o igual a 0");
+        return;
+      }
+      body.descripcion = (body.descripcion || "").trim() || null;
       try {
         if (caja) await API.updateCaja(caja.id, body);
         else await API.createCaja(body);

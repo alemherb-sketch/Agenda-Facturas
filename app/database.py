@@ -122,6 +122,14 @@ def ensure_schema() -> None:
                         "ALTER TABLE movimientos_combustible ADD COLUMN adjunto_path VARCHAR(500)"
                     )
 
+            caja_cols = {
+                row[1] for row in conn.exec_driver_sql("PRAGMA table_info(cajas)").fetchall()
+            }
+            if caja_cols and "monto_apertura" not in caja_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE cajas ADD COLUMN monto_apertura NUMERIC(12, 2) NOT NULL DEFAULT 0"
+                )
+
             agenda_cols = {
                 row[1] for row in conn.exec_driver_sql("PRAGMA table_info(agendas)").fetchall()
             }
@@ -163,6 +171,9 @@ def ensure_schema() -> None:
                 )
             conn.exec_driver_sql(
                 "ALTER TABLE agendas ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'programado'"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE cajas ADD COLUMN IF NOT EXISTS monto_apertura NUMERIC(12, 2) NOT NULL DEFAULT 0"
             )
             conn.exec_driver_sql(
                 "UPDATE agendas SET estado = 'finalizado' "
