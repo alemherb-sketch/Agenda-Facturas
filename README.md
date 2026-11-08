@@ -58,6 +58,21 @@ GET https://tu-app.up.railway.app/api/cron/recordatorios?secret=TU_CRON_SECRET
 
 Variable de entorno opcional: `CRON_SECRET`.
 
+## Conector del panel de ERPGEST (el proveedor)
+
+`app/panel_erpgest.py` recibe en `/erpgest-conector/v1/` las órdenes firmadas (Ed25519) del panel de ERPGEST
+(Panel › Subdominios): ver las cuentas y su actividad, suspender el servicio (la página y el API responden 503
+con el aviso), fijar cuántas cuentas activas se admiten (el registro público lo respeta) y restablecer el acceso
+de una cuenta (contraseña nueva y cierre de todas las sesiones). Se activa con dos variables de entorno, que el
+panel muestra en la pestaña *Conector*; la llave es pública, no secreta:
+
+```
+ERPGEST_CONECTOR_SISTEMA=agenda
+ERPGEST_CONECTOR_LLAVE=<la llave pública que muestra el panel>
+```
+
+Sin ellas el conector no existe (404). Pruebas: `python -m pytest tests -q` (base SQLite temporal).
+
 ## Despliegue en VPS (Docker)
 
 Producción objetivo: **https://agenda.erpgestapp.com**

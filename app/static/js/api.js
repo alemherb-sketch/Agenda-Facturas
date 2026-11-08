@@ -21,6 +21,27 @@ const API = {
     localStorage.removeItem(this.userKey);
   },
 
+  mostrarSuspension(mensaje) {
+    if (document.getElementById("af-suspendido")) return;
+    const capa = document.createElement("div");
+    capa.id = "af-suspendido";
+    capa.setAttribute("role", "alertdialog");
+    capa.style.cssText = "position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;"
+      + "background:#f1f5f9;color:#0f172a;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+    const caja = document.createElement("div");
+    caja.style.cssText = "max-width:460px;background:#fff;border-radius:16px;padding:32px;text-align:center;"
+      + "box-shadow:0 10px 30px rgba(15,23,42,.08)";
+    const titulo = document.createElement("h1");
+    titulo.style.cssText = "font-size:1.3rem;margin:0 0 .6rem";
+    titulo.textContent = "Servicio suspendido";
+    const texto = document.createElement("p");
+    texto.style.cssText = "color:#475569;line-height:1.5;margin:0";
+    texto.textContent = mensaje || "El servicio está suspendido temporalmente.";
+    caja.append(titulo, texto);
+    capa.append(caja);
+    document.body.append(capa);
+  },
+
   async request(path, options = {}) {
     const headers = { ...(options.headers || {}) };
     if (!(options.body instanceof FormData) && options.body && !headers["Content-Type"]) {
@@ -48,6 +69,10 @@ const API = {
     }
 
     const data = contentType.includes("application/json") ? await res.json() : await res.text();
+    if (res.status === 503 && data?.motivo === "suspendido") {
+      // El proveedor suspendio el servicio desde su panel: el aviso ocupa la pantalla
+      this.mostrarSuspension(data.detail);
+    }
     if (!res.ok) {
       const detail = data?.detail;
       const msg = Array.isArray(detail)

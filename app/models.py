@@ -349,3 +349,25 @@ class MovimientoCombustible(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     usuario: Mapped[Usuario] = relationship(back_populates="movimientos_combustible")
+
+
+class PanelEstado(Base):
+    """Lo que el panel de ERPGEST (el proveedor) le ordeno a este sistema: una sola fila, id=1. Ver panel_erpgest.py."""
+
+    __tablename__ = "panel_erpgest_estado"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    suspendido: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    mensaje: Mapped[str] = mapped_column(String(300), default="")
+    limite_usuarios: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # 0 = sin limite
+    # Tokens emitidos antes de esto ya no valen (restablecer el acceso cierra todas las sesiones). UTC sin zona.
+    sesiones_desde: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class PanelIngreso(Base):
+    """Ultimo ingreso de cada cuenta, para la actividad que ve el proveedor en su panel."""
+
+    __tablename__ = "panel_erpgest_ingresos"
+
+    usuario_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ultimo: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)

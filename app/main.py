@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import panel_erpgest
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine, ensure_schema
 from app.routers import (
@@ -61,6 +62,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
+# Conector del panel de ERPGEST (el proveedor): ordenes firmadas y suspension del servicio. Ver panel_erpgest.py.
+app.add_middleware(panel_erpgest.MiddlewareSuspension)
+app.include_router(panel_erpgest.router)
 app.include_router(auth_router.router)
 app.include_router(comprobantes.router)
 app.include_router(agenda.router)
