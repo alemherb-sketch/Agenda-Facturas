@@ -341,6 +341,7 @@ class DashboardOut(BaseModel):
     agendas_proximas: int
     agendas_hoy: int
     documentos_vencidos: int
+    total_egresos_comprobantes: Decimal = Decimal("0")
     recientes: list[ComprobanteOut]
 
 

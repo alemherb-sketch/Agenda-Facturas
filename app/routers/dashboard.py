@@ -32,6 +32,7 @@ def resumen(
     total_cobrado = Decimal("0")
     total_pendiente = Decimal("0")
     total_anulado = Decimal("0")
+    total_egresos_comprobantes = Decimal("0")
     por_estado: dict[str, int] = defaultdict(int)
     por_tipo: dict[str, int] = defaultdict(int)
     por_mes_map: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
@@ -39,7 +40,10 @@ def resumen(
     for doc in docs:
         por_estado[doc.estado.value] += 1
         por_tipo[TIPO_LABELS.get(doc.tipo, doc.tipo.value)] += 1
-        # Las compras se ven en Cajas (egreso). Aquí el dinero es de ventas.
+        # Todo comprobante no anulado es un egreso, aparte de la caja.
+        if doc.estado != EstadoComprobante.ANULADO:
+            total_egresos_comprobantes += doc.total or 0
+        # El facturado del panel sigue siendo de ventas.
         if (doc.operacion or "venta") == "compra":
             continue
         if doc.estado != EstadoComprobante.ANULADO:
@@ -110,5 +114,6 @@ def resumen(
         agendas_proximas=agendas_proximas,
         agendas_hoy=agendas_hoy,
         documentos_vencidos=documentos_vencidos,
+        total_egresos_comprobantes=total_egresos_comprobantes,
         recientes=[ComprobanteOut.model_validate(r) for r in recientes],
     )

@@ -1,4 +1,8 @@
-"""Relaciona una venta o compra con la caja elegida y mantiene su movimiento."""
+"""Los comprobantes no se vinculan a ninguna caja.
+
+El arranque borra los movimientos que un comprobante hubiera generado
+y deja caja_id en blanco. Los movimientos manuales de caja se conservan.
+"""
 
 from __future__ import annotations
 
@@ -60,6 +64,17 @@ def _borrar_movimiento(db: Session, mov: MovimientoCaja) -> None:
     eliminar_adjuntos_entidad(db, ENTIDAD_CAJA, mov.id)
     db.delete(mov)
     db.flush()
+
+
+def desvincular_comprobantes_de_cajas(db: Session) -> None:
+    """Los comprobantes no mueven ninguna caja: se quitan sus movimientos y el vínculo."""
+    movs = db.query(MovimientoCaja).filter(MovimientoCaja.comprobante_id.isnot(None)).all()
+    for mov in movs:
+        _borrar_movimiento(db, mov)
+    db.query(Comprobante).filter(Comprobante.caja_id.isnot(None)).update(
+        {Comprobante.caja_id: None}, synchronize_session=False
+    )
+    db.commit()
 
 
 def eliminar_movimiento_comprobante(db: Session, usuario_id: int, comprobante_id: int) -> None:

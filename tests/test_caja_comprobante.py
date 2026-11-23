@@ -1,4 +1,4 @@
-"""Ventas y compras ligadas a la caja principal."""
+"""Los comprobantes son egresos y no se vinculan a ninguna caja."""
 import os
 import sys
 import tempfile
@@ -74,16 +74,15 @@ def test_una_sola_caja_principal():
     assert lista[0]["id"] == segunda["id"]
 
 
-def test_venta_y_compra_mueven_la_caja_elegida():
+def test_comprobante_no_mueve_la_caja_y_el_dashboard_resta_egresos():
     client = _cliente()
     headers = _auth(client, "movimientos@negocio.pe")
     principal = _caja(client, headers, "Caja principal", principal=True, apertura=20)
     otra = _caja(client, headers, "Yape", principal=False)
 
     venta = _doc(client, headers, caja_id=principal["id"], numero="1", operacion="venta")
-    assert venta["operacion"] == "venta"
-    assert venta["caja_id"] == principal["id"]
-    assert venta["caja_nombre"] == "Caja principal"
+    assert venta["caja_id"] is None
+    assert venta["caja_nombre"] is None
     assert float(venta["total"]) == 150
 
     compra = _doc(
@@ -95,97 +94,132 @@ def test_venta_y_compra_mueven_la_caja_elegida():
         cliente_nombre="Proveedor Norte",
         items=[{"descripcion": "Repuesto", "cantidad": 2, "precio_unitario": 40, "aplica_igv": False}],
     )
-    assert compra["operacion"] == "compra"
+    assert compra["caja_id"] is None
     assert float(compra["total"]) == 80
 
+    manual = client.post(
+        "/api/cajas/movimientos",
+        headers=headers,
+        json={
+            "caja_id": principal["id"],
+            "tipo": "ingreso",
+            "monto": 50,
+            "concepto": "Aporte manual",
+            "fecha": "2026-11-03",
+        },
+    )
+    assert manual.status_code == 201, manual.text
+
     movs = client.get("/api/cajas/movimientos", headers=headers).json()
-    assert len(movs) == 2
-    por_comp = {m["comprobante_id"]: m for m in movs}
-    assert por_comp[venta["id"]]["tipo"] == "ingreso"
-    assert float(por_comp[venta["id"]]["monto"]) == 150
-    assert por_comp[compra["id"]]["tipo"] == "egreso"
-    assert float(por_comp[compra["id"]]["monto"]) == 80
+    assert len(movs) == 1
+    assert movs[0]["comprobante_id"] is None
+    assert float(movs[0]["monto"]) == 50
 
     cajas = client.get("/api/cajas", headers=headers).json()
     caja = next(c for c in cajas if c["id"] == principal["id"])
-    assert float(caja["total_ingresos"]) == 150
-    assert float(caja["total_egresos"]) == 80
-    assert float(caja["saldo"]) == 90  # 20 de apertura + 150 - 80
+    assert float(caja["saldo"]) == 70  # 20 de apertura + 50 manual
+
+    panel = client.get("/api/dashboard", headers=headers)
+    assert panel.status_code == 200, panel.text
+    assert float(panel.json()["total_egresos_comprobantes"]) == 230
 
     cambiada = client.put(
         f"/api/comprobantes/{venta['id']}",
         headers=headers,
-        json={"caja_id": otra["id"], "operacion": "venta"},
+        json={"caja_id": otra["id"], "operacion": "compra"},
     )
     assert cambiada.status_code == 200, cambiada.text
+    assert cambiada.json()["caja_id"] is None
+    assert cambiada.json()["operacion"] == "venta"
     movs = client.get("/api/cajas/movimientos", headers=headers).json()
-    venta_mov = next(m for m in movs if m["comprobante_id"] == venta["id"])
-    assert venta_mov["caja_id"] == otra["id"]
-
-    nota = _doc(
-        client,
-        headers,
-        tipo="nota_credito",
-        serie="FC01",
-        numero="3",
-        operacion="venta",
-        caja_id=principal["id"],
-        items=[{"descripcion": "Devolución", "cantidad": 1, "precio_unitario": 30, "aplica_igv": False}],
-    )
-    movs = client.get("/api/cajas/movimientos", headers=headers).json()
-    nota_mov = next(m for m in movs if m["comprobante_id"] == nota["id"])
-    assert nota_mov["tipo"] == "egreso"
-
-    cotizacion = _doc(
-        client,
-        headers,
-        tipo="cotizacion",
-        serie="CT01",
-        numero="4",
-        caja_id=principal["id"],
-    )
-    movs = client.get("/api/cajas/movimientos", headers=headers).json()
-    assert all(m["comprobante_id"] != cotizacion["id"] for m in movs)
+    assert len(movs) == 1
+    assert movs[0]["comprobante_id"] is None
 
     anulado = client.patch(
         f"/api/comprobantes/{compra['id']}/estado?estado=anulado",
         headers=headers,
     )
     assert anulado.status_code == 200, anulado.text
+    assert anulado.json()["caja_id"] is None
+    panel = client.get("/api/dashboard", headers=headers).json()
+    assert float(panel["total_egresos_comprobantes"]) == 150
+
+
+def test_desvincular_quita_el_movimiento_ligado_y_conserva_el_manual():
+    from datetime import date
+
+    from app.database import SessionLocal
+    from app.models import Comprobante, MovimientoCaja, TipoMovimientoCaja
+    from app.services.caja_comprobante import desvincular_comprobantes_de_cajas
+
+    client = _cliente()
+    headers = _auth(client, "limpieza@negocio.pe")
+    principal = _caja(client, headers, "Caja principal", principal=True, apertura=10)
+    doc = _doc(client, headers, numero="9")
+    manual = client.post(
+        "/api/cajas/movimientos",
+        headers=headers,
+        json={
+            "caja_id": principal["id"],
+            "tipo": "egreso",
+            "monto": 4,
+            "concepto": "Salida manual",
+            "fecha": "2026-11-04",
+        },
+    )
+    assert manual.status_code == 201, manual.text
+
+    db = SessionLocal()
+    try:
+        guardado = db.get(Comprobante, doc["id"])
+        guardado.caja_id = principal["id"]
+        db.add(
+            MovimientoCaja(
+                usuario_id=guardado.usuario_id,
+                caja_id=principal["id"],
+                comprobante_id=guardado.id,
+                tipo=TipoMovimientoCaja.INGRESO,
+                monto=guardado.total,
+                concepto="Venta antigua",
+                fecha=date(2026, 11, 2),
+            )
+        )
+        db.commit()
+        desvincular_comprobantes_de_cajas(db)
+    finally:
+        db.close()
+
+    revisado = client.get(f"/api/comprobantes/{doc['id']}", headers=headers).json()
+    assert revisado["caja_id"] is None
     movs = client.get("/api/cajas/movimientos", headers=headers).json()
-    assert all(m["comprobante_id"] != compra["id"] for m in movs)
-
-    borrado = client.delete(f"/api/cajas/movimientos/{venta_mov['id']}", headers=headers)
-    assert borrado.status_code == 200, borrado.text
-    doc = client.get(f"/api/comprobantes/{venta['id']}", headers=headers).json()
-    assert doc["caja_id"] is None
-
-    dash = client.get("/api/cajas/dashboard?fecha_desde=2026-11-01&fecha_hasta=2026-11-30", headers=headers)
-    assert dash.status_code == 200, dash.text
-    cuerpo = dash.json()
-    assert float(cuerpo["total_egresos"]) >= 30
+    assert len(movs) == 1
+    assert movs[0]["concepto"] == "Salida manual"
+    caja = next(c for c in client.get("/api/cajas", headers=headers).json() if c["id"] == principal["id"])
+    assert float(caja["saldo"]) == 6  # 10 de apertura − 4 manual
 
 
-def test_filtra_comprobantes_por_operacion_y_caja():
+def test_filtra_comprobantes_por_operacion_sin_vincular_caja():
     client = _cliente()
     headers = _auth(client, "filtros@negocio.pe")
     principal = _caja(client, headers, "Caja principal", principal=True)
     yape = _caja(client, headers, "Yape")
-    _doc(client, headers, caja_id=principal["id"], numero="1", operacion="venta", cliente_nombre="Cliente A")
+    primero = _doc(client, headers, caja_id=principal["id"], numero="1", operacion="venta", cliente_nombre="Cliente A")
     _doc(client, headers, caja_id=principal["id"], numero="2", operacion="compra", cliente_nombre="Proveedor B")
-    _doc(client, headers, caja_id=yape["id"], numero="3", operacion="venta", cliente_nombre="Cliente C")
+    tercero = _doc(client, headers, caja_id=yape["id"], numero="3", operacion="venta", cliente_nombre="Cliente C")
+    assert primero["caja_id"] is None
+    assert tercero["caja_nombre"] is None
 
-    ingresos = client.get(
-        f"/api/comprobantes?operacion=ingreso&caja_id={principal['id']}", headers=headers
-    ).json()
-    assert [d["numero"] for d in ingresos] == ["1"]
+    ingresos = client.get("/api/comprobantes?operacion=ingreso", headers=headers).json()
+    assert sorted(d["numero"] for d in ingresos) == ["1", "3"]
 
     egresos = client.get("/api/comprobantes?operacion=egreso", headers=headers).json()
     assert [d["numero"] for d in egresos] == ["2"]
 
     en_yape = client.get(f"/api/comprobantes?caja_id={yape['id']}", headers=headers).json()
-    assert [d["numero"] for d in en_yape] == ["3"]
-    assert en_yape[0]["caja_nombre"] == "Yape"
+    assert en_yape == []
 
     invalido = client.get("/api/comprobantes?operacion=otro", headers=headers)
     assert invalido.status_code == 400
+
+    panel = client.get("/api/dashboard", headers=headers).json()
+    assert float(panel["total_egresos_comprobantes"]) == 450

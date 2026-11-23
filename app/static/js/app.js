@@ -34,7 +34,7 @@
     editingAgenda: null,
     editingCliente: null,
     editingProducto: null,
-    filters: { q: "", estado: "", tipo: "", zona: "", operacion: "", caja_id: "", fecha_desde: "", fecha_hasta: "" },
+    filters: { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" },
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -722,24 +722,19 @@
     return null;
   }
 
-  function opcionesCajaHtml(selectedId, extra = null) {
-    const sel = selectedId == null || selectedId === "" ? "" : String(selectedId);
-    const opts = [`<option value="">No registrar en caja</option>`];
-    if (extra && !state.cajas.some((c) => String(c.id) === String(extra.id))) {
-      opts.push(
-        `<option value="${extra.id}" ${sel === String(extra.id) ? "selected" : ""}>${escapeHtml(extra.nombre || "Caja archivada")} (archivada)</option>`
-      );
-    }
-    for (const c of state.cajas) {
-      const mark = c.es_principal ? " (principal)" : "";
-      opts.push(
-        `<option value="${c.id}" ${sel === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}${mark}</option>`
-      );
-    }
-    return opts.join("");
+  function formulaCajaHtml(cajas, resumen) {
+    const saldoTotal = (cajas || []).reduce((acc, c) => acc + Number(c.saldo || 0), 0);
+    const egresos = Number(resumen?.total_egresos_comprobantes || 0);
+    const resultado = saldoTotal - egresos;
+    return `
+      <div class="grid-stats" style="margin:0">
+        <div class="stat"><label>Total de la caja</label><strong>${money(saldoTotal)}</strong><span class="stat-meta">Suma del saldo de todas las cajas</span></div>
+        <div class="stat warn"><label>Egresos (comprobantes)</label><strong>${money(egresos)}</strong><span class="stat-meta">Comprobantes no anulados</span></div>
+        <div class="stat ${resultado < 0 ? "danger" : "ok"}"><label>Resultado</label><strong>${money(resultado)}</strong><span class="stat-meta">Total de la caja − egresos</span></div>
+      </div>`;
   }
 
-  function seccionCajasDashboard(cajas, dash, cajaError) {
+  function seccionCajasDashboard(cajas, dash, cajaError, resumen) {
     if (cajaError) {
       return `<div class="panel" style="margin-bottom:1rem"><strong style="font-family:var(--font-display)">Cajas</strong><p style="color:var(--muted)">No se pudo cargar el resumen de cajas.</p></div>`;
     }
@@ -750,11 +745,11 @@
             <strong style="font-family:var(--font-display)">Cajas</strong>
             <button class="btn btn-secondary btn-sm" data-go="cajas">Configurar cajas</button>
           </div>
-          <div class="empty"><strong>Sin cajas</strong>Crea una caja y márcala como principal para que las ventas y compras se registren ahí.</div>
+          ${formulaCajaHtml([], resumen)}
+          <div class="empty"><strong>Sin cajas</strong>Crea una caja para el efectivo. Los comprobantes se cuentan aparte, como egresos.</div>
         </div>`;
     }
     const principal = cajas.find((c) => c.es_principal);
-    const saldoTotal = cajas.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
     const rango = dash ? `${fmtDate(dash.fecha_desde)} — ${fmtDate(dash.fecha_hasta)}` : "Mes en curso";
     const movimientos = dash?.movimientos || [];
     return `
@@ -764,18 +759,13 @@
             <strong style="font-family:var(--font-display)">Cajas</strong>
             <p style="margin:.2rem 0 0;color:var(--muted);font-size:.85rem">
               ${principal ? `Principal: ${escapeHtml(principal.nombre)}. ` : "Sin caja principal. "}
-              Ingresos y egresos del ${rango}. Las ventas suman y las compras restan en la caja elegida.
+              Los comprobantes no entran a ninguna caja. Resultado = total de la caja − egresos. Movimientos de caja del ${rango}.
             </p>
           </div>
           <button class="btn btn-secondary btn-sm" data-go="cajas">Ver cajas</button>
         </div>
         <div style="padding:1rem">
-          <div class="grid-stats" style="margin:0">
-            <div class="stat ok"><label>Ingresos del período</label><strong>${money(dash?.total_ingresos || 0)}</strong></div>
-            <div class="stat warn"><label>Egresos del período</label><strong>${money(dash?.total_egresos || 0)}</strong></div>
-            <div class="stat"><label>Saldo del período</label><strong>${money(dash?.saldo_periodo || 0)}</strong></div>
-            <div class="stat"><label>Saldo acumulado</label><strong>${money(saldoTotal)}</strong></div>
-          </div>
+          ${formulaCajaHtml(cajas, resumen)}
         </div>
         <div class="charts" style="padding:0 1rem">
           <div class="panel chart-box" style="box-shadow:none">
@@ -800,7 +790,7 @@
                       )
                       .join("")}
                     </tbody></table></div>`
-                : `<div class="empty"><strong>Sin movimientos</strong>Registra una venta, una compra o un movimiento manual.</div>`
+                : `<div class="empty"><strong>Sin movimientos</strong>Los comprobantes no mueven la caja. Registra un movimiento manual.</div>`
             }
           </div>
         </div>
@@ -890,7 +880,7 @@
         <div class="stat warn"><label>Por cobrar</label><strong>${money(d.total_pendiente)}</strong></div>
         <div class="stat danger"><label>Anulado</label><strong>${money(d.total_anulado)}</strong></div>
       </div>
-      ${seccionCajasDashboard(cajas, cajaDash, cajaError)}
+      ${seccionCajasDashboard(cajas, cajaDash, cajaError, d)}
       <div class="charts">
         <div class="panel chart-box"><h3>Facturación mensual</h3><canvas id="chart-mes"></canvas></div>
         <div class="panel chart-box"><h3>Por estado</h3><canvas id="chart-estado"></canvas></div>
@@ -1210,16 +1200,10 @@
     if (state.filters.estado) params.estado = state.filters.estado;
     if (state.filters.tipo) params.tipo = state.filters.tipo;
     if (state.filters.zona) params.zona = state.filters.zona;
-    if (state.filters.operacion) params.operacion = state.filters.operacion;
-    if (state.filters.caja_id) params.caja_id = state.filters.caja_id;
     if (state.filters.fecha_desde) params.fecha_desde = state.filters.fecha_desde;
     if (state.filters.fecha_hasta) params.fecha_hasta = state.filters.fecha_hasta;
-    const [docs, cajas] = await Promise.all([
-      API.listComprobantes(params),
-      API.listCajas().catch(() => state.cajas || []),
-    ]);
+    const docs = await API.listComprobantes(params);
     state.docs = docs;
-    state.cajas = cajas;
 
     return `
       <div class="page-head">
@@ -1253,20 +1237,6 @@
             .map((z) => `<option value="${z}" ${state.filters.zona === z ? "selected" : ""}>${z}</option>`)
             .join("")}
         </select>
-        <select id="f-operacion">
-          <option value="">Tipo de operación</option>
-          <option value="ingreso" ${state.filters.operacion === "ingreso" ? "selected" : ""}>Ingreso</option>
-          <option value="egreso" ${state.filters.operacion === "egreso" ? "selected" : ""}>Egreso</option>
-        </select>
-        <select id="f-caja">
-          <option value="">Todas las cajas</option>
-          ${(state.cajas || [])
-            .map(
-              (c) =>
-                `<option value="${c.id}" ${String(state.filters.caja_id) === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}</option>`
-            )
-            .join("")}
-        </select>
         <input id="f-desde" type="date" title="Desde" value="${escapeHtml(state.filters.fecha_desde)}" />
         <input id="f-hasta" type="date" title="Hasta" value="${escapeHtml(state.filters.fecha_hasta)}" />
         <button class="btn btn-secondary" id="btn-filtrar">Filtrar</button>
@@ -1287,7 +1257,7 @@
                 .map((d) => {
                   const desc = itemsDescripcion(d);
                   return `<tr>
-                  <td><span class="clip-lines" title="${escapeHtml(tipoLabel(d.tipo))} ${d.serie}-${d.numero}"><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></span><br><span class="badge ${d.operacion === "compra" ? "compra" : "venta"}">${d.operacion === "compra" ? "Compra" : "Venta"}</span>${d.caja_nombre ? `<br><span style="color:var(--muted);font-size:.75rem">${escapeHtml(d.caja_nombre)}</span>` : ""}</td>
+                  <td><span class="clip-lines" title="${escapeHtml(tipoLabel(d.tipo))} ${d.serie}-${d.numero}"><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></span><br><span class="badge compra">Egreso</span></td>
                   <td><span class="clip-lines" title="${escapeHtml(d.cliente_nombre)}">${escapeHtml(d.cliente_nombre)}</span><span class="cell-clip" style="color:var(--muted);font-size:.8rem">${escapeHtml(d.cliente_documento || "")}</span></td>
                   <td><span class="cell-clip" title="${escapeHtml(d.zona || "")}">${escapeHtml(d.zona || "—")}</span></td>
                   <td><span class="cell-clip" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</span></td>
@@ -1356,20 +1326,6 @@
                 )
                 .join("")}
             </select>
-          </div>
-          <div class="field">
-            <label>Operación</label>
-            <select name="operacion" id="c-operacion" required>
-              <option value="venta" ${(doc?.operacion || "venta") !== "compra" ? "selected" : ""}>Venta (ingreso)</option>
-              <option value="compra" ${doc?.operacion === "compra" ? "selected" : ""}>Compra (egreso)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Caja</label>
-            <select name="caja_id" id="c-caja">
-              ${opcionesCajaHtml(doc ? doc.caja_id || "" : cajaPrincipalId() || "", doc?.caja_id ? { id: doc.caja_id, nombre: doc.caja_nombre } : null)}
-            </select>
-            <small class="field-hint" id="caja-hint">El total se anota en la caja elegida. Usa «No registrar en caja» si el dinero todavía no entra ni sale.</small>
           </div>
           <div class="field">
             <label>Estado</label>
@@ -1878,14 +1834,14 @@
       ? `<div class="panel caja-banner">
           <div>
             <strong>Caja principal: ${escapeHtml(principal.nombre)}</strong>
-            <p>Las ventas y compras nuevas se registran en esta caja, salvo que elijas otra al emitir el comprobante.</p>
+            <p>Los comprobantes no se registran en esta caja. En el Dashboard se restan como egresos del total de las cajas.</p>
           </div>
           <span class="badge principal">Principal</span>
         </div>`
       : `<div class="panel caja-banner">
           <div>
             <strong>Sin caja principal</strong>
-            <p>Marca una caja como principal para que las ventas y compras queden ligadas a ella.</p>
+            <p>Puedes marcar una caja como principal. Los comprobantes siguen sin vincularse a ninguna caja.</p>
           </div>
         </div>`;
 
@@ -1893,7 +1849,7 @@
       <div class="page-head">
         <div>
           <h1>Cajas</h1>
-          <p>Dashboard de movimientos, ingresos y egresos por caja. La caja principal recibe las ventas y compras.</p>
+          <p>Movimientos manuales de ingreso y egreso. Los comprobantes no se vinculan a ninguna caja.</p>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-caja">🖨 Imprimir reporte</button>
@@ -2440,7 +2396,7 @@
                 const marcada = caja ? caja.es_principal : !hayPrincipal;
                 return marcada ? "checked" : "";
               })()} />
-              <span>Caja principal para ventas y compras<br><small style="font-weight:500;color:var(--muted)">Solo una caja queda como principal. Las ventas y compras nuevas se registran aquí si no eliges otra.</small></span>
+              <span>Caja principal<br><small style="font-weight:500;color:var(--muted)">Solo una caja queda como principal. Los comprobantes no se registran en la caja.</small></span>
             </label>
           </div>
           <div class="field full">
@@ -3389,14 +3345,12 @@
         state.filters.estado = $("#f-estado").value;
         state.filters.tipo = $("#f-tipo").value;
         state.filters.zona = $("#f-zona")?.value || "";
-        state.filters.operacion = $("#f-operacion")?.value || "";
-        state.filters.caja_id = $("#f-caja")?.value || "";
         state.filters.fecha_desde = $("#f-desde")?.value || "";
         state.filters.fecha_hasta = $("#f-hasta")?.value || "";
         renderApp();
       });
       $("#btn-limpiar-filtros")?.addEventListener("click", () => {
-        state.filters = { q: "", estado: "", tipo: "", zona: "", operacion: "", caja_id: "", fecha_desde: "", fecha_hasta: "" };
+        state.filters = { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" };
         renderApp();
       });
       $("#btn-reporte-comp")?.addEventListener("click", async () => {
@@ -3481,31 +3435,12 @@
 
     if (state.route === "nuevo") {
       const tipo = $("#c-tipo");
-      const syncCajaHint = () => {
-        const op = $("#c-operacion")?.value || "venta";
-        const tipoDoc = $("#c-tipo")?.value || "";
-        const label = $("#c-cliente-label");
-        if (label) label.textContent = op === "compra" ? "Proveedor" : "Cliente";
-        const hint = $("#caja-hint");
-        if (!hint) return;
-        if (tipoDoc === "cotizacion" || tipoDoc === "guia_remision") {
-          hint.textContent = "Cotizaciones y guías no generan ingreso ni egreso en la caja.";
-          return;
-        }
-        hint.textContent =
-          op === "compra"
-            ? "El total se anota como egreso (salida) en la caja elegida. Anular el comprobante quita el movimiento."
-            : "El total se anota como ingreso en la caja elegida. Anular el comprobante quita el movimiento.";
-      };
       tipo?.addEventListener("change", () => {
         const opt = tipo.selectedOptions[0];
         if (opt && !state.editingDoc) $("#c-serie").value = opt.dataset.serie || "F001";
         syncItemIgvControls();
         recalcItems();
-        syncCajaHint();
       });
-      $("#c-operacion")?.addEventListener("change", syncCajaHint);
-      syncCajaHint();
       $("#btn-add-item")?.addEventListener("click", () => {
         $("#items-editor").insertAdjacentHTML("beforeend", itemRowHtml(1));
         bindItemEvents();
@@ -3532,8 +3467,8 @@
         body.zona = (body.zona || "").trim() || null;
         body.motivo = (body.motivo || "").trim() || null;
         body.observaciones = (body.observaciones || "").trim() || null;
-        body.operacion = body.operacion === "compra" ? "compra" : "venta";
-        body.caja_id = body.caja_id ? Number(body.caja_id) : null;
+        delete body.operacion;
+        delete body.caja_id;
         const permiteIgv = tipoPermiteIgv(body.tipo);
         body.items = $$("[data-item]").map((row) => ({
           descripcion: $('[data-k="descripcion"]', row).value,
@@ -3840,7 +3775,7 @@
         b.addEventListener("click", async () => {
           try {
             await API.updateCaja(b.dataset.cajaPrincipal, { es_principal: true });
-            toast("Caja principal actualizada. Las ventas y compras nuevas se registran aquí.");
+            toast("Caja principal actualizada.");
             renderApp();
           } catch (ex) {
             toast(ex.message);
@@ -4937,16 +4872,14 @@
       else if (state.route === "reporte") html = await viewReporteForm(params);
       else if (state.route === "nuevo") {
         const editId = params.id ? Number(params.id) : null;
-        const [clientes, productos, doc, cajas] = await Promise.all([
+        const [clientes, productos, doc] = await Promise.all([
           API.listClientes(),
           API.listProductos(),
           editId ? API.request(`/api/comprobantes/${editId}`) : Promise.resolve(null),
-          API.listCajas().catch(() => []),
         ]);
         if (seq !== renderSeq) return;
         state.clientes = clientes;
         state.productos = productos;
-        state.cajas = cajas;
         state.editingDoc = doc;
         html = viewNuevoForm(doc);
       } else if (state.route === "agenda") {

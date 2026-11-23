@@ -27,6 +27,7 @@ from app.routers import (
     reportes,
 )
 from app.services.adjuntos import migrar_adjuntos_legados
+from app.services.caja_comprobante import desvincular_comprobantes_de_cajas
 from app.services.reminders import procesar_recordatorios
 from app.services.seed import ensure_demo_user
 from app.services.vapid_keys import ensure_vapid_keys
@@ -39,6 +40,8 @@ Base.metadata.create_all(bind=engine)
 ensure_schema()
 with SessionLocal() as _db:
     migrar_adjuntos_legados(_db)
+with SessionLocal() as _db:
+    desvincular_comprobantes_de_cajas(_db)
 ensure_demo_user()
 ensure_vapid_keys(settings)
 

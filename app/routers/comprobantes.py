@@ -26,11 +26,7 @@ from app.services.adjuntos import (
     listar_adjuntos,
     map_adjuntos_por_entidad,
 )
-from app.services.caja_comprobante import (
-    eliminar_movimiento_comprobante,
-    sincronizar_movimiento_comprobante,
-    validar_caja,
-)
+from app.services.caja_comprobante import eliminar_movimiento_comprobante
 from app.services.catalogo import upsert_cliente, upsert_productos_desde_items
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS, calcular_totales
 from app.services.email_service import enviar_correo
@@ -283,13 +279,11 @@ def crear(
         cliente_nombre=payload.cliente_nombre,
         cliente_documento=payload.cliente_documento,
         operacion=payload.operacion,
+        caja_id=None,
     )
     db.add(doc)
     db.flush()
     _aplicar_items(doc, payload.items, payload.tipo)
-    if payload.caja_id is not None:
-        doc.caja_id = validar_caja(db, user, payload.caja_id).id
-    sincronizar_movimiento_comprobante(db, user, doc)
     db.commit()
     db.refresh(doc)
     return _doc_out(db, _get_owned(db, user, doc.id))
@@ -314,20 +308,14 @@ def actualizar(
     doc = _get_owned(db, user, comprobante_id)
     data = payload.model_dump(exclude_unset=True)
     items = data.pop("items", None)
-    caja_en_payload = "caja_id" in data
-    caja_id = data.pop("caja_id", None)
+    data.pop("caja_id", None)
+    data.pop("operacion", None)
     for key in ("zona", "motivo", "observaciones"):
         if key in data and isinstance(data[key], str):
             data[key] = data[key].strip() or None
     for key, value in data.items():
         setattr(doc, key, value.upper() if key == "serie" and isinstance(value, str) else value)
-    if caja_en_payload:
-        if caja_id is None:
-            doc.caja_id = None
-        else:
-            doc.caja_id = validar_caja(
-                db, user, caja_id, permitir_inactiva=doc.caja_id == caja_id
-            ).id
+    doc.caja_id = None
 
     nombre = data.get("cliente_nombre", doc.cliente_nombre)
     documento = data.get("cliente_documento", doc.cliente_documento)
@@ -337,7 +325,7 @@ def actualizar(
     if items is not None:
         upsert_productos_desde_items(db, user.id, payload.items)
         _aplicar_items(doc, payload.items, doc.tipo)
-    sincronizar_movimiento_comprobante(db, user, doc)
+    eliminar_movimiento_comprobante(db, user.id, doc.id)
     db.commit()
     return _doc_out(db, _get_owned(db, user, doc.id))
 
@@ -359,7 +347,8 @@ def cambiar_estado(
 
     doc = _get_owned(db, user, comprobante_id)
     doc.estado = nuevo
-    sincronizar_movimiento_comprobante(db, user, doc)
+    doc.caja_id = None
+    eliminar_movimiento_comprobante(db, user.id, doc.id)
     db.commit()
     return _doc_out(db, _get_owned(db, user, doc.id))
 
