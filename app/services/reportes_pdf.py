@@ -6,7 +6,7 @@ from datetime import date
 from io import BytesIO
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -18,8 +18,6 @@ GRIS = colors.HexColor("#e5e7eb")
 GRIS_OSCURO = colors.HexColor("#374151")
 BORDE = colors.HexColor("#6b7280")
 ROJO = colors.HexColor("#c0262d")
-MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
-         "octubre", "noviembre", "diciembre"]
 
 
 def _estilo(nombre: str, size: float = 6.5, bold: bool = False, align=None, color=None, leading=None) -> ParagraphStyle:
@@ -66,14 +64,6 @@ def _fecha(valor) -> str:
     except ValueError:
         return _xml(valor)
     return d.strftime("%d/%m/%Y")
-
-
-def _fecha_larga(valor) -> str:
-    try:
-        d = date.fromisoformat(str(valor))
-    except (TypeError, ValueError):
-        return ""
-    return f"{d.day} de {MESES[d.month - 1]} de {d.year}"
 
 
 def _texto_valor(definicion: dict, valor) -> str:
@@ -488,66 +478,10 @@ def _cuerpo(secciones: list[dict], datos: dict, ancho: float, escala: float) -> 
     return story
 
 
-def _carta(formato: dict, numero: str, datos: dict, ancho: float) -> list:
-    st_txt = _estilo("CartaTxt", 10, leading=14, align=TA_JUSTIFY)
-    st_lbl = _estilo("CartaLbl", 10, bold=True, leading=14)
-    st_val = _estilo("CartaVal", 10, leading=14)
-    st_centro = _estilo("CartaCentro", 10, align=TA_CENTER, leading=13)
-    st_anio = _estilo("CartaAnio", 9, align=TA_CENTER, color=colors.HexColor("#374151"))
-
-    anio = (datos.get("fecha") or date.today().isoformat())[:4]
-    entidad = datos.get("entidad")
-    numero_completo = f"{numero}-{entidad}-{anio}" if entidad else f"{numero}-{anio}"
-    story: list = []
-    if datos.get("denominacion_anio"):
-        story += [Paragraph(f"<i>“{_xml(datos['denominacion_anio'])}”</i>", st_anio), Spacer(1, 3 * mm)]
-    story += [_encabezado(formato, numero_completo, ancho), Spacer(1, 6 * mm)]
-
-    medico = datos.get("medico") or ""
-    filas = [
-        ("DE", f"Dr(a). {_xml(medico)}<br/>{_xml(datos.get('cargo_medico') or '')}" if medico else _xml(datos.get("cargo_medico") or "")),
-        ("ASUNTO", _xml(datos.get("asunto") or "")),
-        ("FECHA", _fecha_larga(datos.get("fecha"))),
-        ("H. CLÍNICA LABORAL", _xml(datos.get("historia_clinica") or datos.get("dni") or "")),
-        ("USUARIO", _xml(datos.get("paciente") or "")),
-        ("EDAD", f"{_num(datos['edad'])} años" if datos.get("edad") is not None else ""),
-        ("DNI", _xml(datos.get("dni") or "")),
-    ]
-    t = Table([[Paragraph(k, st_lbl), Paragraph(":", st_lbl), Paragraph(v or "&nbsp;", st_val)] for k, v in filas],
-              colWidths=[42 * mm, 4 * mm, ancho - 46 * mm])
-    t.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 1),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-        ("LEFTPADDING", (0, 0), (-1, -1), 1),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 1),
-        ("LINEBELOW", (0, -1), (-1, -1), 0.8, colors.black),
-    ]))
-    story += [t, Spacer(1, 6 * mm)]
-
-    for parrafo in (datos.get("contenido") or "").split("\n"):
-        story.append(Paragraph(_xml(parrafo) or "&nbsp;", st_txt))
-    story.append(Spacer(1, 6 * mm))
-    if datos.get("cierre"):
-        story += [Paragraph(_xml(datos["cierre"]), st_txt), Spacer(1, 4 * mm)]
-    story += [Paragraph("Atentamente,", st_txt), Spacer(1, 22 * mm)]
-    firma = Table([[""]], colWidths=[70 * mm])
-    firma.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, -1), 0.8, colors.black)]))
-    firma.hAlign = "CENTER"
-    story += [firma, Paragraph(f"<b>Dr(a). {_xml(medico)}</b>" if medico else "&nbsp;", st_centro),
-              Paragraph(_xml(datos.get("cargo_medico") or ""), st_centro), Spacer(1, 8 * mm)]
-    if datos.get("iniciales"):
-        story.append(Paragraph(_xml(datos["iniciales"]), _estilo("CartaIni", 8)))
-    if datos.get("cc"):
-        story.append(Paragraph(f"CC.: {_xml(datos['cc'])}", _estilo("CartaCc", 8)))
-    return story
-
-
 def generar_pdf_reporte(formato: dict, numero: str, datos: dict) -> bytes:
     papel = formato["papel"]
     ancho_pag, alto_pag = papel["ancho_mm"] * mm, papel["alto_mm"] * mm
     ancho = ancho_pag - 2 * MARGEN
-    pie = (datos.get("pie") or "") if formato.get("layout") == "carta" else ""
 
     def nuevo_doc(destino):
         return SimpleDocTemplate(
@@ -556,7 +490,7 @@ def generar_pdf_reporte(formato: dict, numero: str, datos: dict) -> bytes:
             leftMargin=MARGEN,
             rightMargin=MARGEN,
             topMargin=MARGEN,
-            bottomMargin=MARGEN + (10 * mm if pie else 4 * mm),
+            bottomMargin=MARGEN + 4 * mm,
             title=f"{formato['titulo']} {numero}",
         )
 
@@ -586,24 +520,14 @@ def generar_pdf_reporte(formato: dict, numero: str, datos: dict) -> bytes:
 
     def al_pintar(canv, doc_):
         canv.saveState()
-        if pie:
-            p = Paragraph(_xml(pie), _estilo("CartaPie", 7.5, align=TA_CENTER, color=colors.HexColor("#374151")))
-            _, h = p.wrap(ancho, 20 * mm)
-            canv.setStrokeColor(colors.HexColor("#9ca3af"))
-            canv.line(MARGEN, MARGEN + h + 2 * mm, ancho_pag - MARGEN, MARGEN + h + 2 * mm)
-            p.drawOn(canv, MARGEN, MARGEN)
-        else:
-            canv.setFont("Helvetica", 5.5)
-            canv.setFillColor(colors.HexColor("#6b7280"))
-            canv.drawString(MARGEN, MARGEN - 2 * mm, f"{numero} · Formato {papel['etiqueta']}")
-            canv.drawRightString(ancho_pag - MARGEN, MARGEN - 2 * mm, f"Pág. {doc_.page}")
+        canv.setFont("Helvetica", 5.5)
+        canv.setFillColor(colors.HexColor("#6b7280"))
+        canv.drawString(MARGEN, MARGEN - 2 * mm, f"{numero} · Formato {papel['etiqueta']}")
+        canv.drawRightString(ancho_pag - MARGEN, MARGEN - 2 * mm, f"Pág. {doc_.page}")
         canv.restoreState()
 
-    if formato.get("layout") == "carta":
-        story = _carta(formato, numero, datos, ancho)
-    else:
-        story = cara(escala_que_entra(cara))
-        if formato.get("reverso"):
-            story += [PageBreak()] + reverso(escala_que_entra(reverso))
+    story = cara(escala_que_entra(cara))
+    if formato.get("reverso"):
+        story += [PageBreak()] + reverso(escala_que_entra(reverso))
     doc.build(story, onFirstPage=al_pintar, onLaterPages=al_pintar)
     return buffer.getvalue()

@@ -29,7 +29,7 @@ def test_formatos_y_correlativo():
     h = _auth(client, "rep1@negocio.pe")
     formatos = client.get("/api/reportes/formatos", headers=h).json()
     ids = {f["id"] for f in formatos}
-    assert ids == {"rpe", "rpeq18", "rpcam", "roft", "rju", "rpvol", "veo", "medico"}
+    assert ids == {"rpe", "rpeq18", "rpcam", "roft", "rju", "rpvol", "veo"}
     papel = {f["id"]: (f["papel"]["ancho_mm"], f["papel"]["alto_mm"]) for f in formatos}
     assert papel["rpe"] == (230, 296)
     assert papel["rju"] == (297, 230)

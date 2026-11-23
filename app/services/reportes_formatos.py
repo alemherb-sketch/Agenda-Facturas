@@ -841,47 +841,6 @@ FORMATOS: list[dict] = [
             }
         ],
     },
-    {
-        "id": "medico",
-        "codigo": "INF. MÉDICO",
-        "titulo": "Informe Médico",
-        "prefijo": "INF. MÉDICO N° ",
-        "digitos": 4,
-        "inicio": 1,
-        "papel": A4_VERTICAL,
-        "material": "Sin medida establecida · se imprime en A4",
-        "layout": "carta",
-        "resumen": {"equipo": "dni", "responsable": ("campos", ["paciente"])},
-        "cara": [
-            campos(
-                "Encabezado",
-                campo("entidad", "Entidad (va en el N° de informe)", recordar=True, default="MET Salud"),
-                campo("fecha", "Fecha", "date", requerido=True, auto="hoy"),
-                campo("denominacion_anio", "Denominación del año", recordar=True),
-                campo("medico", "De: Dr(a).", recordar=True),
-                campo("cargo_medico", "Cargo del médico", recordar=True, default="Médico Rehabilitador"),
-                campo("asunto", "Asunto", default="Informe Médico"),
-            ),
-            campos(
-                "Paciente",
-                campo("paciente", "Usuario (paciente)", span=2, requerido=True),
-                campo("dni", "DNI", max=12),
-                campo("edad", "Edad", "number"),
-                campo("historia_clinica", "H. Clínica Laboral", auto="copia:dni",
-                      ayuda="Se llena sola con el DNI del paciente"),
-            ),
-            campos(
-                "Contenido",
-                campo("contenido", "Informe", "textarea", span=3, filas=12, max=8000),
-                campo("cierre", "Cierre", span=3, default="Es todo lo que se puede informar."),
-                campo("iniciales", "Iniciales (ej. RCHG/rchg)", recordar=True),
-                campo("cc", "CC.", default="ARCHIVO", recordar=True),
-                campo("pie", "Pie de página", "textarea", span=3, filas=2, recordar=True,
-                      default="Especialistas en: • Medicina Regenerativa del Dolor • Alteraciones del Neurodesarrollo (Autismo, TDAH) • Consultoría en Discapacidad"),
-            ),
-        ],
-        "reverso": None,
-    },
 ]
 
 FORMATOS_POR_ID = {f["id"]: f for f in FORMATOS}
