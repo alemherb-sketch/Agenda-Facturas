@@ -164,3 +164,28 @@ def test_venta_y_compra_mueven_la_caja_elegida():
     assert dash.status_code == 200, dash.text
     cuerpo = dash.json()
     assert float(cuerpo["total_egresos"]) >= 30
+
+
+def test_filtra_comprobantes_por_operacion_y_caja():
+    client = _cliente()
+    headers = _auth(client, "filtros@negocio.pe")
+    principal = _caja(client, headers, "Caja principal", principal=True)
+    yape = _caja(client, headers, "Yape")
+    _doc(client, headers, caja_id=principal["id"], numero="1", operacion="venta", cliente_nombre="Cliente A")
+    _doc(client, headers, caja_id=principal["id"], numero="2", operacion="compra", cliente_nombre="Proveedor B")
+    _doc(client, headers, caja_id=yape["id"], numero="3", operacion="venta", cliente_nombre="Cliente C")
+
+    ingresos = client.get(
+        f"/api/comprobantes?operacion=ingreso&caja_id={principal['id']}", headers=headers
+    ).json()
+    assert [d["numero"] for d in ingresos] == ["1"]
+
+    egresos = client.get("/api/comprobantes?operacion=egreso", headers=headers).json()
+    assert [d["numero"] for d in egresos] == ["2"]
+
+    en_yape = client.get(f"/api/comprobantes?caja_id={yape['id']}", headers=headers).json()
+    assert [d["numero"] for d in en_yape] == ["3"]
+    assert en_yape[0]["caja_nombre"] == "Yape"
+
+    invalido = client.get("/api/comprobantes?operacion=otro", headers=headers)
+    assert invalido.status_code == 400

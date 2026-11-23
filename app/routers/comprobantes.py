@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Comprobante, ComprobanteItem, Usuario
+from app.models import Caja, Comprobante, ComprobanteItem, Usuario
 from app.schemas import (
     AdjuntoOut,
     ComprobanteCreate,
@@ -78,6 +78,8 @@ def listar(
     estado: str | None = None,
     tipo: str | None = None,
     zona: str | None = None,
+    operacion: str | None = None,
+    caja_id: int | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     q: str | None = None,
@@ -89,6 +91,8 @@ def listar(
         estado=estado,
         tipo=tipo,
         zona=zona,
+        operacion=operacion,
+        caja_id=caja_id,
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
         q=q,
@@ -98,6 +102,23 @@ def listar(
     return [_doc_out(db, d, by_id.get(d.id, [])) for d in docs]
 
 
+_OPERACION_FILTRO = {
+    "venta": "venta",
+    "ingreso": "venta",
+    "compra": "compra",
+    "egreso": "compra",
+}
+
+
+def _operacion_guardada(valor: str | None) -> str | None:
+    if not valor or not valor.strip():
+        return None
+    clave = valor.strip().lower()
+    if clave not in _OPERACION_FILTRO:
+        raise HTTPException(status_code=400, detail="Tipo de operación no válido. Use ingreso o egreso")
+    return _OPERACION_FILTRO[clave]
+
+
 def _filtrar_comprobantes(
     db: Session,
     user: Usuario,
@@ -105,6 +126,8 @@ def _filtrar_comprobantes(
     estado: str | None = None,
     tipo: str | None = None,
     zona: str | None = None,
+    operacion: str | None = None,
+    caja_id: int | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     q: str | None = None,
@@ -123,6 +146,11 @@ def _filtrar_comprobantes(
         query = query.filter(Comprobante.tipo == tipo)
     if zona:
         query = query.filter(Comprobante.zona == zona)
+    guardada = _operacion_guardada(operacion)
+    if guardada:
+        query = query.filter(Comprobante.operacion == guardada)
+    if caja_id:
+        query = query.filter(Comprobante.caja_id == caja_id)
     if fecha_desde:
         query = query.filter(Comprobante.fecha_emision >= fecha_desde)
     if fecha_hasta:
@@ -145,6 +173,8 @@ def reporte_pdf(
     estado: str | None = None,
     tipo: str | None = None,
     zona: str | None = None,
+    operacion: str | None = None,
+    caja_id: int | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     q: str | None = None,
@@ -156,16 +186,25 @@ def reporte_pdf(
         estado=estado,
         tipo=tipo,
         zona=zona,
+        operacion=operacion,
+        caja_id=caja_id,
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
         q=q,
     ).limit(limit).all()
+    op = _operacion_guardada(operacion)
+    caja_nombre = None
+    if caja_id:
+        caja = db.query(Caja).filter(Caja.id == caja_id, Caja.usuario_id == user.id).first()
+        caja_nombre = caja.nombre if caja else None
     pdf = generar_pdf_reporte_comprobantes(
         docs,
         filtros={
             "estado": estado,
             "tipo": tipo,
             "zona": zona,
+            "operacion": "Ingreso" if op == "venta" else "Egreso" if op == "compra" else None,
+            "caja": caja_nombre,
             "fecha_desde": fecha_desde.isoformat() if fecha_desde else None,
             "fecha_hasta": fecha_hasta.isoformat() if fecha_hasta else None,
             "q": q,
@@ -185,6 +224,8 @@ def reporte_excel(
     estado: str | None = None,
     tipo: str | None = None,
     zona: str | None = None,
+    operacion: str | None = None,
+    caja_id: int | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     q: str | None = None,
@@ -196,6 +237,8 @@ def reporte_excel(
         estado=estado,
         tipo=tipo,
         zona=zona,
+        operacion=operacion,
+        caja_id=caja_id,
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
         q=q,

@@ -330,6 +330,10 @@ def generar_pdf_reporte_comprobantes(
         filtros_txt.append(
             f"Periodo: {filtros.get('fecha_desde') or '…'} — {filtros.get('fecha_hasta') or '…'}"
         )
+    if filtros.get("operacion"):
+        filtros_txt.append(f"Operación: {filtros['operacion']}")
+    if filtros.get("caja"):
+        filtros_txt.append(f"Caja: {filtros['caja']}")
     if filtros.get("zona"):
         filtros_txt.append(f"Zona: {filtros['zona']}")
     if filtros.get("estado"):

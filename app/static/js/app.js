@@ -34,7 +34,7 @@
     editingAgenda: null,
     editingCliente: null,
     editingProducto: null,
-    filters: { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" },
+    filters: { q: "", estado: "", tipo: "", zona: "", operacion: "", caja_id: "", fecha_desde: "", fecha_hasta: "" },
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -1210,9 +1210,16 @@
     if (state.filters.estado) params.estado = state.filters.estado;
     if (state.filters.tipo) params.tipo = state.filters.tipo;
     if (state.filters.zona) params.zona = state.filters.zona;
+    if (state.filters.operacion) params.operacion = state.filters.operacion;
+    if (state.filters.caja_id) params.caja_id = state.filters.caja_id;
     if (state.filters.fecha_desde) params.fecha_desde = state.filters.fecha_desde;
     if (state.filters.fecha_hasta) params.fecha_hasta = state.filters.fecha_hasta;
-    state.docs = await API.listComprobantes(params);
+    const [docs, cajas] = await Promise.all([
+      API.listComprobantes(params),
+      API.listCajas().catch(() => state.cajas || []),
+    ]);
+    state.docs = docs;
+    state.cajas = cajas;
 
     return `
       <div class="page-head">
@@ -1244,6 +1251,20 @@
           <option value="">Todas las zonas</option>
           ${zonas
             .map((z) => `<option value="${z}" ${state.filters.zona === z ? "selected" : ""}>${z}</option>`)
+            .join("")}
+        </select>
+        <select id="f-operacion">
+          <option value="">Tipo de operación</option>
+          <option value="ingreso" ${state.filters.operacion === "ingreso" ? "selected" : ""}>Ingreso</option>
+          <option value="egreso" ${state.filters.operacion === "egreso" ? "selected" : ""}>Egreso</option>
+        </select>
+        <select id="f-caja">
+          <option value="">Todas las cajas</option>
+          ${(state.cajas || [])
+            .map(
+              (c) =>
+                `<option value="${c.id}" ${String(state.filters.caja_id) === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}</option>`
+            )
             .join("")}
         </select>
         <input id="f-desde" type="date" title="Desde" value="${escapeHtml(state.filters.fecha_desde)}" />
@@ -3368,12 +3389,14 @@
         state.filters.estado = $("#f-estado").value;
         state.filters.tipo = $("#f-tipo").value;
         state.filters.zona = $("#f-zona")?.value || "";
+        state.filters.operacion = $("#f-operacion")?.value || "";
+        state.filters.caja_id = $("#f-caja")?.value || "";
         state.filters.fecha_desde = $("#f-desde")?.value || "";
         state.filters.fecha_hasta = $("#f-hasta")?.value || "";
         renderApp();
       });
       $("#btn-limpiar-filtros")?.addEventListener("click", () => {
-        state.filters = { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" };
+        state.filters = { q: "", estado: "", tipo: "", zona: "", operacion: "", caja_id: "", fecha_desde: "", fecha_hasta: "" };
         renderApp();
       });
       $("#btn-reporte-comp")?.addEventListener("click", async () => {
