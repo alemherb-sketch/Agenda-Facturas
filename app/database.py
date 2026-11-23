@@ -91,6 +91,14 @@ def ensure_schema() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE movimientos_caja ADD COLUMN metodo_pago VARCHAR(20) NOT NULL DEFAULT 'efectivo'"
                     )
+                if "comprobante_id" not in mov_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE movimientos_caja ADD COLUMN comprobante_id INTEGER"
+                    )
+                conn.exec_driver_sql(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_movimiento_comprobante "
+                    "ON movimientos_caja(comprobante_id)"
+                )
 
             comp_cols = {
                 row[1]
@@ -107,6 +115,15 @@ def ensure_schema() -> None:
                     conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN adjunto_mime VARCHAR(120)")
                 if "adjunto_path" not in comp_cols:
                     conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN adjunto_path VARCHAR(500)")
+                if "operacion" not in comp_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE comprobantes ADD COLUMN operacion VARCHAR(10) NOT NULL DEFAULT 'venta'"
+                    )
+                if "caja_id" not in comp_cols:
+                    conn.exec_driver_sql("ALTER TABLE comprobantes ADD COLUMN caja_id INTEGER")
+                conn.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_comprobantes_caja_id ON comprobantes(caja_id)"
+                )
 
             comb_cols = {
                 row[1]
@@ -135,6 +152,10 @@ def ensure_schema() -> None:
                 )
             if caja_cols and "fecha_apertura" not in caja_cols:
                 conn.exec_driver_sql("ALTER TABLE cajas ADD COLUMN fecha_apertura DATE")
+            if caja_cols and "es_principal" not in caja_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE cajas ADD COLUMN es_principal BOOLEAN NOT NULL DEFAULT 0"
+                )
 
             agenda_cols = {
                 row[1] for row in conn.exec_driver_sql("PRAGMA table_info(agendas)").fetchall()
@@ -165,6 +186,15 @@ def ensure_schema() -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS motivo VARCHAR(300)"
             )
+            conn.exec_driver_sql(
+                "ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS operacion VARCHAR(10) NOT NULL DEFAULT 'venta'"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE comprobantes ADD COLUMN IF NOT EXISTS caja_id INTEGER"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_comprobantes_caja_id ON comprobantes(caja_id)"
+            )
             for table in ("comprobantes", "movimientos_caja", "movimientos_combustible"):
                 conn.exec_driver_sql(
                     f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS adjunto_nombre VARCHAR(255)"
@@ -185,7 +215,16 @@ def ensure_schema() -> None:
                 "ALTER TABLE cajas ADD COLUMN IF NOT EXISTS fecha_apertura DATE"
             )
             conn.exec_driver_sql(
+                "ALTER TABLE cajas ADD COLUMN IF NOT EXISTS es_principal BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+            conn.exec_driver_sql(
                 "ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(20) NOT NULL DEFAULT 'efectivo'"
+            )
+            conn.exec_driver_sql(
+                "ALTER TABLE movimientos_caja ADD COLUMN IF NOT EXISTS comprobante_id INTEGER"
+            )
+            conn.exec_driver_sql(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_movimiento_comprobante ON movimientos_caja(comprobante_id)"
             )
             conn.exec_driver_sql(
                 "UPDATE agendas SET estado = 'finalizado' "

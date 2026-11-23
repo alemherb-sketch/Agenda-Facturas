@@ -39,6 +39,9 @@ def resumen(
     for doc in docs:
         por_estado[doc.estado.value] += 1
         por_tipo[TIPO_LABELS.get(doc.tipo, doc.tipo.value)] += 1
+        # Las compras se ven en Cajas (egreso). Aquí el dinero es de ventas.
+        if (doc.operacion or "venta") == "compra":
+            continue
         if doc.estado != EstadoComprobante.ANULADO:
             total_facturado += doc.total
             key = doc.fecha_emision.strftime("%Y-%m")
@@ -80,6 +83,7 @@ def resumen(
         db.query(func.count(Comprobante.id))
         .filter(
             Comprobante.usuario_id == user.id,
+            Comprobante.operacion != "compra",
             Comprobante.estado == EstadoComprobante.NO_PAGADO,
             Comprobante.fecha_vencimiento.is_not(None),
             Comprobante.fecha_vencimiento < hoy,

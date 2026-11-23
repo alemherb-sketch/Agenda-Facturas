@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Caja, MovimientoCaja, TipoMovimientoCaja, Usuario
+from app.models import Caja, Comprobante, MovimientoCaja, TipoMovimientoCaja, Usuario
 from app.schemas import (
     AdjuntoOut,
     CajaCreate,
@@ -69,6 +69,7 @@ def _caja_out(db: Session, caja: Caja) -> CajaOut:
         descripcion=caja.descripcion,
         monto_apertura=apertura,
         fecha_apertura=caja.fecha_apertura,
+        es_principal=bool(caja.es_principal),
         activo=caja.activo,
         saldo=saldo + apertura,
         total_ingresos=ingresos,
@@ -90,6 +91,7 @@ def _mov_out(mov: MovimientoCaja, adjuntos_rows=None) -> MovimientoCajaOut:
         id=mov.id,
         caja_id=mov.caja_id,
         caja_nombre=mov.caja.nombre if mov.caja else "",
+        comprobante_id=mov.comprobante_id,
         tipo=mov.tipo,
         monto=mov.monto,
         metodo_pago=mov.metodo_pago or "efectivo",
@@ -143,7 +145,7 @@ def listar_cajas(
     query = db.query(Caja).filter(Caja.usuario_id == user.id)
     if activas:
         query = query.filter(Caja.activo.is_(True))
-    cajas = query.order_by(Caja.nombre.asc()).all()
+    cajas = query.order_by(Caja.es_principal.desc(), Caja.nombre.asc()).all()
     return [_caja_out(db, c) for c in cajas]
 
 
@@ -161,12 +163,17 @@ def crear_caja(
     )
     if existe:
         raise HTTPException(status_code=400, detail="Ya existe una caja con ese nombre")
+    if payload.es_principal:
+        db.query(Caja).filter(Caja.usuario_id == user.id).update(
+            {Caja.es_principal: False}, synchronize_session="fetch"
+        )
     caja = Caja(
         usuario_id=user.id,
         nombre=nombre,
         descripcion=payload.descripcion,
         monto_apertura=payload.monto_apertura,
         fecha_apertura=payload.fecha_apertura or datetime.now(ZoneInfo("America/Lima")).date(),
+        es_principal=bool(payload.es_principal),
     )
     db.add(caja)
     db.commit()
@@ -436,6 +443,7 @@ def actualizar_caja(
 ):
     caja = _get_caja(db, user, caja_id)
     data = payload.model_dump(exclude_unset=True)
+    quiere_principal = data.pop("es_principal", None)
     if "nombre" in data and data["nombre"]:
         data["nombre"] = data["nombre"].strip()
         dup = (
@@ -451,6 +459,13 @@ def actualizar_caja(
             raise HTTPException(status_code=400, detail="Ya existe una caja con ese nombre")
     for key, value in data.items():
         setattr(caja, key, value)
+    if quiere_principal is True:
+        db.query(Caja).filter(Caja.usuario_id == user.id, Caja.id != caja.id).update(
+            {Caja.es_principal: False}, synchronize_session="fetch"
+        )
+        caja.es_principal = True
+    elif quiere_principal is False:
+        caja.es_principal = False
     db.commit()
     db.refresh(caja)
     return _caja_out(db, caja)
@@ -466,6 +481,7 @@ def eliminar_caja(
     caja = _get_caja(db, user, caja_id)
     if not permanente:
         caja.activo = False
+        caja.es_principal = False
         db.commit()
         return {"ok": True, "archivada": True}
 
@@ -483,6 +499,9 @@ def eliminar_caja(
                 "Archívala o elimina los movimientos primero."
             ),
         )
+    db.query(Comprobante).filter(
+        Comprobante.usuario_id == user.id, Comprobante.caja_id == caja.id
+    ).update({Comprobante.caja_id: None}, synchronize_session="fetch")
     db.delete(caja)
     db.commit()
     return {"ok": True, "eliminada": True}
@@ -566,7 +585,30 @@ def actualizar_movimiento(
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
     data = payload.model_dump(exclude_unset=True)
     if "caja_id" in data and data["caja_id"] is not None:
-        _get_caja(db, user, data["caja_id"])
+        caja_destino = _get_caja(db, user, data["caja_id"])
+        if not caja_destino.activo:
+            raise HTTPException(status_code=400, detail="La caja está inactiva")
+    if mov.comprobante_id:
+        if "tipo" in data and data["tipo"] != mov.tipo:
+            raise HTTPException(
+                status_code=400,
+                detail="Este movimiento lo genera una venta o compra. Edita el comprobante para cambiar el tipo.",
+            )
+        if "monto" in data and Decimal(str(data["monto"])) != Decimal(str(mov.monto)):
+            raise HTTPException(
+                status_code=400,
+                detail="Este movimiento lo genera una venta o compra. Edita el comprobante para cambiar el monto.",
+            )
+        if "fecha" in data and data["fecha"] != mov.fecha:
+            raise HTTPException(
+                status_code=400,
+                detail="Este movimiento lo genera una venta o compra. Edita el comprobante para cambiar la fecha.",
+            )
+        if "concepto" in data and (data["concepto"] or "").strip() != (mov.concepto or ""):
+            raise HTTPException(
+                status_code=400,
+                detail="Este movimiento lo genera una venta o compra. Edita el comprobante para cambiar el concepto.",
+            )
     if "concepto" in data and data["concepto"]:
         data["concepto"] = data["concepto"].strip()
     if "numero_transaccion" in data:
@@ -575,6 +617,14 @@ def actualizar_movimiento(
         data.pop("metodo_pago")
     for key, value in data.items():
         setattr(mov, key, value)
+    if mov.comprobante_id and "caja_id" in data and data["caja_id"] is not None:
+        doc = (
+            db.query(Comprobante)
+            .filter(Comprobante.id == mov.comprobante_id, Comprobante.usuario_id == user.id)
+            .first()
+        )
+        if doc:
+            doc.caja_id = data["caja_id"]
     db.commit()
     db.refresh(mov)
     mov = (
@@ -650,6 +700,14 @@ def eliminar_movimiento(
     )
     if not mov:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+    if mov.comprobante_id:
+        doc = (
+            db.query(Comprobante)
+            .filter(Comprobante.id == mov.comprobante_id, Comprobante.usuario_id == user.id)
+            .first()
+        )
+        if doc and doc.caja_id == mov.caja_id:
+            doc.caja_id = None
     eliminar_adjuntos_entidad(db, ENTIDAD_CAJA, mov.id)
     db.delete(mov)
     db.commit()

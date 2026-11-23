@@ -26,6 +26,11 @@ from app.services.adjuntos import (
     listar_adjuntos,
     map_adjuntos_por_entidad,
 )
+from app.services.caja_comprobante import (
+    eliminar_movimiento_comprobante,
+    sincronizar_movimiento_comprobante,
+    validar_caja,
+)
 from app.services.catalogo import upsert_cliente, upsert_productos_desde_items
 from app.services.comprobante_calc import ESTADO_LABELS, TIPO_LABELS, calcular_totales
 from app.services.email_service import enviar_correo
@@ -38,6 +43,7 @@ router = APIRouter(prefix="/api/comprobantes", tags=["comprobantes"])
 def _doc_out(db: Session, doc: Comprobante, adjuntos_rows=None) -> ComprobanteOut:
     rows = adjuntos_rows if adjuntos_rows is not None else listar_adjuntos(db, ENTIDAD_COMPROBANTE, doc.id)
     out = ComprobanteOut.model_validate(doc)
+    out.caja_nombre = doc.caja.nombre if doc.caja else None
     out.adjuntos = [AdjuntoOut.from_row(r) for r in rows]
     out.tiene_adjunto = bool(out.adjuntos)
     return out
@@ -46,7 +52,7 @@ def _doc_out(db: Session, doc: Comprobante, adjuntos_rows=None) -> ComprobanteOu
 def _get_owned(db: Session, user: Usuario, comprobante_id: int) -> Comprobante:
     doc = (
         db.query(Comprobante)
-        .options(joinedload(Comprobante.items))
+        .options(joinedload(Comprobante.items), joinedload(Comprobante.caja))
         .filter(Comprobante.id == comprobante_id, Comprobante.usuario_id == user.id)
         .first()
     )
@@ -107,7 +113,7 @@ def _filtrar_comprobantes(
         raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
     query = (
         db.query(Comprobante)
-        .options(joinedload(Comprobante.items))
+        .options(joinedload(Comprobante.items), joinedload(Comprobante.caja))
         .filter(Comprobante.usuario_id == user.id)
         .order_by(Comprobante.fecha_emision.desc(), Comprobante.id.desc())
     )
@@ -233,10 +239,14 @@ def crear(
         motivo=(payload.motivo or "").strip() or None,
         cliente_nombre=payload.cliente_nombre,
         cliente_documento=payload.cliente_documento,
+        operacion=payload.operacion,
     )
     db.add(doc)
     db.flush()
     _aplicar_items(doc, payload.items, payload.tipo)
+    if payload.caja_id is not None:
+        doc.caja_id = validar_caja(db, user, payload.caja_id).id
+    sincronizar_movimiento_comprobante(db, user, doc)
     db.commit()
     db.refresh(doc)
     return _doc_out(db, _get_owned(db, user, doc.id))
@@ -261,11 +271,20 @@ def actualizar(
     doc = _get_owned(db, user, comprobante_id)
     data = payload.model_dump(exclude_unset=True)
     items = data.pop("items", None)
+    caja_en_payload = "caja_id" in data
+    caja_id = data.pop("caja_id", None)
     for key in ("zona", "motivo", "observaciones"):
         if key in data and isinstance(data[key], str):
             data[key] = data[key].strip() or None
     for key, value in data.items():
         setattr(doc, key, value.upper() if key == "serie" and isinstance(value, str) else value)
+    if caja_en_payload:
+        if caja_id is None:
+            doc.caja_id = None
+        else:
+            doc.caja_id = validar_caja(
+                db, user, caja_id, permitir_inactiva=doc.caja_id == caja_id
+            ).id
 
     nombre = data.get("cliente_nombre", doc.cliente_nombre)
     documento = data.get("cliente_documento", doc.cliente_documento)
@@ -275,6 +294,7 @@ def actualizar(
     if items is not None:
         upsert_productos_desde_items(db, user.id, payload.items)
         _aplicar_items(doc, payload.items, doc.tipo)
+    sincronizar_movimiento_comprobante(db, user, doc)
     db.commit()
     return _doc_out(db, _get_owned(db, user, doc.id))
 
@@ -296,6 +316,7 @@ def cambiar_estado(
 
     doc = _get_owned(db, user, comprobante_id)
     doc.estado = nuevo
+    sincronizar_movimiento_comprobante(db, user, doc)
     db.commit()
     return _doc_out(db, _get_owned(db, user, doc.id))
 
@@ -339,6 +360,7 @@ def eliminar(
     db: Annotated[Session, Depends(get_db)],
 ):
     doc = _get_owned(db, user, comprobante_id)
+    eliminar_movimiento_comprobante(db, user.id, doc.id)
     eliminar_adjuntos_entidad(db, ENTIDAD_COMPROBANTE, doc.id)
     db.delete(doc)
     db.commit()

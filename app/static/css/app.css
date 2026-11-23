@@ -427,6 +427,26 @@ td.actions .btn + .btn { margin-left: 0.25rem; }
 .badge.reunion { background: #e8f1ff; color: #175cd3; }
 .badge.cita { background: #f3e8ff; color: #6941c6; }
 .badge.nota { background: #f2f4f7; color: #344054; }
+.badge.principal { background: #e4f4ec; color: #0f3d2e; border: 1px solid #b7e4c7; margin-left: .35rem; }
+.badge.venta { background: #dcfae6; color: #067647; }
+.badge.compra { background: #ffefd6; color: #b54708; }
+tr.row-principal td { background: rgba(15, 61, 46, 0.045); }
+.caja-banner {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.caja-banner p { margin: .25rem 0 0; color: var(--muted); }
+.check-row {
+  display: flex;
+  gap: .55rem;
+  align-items: flex-start;
+  font-weight: 600;
+}
+.check-row input { width: auto; margin-top: .2rem; }
 
 .estado-quick-wrap { display: inline-flex; max-width: 100%; }
 select.estado-quick {

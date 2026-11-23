@@ -124,6 +124,8 @@ class ComprobanteCreate(BaseModel):
     cliente_documento: str | None = None
     cliente_email: str | None = None
     cliente_telefono: str | None = None
+    operacion: Literal["venta", "compra"] = "venta"
+    caja_id: int | None = None
     items: list[ItemCreate] = Field(min_length=1)
 
 
@@ -140,6 +142,8 @@ class ComprobanteUpdate(BaseModel):
     motivo: str | None = Field(default=None, max_length=300)
     cliente_nombre: str | None = None
     cliente_documento: str | None = None
+    operacion: Literal["venta", "compra"] | None = None
+    caja_id: int | None = None
     items: list[ItemCreate] | None = None
 
 
@@ -160,6 +164,9 @@ class ComprobanteOut(BaseModel):
     observaciones: str | None
     zona: str | None = None
     motivo: str | None = None
+    operacion: str = "venta"
+    caja_id: int | None = None
+    caja_nombre: str | None = None
     cliente_nombre: str
     cliente_documento: str | None
     items: list[ItemOut]
@@ -342,6 +349,7 @@ class CajaCreate(BaseModel):
     descripcion: str | None = None
     monto_apertura: Decimal = Field(default=Decimal("0.00"), ge=0)
     fecha_apertura: date | None = None
+    es_principal: bool = False
 
 
 class CajaUpdate(BaseModel):
@@ -349,6 +357,7 @@ class CajaUpdate(BaseModel):
     descripcion: str | None = None
     monto_apertura: Decimal | None = Field(default=None, ge=0)
     fecha_apertura: date | None = None
+    es_principal: bool | None = None
     activo: bool | None = None
 
 
@@ -360,6 +369,7 @@ class CajaOut(BaseModel):
     descripcion: str | None = None
     monto_apertura: Decimal = Decimal("0.00")
     fecha_apertura: date | None = None
+    es_principal: bool = False
     activo: bool = True
     saldo: Decimal = Decimal("0.00")
     total_ingresos: Decimal = Decimal("0.00")
@@ -396,6 +406,7 @@ class MovimientoCajaOut(BaseModel):
     id: int
     caja_id: int
     caja_nombre: str
+    comprobante_id: int | None = None
     tipo: TipoMovimientoCaja
     monto: Decimal
     metodo_pago: str = "efectivo"

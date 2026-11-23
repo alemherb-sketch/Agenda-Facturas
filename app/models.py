@@ -169,6 +169,8 @@ class Comprobante(Base):
     observaciones: Mapped[str | None] = mapped_column(Text)
     zona: Mapped[str | None] = mapped_column(String(120))
     motivo: Mapped[str | None] = mapped_column(String(300))
+    operacion: Mapped[str] = mapped_column(String(10), default="venta", nullable=False)
+    caja_id: Mapped[int | None] = mapped_column(ForeignKey("cajas.id", ondelete="SET NULL"), index=True)
     cliente_nombre: Mapped[str] = mapped_column(String(200), nullable=False)
     cliente_documento: Mapped[str | None] = mapped_column(String(15))
     adjunto_nombre: Mapped[str | None] = mapped_column(String(255))
@@ -181,6 +183,7 @@ class Comprobante(Base):
 
     usuario: Mapped[Usuario] = relationship(back_populates="comprobantes")
     cliente: Mapped[Cliente | None] = relationship(back_populates="comprobantes")
+    caja: Mapped[Caja | None] = relationship(foreign_keys=[caja_id])
     items: Mapped[list[ComprobanteItem]] = relationship(
         back_populates="comprobante", cascade="all, delete-orphan"
     )
@@ -272,6 +275,7 @@ class Caja(Base):
     descripcion: Mapped[str | None] = mapped_column(String(250))
     monto_apertura: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     fecha_apertura: Mapped[date | None] = mapped_column(Date)
+    es_principal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -287,6 +291,9 @@ class MovimientoCaja(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
     caja_id: Mapped[int] = mapped_column(ForeignKey("cajas.id"), index=True)
+    comprobante_id: Mapped[int | None] = mapped_column(
+        ForeignKey("comprobantes.id", ondelete="CASCADE"), unique=True, index=True
+    )
     tipo: Mapped[TipoMovimientoCaja] = mapped_column(
         Enum(TipoMovimientoCaja, native_enum=False), nullable=False
     )

@@ -19,7 +19,9 @@
     filtersContacto: { q: "" },
     filtersCombustible: { tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
     draftFromContact: null,
-    charts: { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null, combDia: null, combPlaca: null, combConductor: null, combMarca: null },
+    dashboard: null,
+    cajaDashHome: null,
+    charts: { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null, dashCaja: null, combDia: null, combPlaca: null, combConductor: null, combMarca: null },
     editingDoc: null,
     editingAgenda: null,
     editingCliente: null,
@@ -128,6 +130,7 @@
   function actionIcon(name) {
     const paths = {
       edit: '<path d="M4 20h4L18.5 9.5a1.5 1.5 0 0 0 0-2.1L16.6 5.5a1.5 1.5 0 0 0-2.1 0L4 16v4z"/><path d="M13.2 6.8l4 4"/>',
+      star: '<path d="M12 3.6 14.2 8.2l5 .7-3.6 3.5.9 5.1L12 15.1 7.5 17.5l.9-5.1L4.8 8.9l5-.7L12 3.6z"/>',
       pdf: '<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/>',
       mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="1.5"/><path d="M4 7l8 6 8-6"/>',
       whatsapp: '<path d="M12 4a8 8 0 0 0-6.9 12L4 20l4.2-1.1A8 8 0 1 0 12 4z"/><path d="M9 10.2c.2 1.6 1.8 3.2 3.4 3.6.5.1.9 0 1.2-.3l.6-.7c.2-.2 0-.4-.2-.5l-1-.4c-.2-.1-.4 0-.5.2l-.2.3c-.8-.3-1.4-.9-1.7-1.6l.3-.2c.2-.1.2-.3.1-.5l-.4-1c-.1-.2-.3-.3-.5-.2l-.7.6c-.3.3-.4.7-.4 1.1z"/>',
@@ -697,8 +700,136 @@
   }
 
   /* ---------- Views ---------- */
+  function cajaPrincipalId() {
+    const marcada = state.cajas.find((c) => c.es_principal);
+    if (marcada) return marcada.id;
+    if (state.cajas.length === 1) return state.cajas[0].id;
+    return null;
+  }
+
+  function opcionesCajaHtml(selectedId, extra = null) {
+    const sel = selectedId == null || selectedId === "" ? "" : String(selectedId);
+    const opts = [`<option value="">No registrar en caja</option>`];
+    if (extra && !state.cajas.some((c) => String(c.id) === String(extra.id))) {
+      opts.push(
+        `<option value="${extra.id}" ${sel === String(extra.id) ? "selected" : ""}>${escapeHtml(extra.nombre || "Caja archivada")} (archivada)</option>`
+      );
+    }
+    for (const c of state.cajas) {
+      const mark = c.es_principal ? " (principal)" : "";
+      opts.push(
+        `<option value="${c.id}" ${sel === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}${mark}</option>`
+      );
+    }
+    return opts.join("");
+  }
+
+  function seccionCajasDashboard(cajas, dash, cajaError) {
+    if (cajaError) {
+      return `<div class="panel" style="margin-bottom:1rem"><strong style="font-family:var(--font-display)">Cajas</strong><p style="color:var(--muted)">No se pudo cargar el resumen de cajas.</p></div>`;
+    }
+    if (!cajas.length) {
+      return `
+        <div class="panel" style="margin-bottom:1rem">
+          <div style="display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:center">
+            <strong style="font-family:var(--font-display)">Cajas</strong>
+            <button class="btn btn-secondary btn-sm" data-go="cajas">Configurar cajas</button>
+          </div>
+          <div class="empty"><strong>Sin cajas</strong>Crea una caja y márcala como principal para que las ventas y compras se registren ahí.</div>
+        </div>`;
+    }
+    const principal = cajas.find((c) => c.es_principal);
+    const saldoTotal = cajas.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
+    const rango = dash ? `${fmtDate(dash.fecha_desde)} — ${fmtDate(dash.fecha_hasta)}` : "Mes en curso";
+    const movimientos = dash?.movimientos || [];
+    return `
+      <div class="panel" style="margin-bottom:1rem;padding:0;overflow:hidden">
+        <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:center">
+          <div>
+            <strong style="font-family:var(--font-display)">Cajas</strong>
+            <p style="margin:.2rem 0 0;color:var(--muted);font-size:.85rem">
+              ${principal ? `Principal: ${escapeHtml(principal.nombre)}. ` : "Sin caja principal. "}
+              Ingresos y egresos del ${rango}. Las ventas suman y las compras restan en la caja elegida.
+            </p>
+          </div>
+          <button class="btn btn-secondary btn-sm" data-go="cajas">Ver cajas</button>
+        </div>
+        <div style="padding:1rem">
+          <div class="grid-stats" style="margin:0">
+            <div class="stat ok"><label>Ingresos del período</label><strong>${money(dash?.total_ingresos || 0)}</strong></div>
+            <div class="stat warn"><label>Egresos del período</label><strong>${money(dash?.total_egresos || 0)}</strong></div>
+            <div class="stat"><label>Saldo del período</label><strong>${money(dash?.saldo_periodo || 0)}</strong></div>
+            <div class="stat"><label>Saldo acumulado</label><strong>${money(saldoTotal)}</strong></div>
+          </div>
+        </div>
+        <div class="charts" style="padding:0 1rem">
+          <div class="panel chart-box" style="box-shadow:none">
+            <h3>Ingresos y egresos por día</h3>
+            ${dash?.por_dia?.length ? `<canvas id="chart-dash-caja"></canvas>` : `<div class="empty"><strong>Sin movimientos en el período</strong></div>`}
+          </div>
+          <div class="panel" style="box-shadow:none;padding:0;overflow:hidden">
+            <div style="padding:.2rem 0 .6rem"><h3 style="margin:0">Últimos movimientos</h3></div>
+            ${
+              movimientos.length
+                ? `<div class="table-wrap"><table>
+                    <thead><tr><th>Fecha</th><th>Caja</th><th>Detalle</th><th>Monto</th></tr></thead>
+                    <tbody>
+                    ${movimientos
+                      .map(
+                        (m) => `<tr>
+                        <td>${fmtDate(m.fecha)}</td>
+                        <td>${escapeHtml(m.caja_nombre || "")}</td>
+                        <td>${escapeHtml(m.concepto)}${m.comprobante_id ? `<br><span class="badge venta">Comprobante</span>` : ""}</td>
+                        <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
+                      </tr>`
+                      )
+                      .join("")}
+                    </tbody></table></div>`
+                : `<div class="empty"><strong>Sin movimientos</strong>Registra una venta, una compra o un movimiento manual.</div>`
+            }
+          </div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Caja</th><th>Apertura</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th></tr></thead>
+          <tbody>
+          ${cajas
+            .map(
+              (c) => `<tr class="${c.es_principal ? "row-principal" : ""}">
+              <td><strong>${escapeHtml(c.nombre)}</strong>
+                ${c.es_principal ? `<span class="badge principal">Principal</span>` : ""}
+                ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
+              <td>${money(c.monto_apertura || 0)}</td>
+              <td style="color:var(--ok)">${money(c.total_ingresos)}</td>
+              <td style="color:var(--danger)">${money(c.total_egresos)}</td>
+              <td><strong>${money(c.saldo)}</strong></td>
+            </tr>`
+            )
+            .join("")}
+          </tbody>
+        </table></div>
+      </div>`;
+  }
+
   async function viewDashboard() {
     const d = await API.dashboard();
+    state.dashboard = d;
+    const defaults = defaultCajaDates();
+    let cajas = [];
+    let cajaDash = null;
+    let cajaError = false;
+    try {
+      [cajas, cajaDash] = await Promise.all([
+        API.listCajas(),
+        API.dashboardCajas({
+          fecha_desde: defaults.desde,
+          fecha_hasta: defaults.hasta,
+          limit: 8,
+        }),
+      ]);
+    } catch (_) {
+      cajaError = true;
+    }
+    state.cajaDashHome = cajaDash;
     const hero = isDesktop()
       ? `<div class="dashboard-hero desktop-only">
           <div class="hero-panel">
@@ -733,7 +864,7 @@
       <div class="page-head">
         <div>
           <h1>Dashboard</h1>
-          <p>Indicadores clave de comprobantes y agenda.</p>
+          <p>Indicadores de comprobantes, cajas y agenda.</p>
         </div>
         <button class="btn btn-primary" data-go="nuevo">＋ Registrar comprobante</button>
       </div>
@@ -744,6 +875,7 @@
         <div class="stat warn"><label>Por cobrar</label><strong>${money(d.total_pendiente)}</strong></div>
         <div class="stat danger"><label>Anulado</label><strong>${money(d.total_anulado)}</strong></div>
       </div>
+      ${seccionCajasDashboard(cajas, cajaDash, cajaError)}
       <div class="charts">
         <div class="panel chart-box"><h3>Facturación mensual</h3><canvas id="chart-mes"></canvas></div>
         <div class="panel chart-box"><h3>Por estado</h3><canvas id="chart-estado"></canvas></div>
@@ -836,6 +968,7 @@
       mes: null,
       cajaDia: null,
       cajaPie: null,
+      dashCaja: null,
       combDia: null,
       combPlaca: null,
       combConductor: null,
@@ -902,6 +1035,39 @@
         options: { responsive: true, plugins: { legend: { position: "bottom" } } },
       });
     }
+  }
+
+  function paintDashCajaChart(dash) {
+    state.charts.dashCaja?.destroy?.();
+    state.charts.dashCaja = null;
+    if (typeof Chart === "undefined" || !dash?.por_dia?.length) return;
+    const el = $("#chart-dash-caja");
+    if (!el) return;
+    state.charts.dashCaja = new Chart(el, {
+      type: "bar",
+      data: {
+        labels: dash.por_dia.map((x) => x.fecha.slice(5)),
+        datasets: [
+          {
+            label: "Ingresos",
+            data: dash.por_dia.map((x) => x.ingresos),
+            backgroundColor: "rgba(6, 118, 71, 0.75)",
+            borderRadius: 6,
+          },
+          {
+            label: "Egresos",
+            data: dash.por_dia.map((x) => x.egresos),
+            backgroundColor: "rgba(180, 35, 24, 0.7)",
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: "bottom" } },
+        scales: { y: { beginAtZero: true } },
+      },
+    });
   }
 
   function paintCombustibleCharts(resumen) {
@@ -1085,7 +1251,7 @@
                 .map((d) => {
                   const desc = itemsDescripcion(d);
                   return `<tr>
-                  <td><span class="clip-lines" title="${escapeHtml(tipoLabel(d.tipo))} ${d.serie}-${d.numero}"><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></span></td>
+                  <td><span class="clip-lines" title="${escapeHtml(tipoLabel(d.tipo))} ${d.serie}-${d.numero}"><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></span><br><span class="badge ${d.operacion === "compra" ? "compra" : "venta"}">${d.operacion === "compra" ? "Compra" : "Venta"}</span>${d.caja_nombre ? `<br><span style="color:var(--muted);font-size:.75rem">${escapeHtml(d.caja_nombre)}</span>` : ""}</td>
                   <td><span class="clip-lines" title="${escapeHtml(d.cliente_nombre)}">${escapeHtml(d.cliente_nombre)}</span><span class="cell-clip" style="color:var(--muted);font-size:.8rem">${escapeHtml(d.cliente_documento || "")}</span></td>
                   <td><span class="cell-clip" title="${escapeHtml(d.zona || "")}">${escapeHtml(d.zona || "—")}</span></td>
                   <td><span class="cell-clip" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</span></td>
@@ -1156,6 +1322,20 @@
             </select>
           </div>
           <div class="field">
+            <label>Operación</label>
+            <select name="operacion" id="c-operacion" required>
+              <option value="venta" ${(doc?.operacion || "venta") !== "compra" ? "selected" : ""}>Venta (ingreso)</option>
+              <option value="compra" ${doc?.operacion === "compra" ? "selected" : ""}>Compra (egreso)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Caja</label>
+            <select name="caja_id" id="c-caja">
+              ${opcionesCajaHtml(doc ? doc.caja_id || "" : cajaPrincipalId() || "", doc?.caja_id ? { id: doc.caja_id, nombre: doc.caja_nombre } : null)}
+            </select>
+            <small class="field-hint" id="caja-hint">El total se anota en la caja elegida. Usa «No registrar en caja» si el dinero todavía no entra ni sale.</small>
+          </div>
+          <div class="field">
             <label>Estado</label>
             <select name="estado" required>
               ${(state.meta?.estados || [])
@@ -1188,7 +1368,7 @@
             <small class="field-hint" id="sunat-hint">Busca en SUNAT o elige un cliente del catálogo.</small>
           </div>
           <div class="field">
-            <label>Cliente</label>
+            <label id="c-cliente-label">Cliente</label>
             <input name="cliente_nombre" id="c-cliente" list="lista-clientes" required value="${escapeHtml(clienteNombre)}" placeholder="Nombre o razón social" />
             <datalist id="lista-clientes">
               ${state.clientes
@@ -1656,13 +1836,28 @@
     state.cajaDash = dash;
     state.movimientosCaja = dash.movimientos || [];
     const saldoTotal = cajas.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
+    const principal = cajas.find((c) => c.es_principal);
     const today = new Date().toISOString().slice(0, 10);
+    const bannerPrincipal = principal
+      ? `<div class="panel caja-banner">
+          <div>
+            <strong>Caja principal: ${escapeHtml(principal.nombre)}</strong>
+            <p>Las ventas y compras nuevas se registran en esta caja, salvo que elijas otra al emitir el comprobante.</p>
+          </div>
+          <span class="badge principal">Principal</span>
+        </div>`
+      : `<div class="panel caja-banner">
+          <div>
+            <strong>Sin caja principal</strong>
+            <p>Marca una caja como principal para que las ventas y compras queden ligadas a ella.</p>
+          </div>
+        </div>`;
 
     return `
       <div class="page-head">
         <div>
           <h1>Cajas</h1>
-          <p>Dashboard de movimientos, ingresos y egresos por caja.</p>
+          <p>Dashboard de movimientos, ingresos y egresos por caja. La caja principal recibe las ventas y compras.</p>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-caja">🖨 Imprimir reporte</button>
@@ -1692,6 +1887,7 @@
         <button class="btn btn-secondary" id="btn-filtrar-caja">Filtrar</button>
         <button class="btn btn-ghost" id="btn-caja-mes">Mes actual</button>
       </div>
+      ${bannerPrincipal}
       <div class="grid-stats">
         <div class="stat ok"><label>Ingresos del período</label><strong>${money(dash.total_ingresos)}</strong></div>
         <div class="stat warn"><label>Egresos del período</label><strong>${money(dash.total_egresos)}</strong></div>
@@ -1714,14 +1910,16 @@
               <tbody>
               ${cajas
                 .map(
-                  (c) => `<tr>
+                  (c) => `<tr class="${c.es_principal ? "row-principal" : ""}">
                   <td><strong>${escapeHtml(c.nombre)}</strong>
+                    ${c.es_principal ? `<span class="badge principal">Principal</span>` : ""}
                     ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
                   <td>${money(c.monto_apertura || 0)}${c.fecha_apertura ? `<br><span style="color:var(--muted);font-size:.8rem">${fmtDate(String(c.fecha_apertura).slice(0, 10))}</span>` : ""}</td>
                   <td style="color:var(--ok)">${money(c.total_ingresos)}</td>
                   <td style="color:var(--danger)">${money(c.total_egresos)}</td>
                   <td><strong>${money(c.saldo)}</strong></td>
                   <td class="actions">
+                    ${c.es_principal ? "" : iconBtn(`data-caja-principal="${c.id}"`, "Usar como caja principal", "star")}
                     ${iconBtn(`data-caja-edit="${c.id}"`, "Editar", "edit")}
                     ${iconBtn(`data-caja-arch="${c.id}"`, "Archivar", "archive")}
                     ${iconBtn(`data-caja-del="${c.id}"`, "Eliminar", "delete", "btn-danger")}
@@ -1775,7 +1973,7 @@
                   <td><span class="badge ${m.tipo === "ingreso" ? "pagado" : "anulado"}">${movCajaLabel(m.tipo)}</span></td>
                   <td>${escapeHtml(metodoPagoLabel(m.metodo_pago))}</td>
                   <td>${escapeHtml(m.numero_transaccion || "—")}</td>
-                  <td>${escapeHtml(m.concepto)}</td>
+                  <td>${escapeHtml(m.concepto)}${m.comprobante_id ? `<br><span class="badge venta">Comprobante</span>` : ""}</td>
                   <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
                   <td class="actions">
                     ${iconBtn(`data-mov-edit="${m.id}"`, "Editar", "edit")}
@@ -1990,6 +2188,16 @@
             <input name="fecha_apertura" type="date" required value="${escapeHtml(String(caja?.fecha_apertura || localIsoDate()).slice(0, 10))}" />
           </div>
           <div class="field full">
+            <label class="check-row">
+              <input type="checkbox" name="es_principal" ${(() => {
+                const hayPrincipal = state.cajas.some((c) => c.es_principal && c.id !== caja?.id);
+                const marcada = caja ? caja.es_principal : !hayPrincipal;
+                return marcada ? "checked" : "";
+              })()} />
+              <span>Caja principal para ventas y compras<br><small style="font-weight:500;color:var(--muted)">Solo una caja queda como principal. Las ventas y compras nuevas se registran aquí si no eliges otra.</small></span>
+            </label>
+          </div>
+          <div class="field full">
             <label>Monto de apertura</label>
             <input name="monto_apertura" type="number" min="0" step="0.01" inputmode="decimal" value="${caja ? Number(caja.monto_apertura || 0).toFixed(2) : ""}" placeholder="0.00" />
             <span style="color:var(--muted);font-size:.8rem">Saldo inicial con el que abre la caja. Se suma al saldo y no cuenta como ingreso.</span>
@@ -2002,7 +2210,9 @@
     $("#close-caja").onclick = () => modal.classList.remove("open");
     $("#form-caja").onsubmit = async (e) => {
       e.preventDefault();
-      const body = Object.fromEntries(new FormData(e.target).entries());
+      const form = e.target;
+      const body = Object.fromEntries(new FormData(form).entries());
+      body.es_principal = Boolean(form.elements.es_principal?.checked);
       const apertura = String(body.monto_apertura ?? "").trim();
       body.monto_apertura = apertura === "" ? 0 : Number(apertura);
       if (!Number.isFinite(body.monto_apertura) || body.monto_apertura < 0) {
@@ -2102,7 +2312,7 @@
           <button type="button" class="picker-row" data-comp-id="${d.id}">
             <span>
               <strong>${escapeHtml(tipoLabel(d.tipo))} ${escapeHtml(d.serie)}-${escapeHtml(d.numero)}</strong>
-              <small>${escapeHtml(d.cliente_nombre || "—")} · ${escapeHtml(d.fecha_emision || "")} · ${escapeHtml(estadoLabel(d.estado))}</small>
+              <small>${escapeHtml(d.cliente_nombre || "—")} · ${escapeHtml(d.fecha_emision || "")} · ${escapeHtml(estadoLabel(d.estado))}${d.caja_id ? " · ya en caja" : ""}</small>
             </span>
             <span class="picker-amt">${money(d.total)}</span>
           </button>`
@@ -2151,6 +2361,8 @@
       return openCajaModal();
     }
     const today = modal.dataset.today || new Date().toISOString().slice(0, 10);
+    const linked = Boolean(mov?.comprobante_id);
+    const cajaMarcada = mov?.caja_id || state.filtersCaja.caja_id || cajaPrincipalId() || "";
     modal.classList.add("open");
     modal.innerHTML = `
       <div class="modal">
@@ -2165,25 +2377,30 @@
               ${state.cajas
                 .map(
                   (c) =>
-                    `<option value="${c.id}" ${String(mov?.caja_id || state.filtersCaja.caja_id) === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}</option>`
+                    `<option value="${c.id}" ${String(cajaMarcada) === String(c.id) ? "selected" : ""}>${escapeHtml(c.nombre)}${c.es_principal ? " (principal)" : ""}</option>`
                 )
                 .join("")}
             </select>
           </div>
+          ${
+            linked
+              ? `<div class="field full"><p class="field-hint">Este movimiento lo genera una venta o compra. El monto, la fecha y el concepto se cambian en el comprobante. Aquí puedes cambiar la caja, el método de pago o el número.</p></div>`
+              : ""
+          }
           <div class="field">
             <label>Tipo</label>
-            <select name="tipo" required>
+            <select name="tipo" required ${linked ? "disabled" : ""}>
               <option value="ingreso" ${!mov || mov?.tipo === "ingreso" ? "selected" : ""}>Ingreso</option>
               <option value="egreso" ${mov?.tipo === "egreso" ? "selected" : ""}>Egreso</option>
             </select>
           </div>
           <div class="field">
             <label>Monto (S/)</label>
-            <input name="monto" type="number" min="0.01" step="0.01" required value="${mov?.monto ?? ""}" placeholder="0.00" />
+            <input name="monto" type="number" min="0.01" step="0.01" required value="${mov?.monto ?? ""}" placeholder="0.00" ${linked ? "disabled" : ""} />
           </div>
           <div class="field">
             <label>Fecha</label>
-            <input name="fecha" type="date" required value="${mov?.fecha || today}" />
+            <input name="fecha" type="date" required value="${mov?.fecha || today}" ${linked ? "disabled" : ""} />
           </div>
           <div class="field full">
             <label>Método de pago</label>
@@ -2200,11 +2417,11 @@
               <input name="numero_transaccion" maxlength="80" value="${escapeHtml(mov?.numero_transaccion || "")}" placeholder="Ej. OP-123456, Yape ref." style="flex:1;min-width:160px" />
               <button class="btn btn-secondary" type="button" id="btn-pick-comprobante">Comprobantes</button>
             </div>
-            <p class="field-hint" id="comp-pick-hint">Puedes buscar un comprobante y rellenar el movimiento.</p>
+            <p class="field-hint" id="comp-pick-hint">Puedes buscar un comprobante y rellenar el movimiento. Si la venta o compra ya tiene caja, no la registres otra vez.</p>
           </div>
           <div class="field full">
             <label>Concepto de transacción</label>
-            <input name="concepto" required maxlength="300" value="${escapeHtml(mov?.concepto || "")}" placeholder="Ej. Venta del día, pago proveedor, transferencia" />
+            <input name="concepto" required maxlength="300" value="${escapeHtml(mov?.concepto || "")}" placeholder="Ej. Venta del día, pago proveedor, transferencia" ${linked ? "disabled" : ""} />
           </div>
           ${adjuntoFieldHtml(mov, "caja")}
           <div class="field full">
@@ -3016,12 +3233,31 @@
 
     if (state.route === "nuevo") {
       const tipo = $("#c-tipo");
+      const syncCajaHint = () => {
+        const op = $("#c-operacion")?.value || "venta";
+        const tipoDoc = $("#c-tipo")?.value || "";
+        const label = $("#c-cliente-label");
+        if (label) label.textContent = op === "compra" ? "Proveedor" : "Cliente";
+        const hint = $("#caja-hint");
+        if (!hint) return;
+        if (tipoDoc === "cotizacion" || tipoDoc === "guia_remision") {
+          hint.textContent = "Cotizaciones y guías no generan ingreso ni egreso en la caja.";
+          return;
+        }
+        hint.textContent =
+          op === "compra"
+            ? "El total se anota como egreso (salida) en la caja elegida. Anular el comprobante quita el movimiento."
+            : "El total se anota como ingreso en la caja elegida. Anular el comprobante quita el movimiento.";
+      };
       tipo?.addEventListener("change", () => {
         const opt = tipo.selectedOptions[0];
         if (opt && !state.editingDoc) $("#c-serie").value = opt.dataset.serie || "F001";
         syncItemIgvControls();
         recalcItems();
+        syncCajaHint();
       });
+      $("#c-operacion")?.addEventListener("change", syncCajaHint);
+      syncCajaHint();
       $("#btn-add-item")?.addEventListener("click", () => {
         $("#items-editor").insertAdjacentHTML("beforeend", itemRowHtml(1));
         bindItemEvents();
@@ -3048,6 +3284,8 @@
         body.zona = (body.zona || "").trim() || null;
         body.motivo = (body.motivo || "").trim() || null;
         body.observaciones = (body.observaciones || "").trim() || null;
+        body.operacion = body.operacion === "compra" ? "compra" : "venta";
+        body.caja_id = body.caja_id ? Number(body.caja_id) : null;
         const permiteIgv = tipoPermiteIgv(body.tipo);
         body.items = $$("[data-item]").map((row) => ({
           descripcion: $('[data-k="descripcion"]', row).value,
@@ -3350,6 +3588,17 @@
         state.filtersCaja.fecha_hasta = d.hasta;
         renderApp();
       });
+      $$("[data-caja-principal]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          try {
+            await API.updateCaja(b.dataset.cajaPrincipal, { es_principal: true });
+            toast("Caja principal actualizada. Las ventas y compras nuevas se registran aquí.");
+            renderApp();
+          } catch (ex) {
+            toast(ex.message);
+          }
+        })
+      );
       $$("[data-caja-edit]").forEach((b) =>
         b.addEventListener("click", () => {
           const caja = state.cajas.find((c) => c.id === Number(b.dataset.cajaEdit));
@@ -3399,7 +3648,11 @@
       );
       $$("[data-mov-del]").forEach((b) =>
         b.addEventListener("click", async () => {
-          if (!confirm("¿Eliminar este movimiento?")) return;
+          const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.movDel));
+          const pregunta = mov?.comprobante_id
+            ? "Este movimiento viene de una venta o compra. Si lo eliminas, ese comprobante dejará de afectar la caja. ¿Continuar?"
+            : "¿Eliminar este movimiento?";
+          if (!confirm(pregunta)) return;
           await API.deleteMovimientoCaja(b.dataset.movDel);
           toast("Movimiento eliminado");
           renderApp();
@@ -3730,14 +3983,16 @@
       else if (state.route === "combustibles") html = await viewCombustibles();
       else if (state.route === "nuevo") {
         const editId = params.id ? Number(params.id) : null;
-        const [clientes, productos, doc] = await Promise.all([
+        const [clientes, productos, doc, cajas] = await Promise.all([
           API.listClientes(),
           API.listProductos(),
           editId ? API.request(`/api/comprobantes/${editId}`) : Promise.resolve(null),
+          API.listCajas().catch(() => []),
         ]);
         if (seq !== renderSeq) return;
         state.clientes = clientes;
         state.productos = productos;
+        state.cajas = cajas;
         state.editingDoc = doc;
         html = viewNuevoForm(doc);
       } else if (state.route === "agenda") {
@@ -3756,14 +4011,9 @@
     bindShell();
     bindView();
 
-    if (state.route === "dashboard") {
-      try {
-        const d = await API.dashboard();
-        if (seq !== renderSeq) return;
-        paintCharts(d);
-      } catch (_) {
-        /* ignore */
-      }
+    if (state.route === "dashboard" && state.dashboard) {
+      paintCharts(state.dashboard);
+      paintDashCajaChart(state.cajaDashHome);
     }
     if (state.route === "cajas" && state.cajaDash) {
       paintCajaCharts(state.cajaDash);
