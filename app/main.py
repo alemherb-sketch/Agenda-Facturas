@@ -23,6 +23,7 @@ from app.routers import (
     dashboard,
     notificaciones,
     productos,
+    reportes,
 )
 from app.services.adjuntos import migrar_adjuntos_legados
 from app.services.reminders import procesar_recordatorios
@@ -76,6 +77,7 @@ app.include_router(productos.router)
 app.include_router(cajas.router)
 app.include_router(combustibles.router)
 app.include_router(contactos.router)
+app.include_router(reportes.router)
 app.include_router(adjuntos.router)
 app.include_router(cron.router)
 

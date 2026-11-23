@@ -18,6 +18,10 @@
     filtersCaja: { caja_id: "", tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
     filtersContacto: { q: "" },
     filtersCombustible: { tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
+    reportes: [],
+    reporteFormatos: null,
+    reporteEdit: null,
+    filtersReporte: { formato: "", q: "", fecha_desde: "", fecha_hasta: "" },
     draftFromContact: null,
     dashboard: null,
     cajaDashHome: null,
@@ -137,6 +141,7 @@
       delete: '<path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M8 7l.8 12h6.4L16 7"/>',
       archive: '<path d="M4 7h16v3H4z"/><path d="M6 10v9h12v-9"/><path d="M10 14h4"/>',
       clip: '<path d="M8 12.5l6.2-6.2a2.2 2.2 0 0 1 3.1 3.1L9.2 17.5a3.4 3.4 0 0 1-4.8-4.8l7.4-7.4"/>',
+      copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="1.5"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
     };
     return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ""}</svg>`;
   }
@@ -597,13 +602,14 @@
       cash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9ZM12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Zm-7.2-6.5h2.2v-.9H4.8v.9Zm12.4 0h2.2v-.9h-2.2v.9Zm-12.4 8.1h2.2v-.9H4.8v.9Zm12.4 0h2.2v-.9h-2.2v.9Z"/></svg>`,
       fuel: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h7.5A1.5 1.5 0 0 1 15 5v12.5a2.5 2.5 0 0 1-2.5 2.5h-4A2.5 2.5 0 0 1 6 17.5V5A1.5 1.5 0 0 1 7.5 3.5H6Zm9.5 3.2 2.2 2.2v7.6a1.8 1.8 0 1 0 1.8-1.8h-.3V9.2L16.8 6.7h-1.3V6.7ZM8 8h4.5v2H8V8Z"/></svg>`,
       bell: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.2 2.2 0 0 0 2.1-1.6H9.9A2.2 2.2 0 0 0 12 22Zm7-5.2V11a7 7 0 1 0-14 0v5.8L3 19v1h18v-1l-2-2.2Z"/></svg>`,
+      report: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3.5h8V5h2.5A1.5 1.5 0 0 1 20 6.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5v-13A1.5 1.5 0 0 1 5.5 5H8V3.5Zm1.5 1.5v1.5h5V5h-5ZM7 10v1.6h10V10H7Zm0 3.5v1.6h10v-1.6H7Zm0 3.5v1.6h6V17H7Z"/></svg>`,
       phone: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 3.8c.5-.5 1.3-.6 1.9-.2l2 1.3c.6.4.8 1.2.5 1.8l-.9 1.8a1.4 1.4 0 0 0 .3 1.6l2.9 2.9c.4.4 1 .5 1.6.3l1.8-.9c.6-.3 1.4-.1 1.8.5l1.3 2c.4.6.3 1.4-.2 1.9l-1.2 1.2c-.6.6-1.5.9-2.4.7-2.2-.4-4.7-1.9-7.3-4.5S5.4 10.2 5 8c-.2-.9.1-1.8.7-2.4L8.2 3.8Z"/></svg>`,
     };
     return icons[name] || "";
   }
 
   function mobileNavHtml() {
-    const moreActive = ["clientes", "productos", "cajas", "combustibles", "contactos", "recordatorios"].includes(state.route);
+    const moreActive = ["clientes", "productos", "cajas", "combustibles", "reportes", "reporte", "contactos", "recordatorios"].includes(state.route);
     const items = [
       ["dashboard", "home", "Inicio"],
       ["comprobantes", "docs", "Docs"],
@@ -627,12 +633,13 @@
       ["productos", "box", "Productos"],
       ["cajas", "cash", "Cajas"],
       ["combustibles", "fuel", "Combustibles"],
+      ["reportes", "report", "Reportes"],
       ["recordatorios", "bell", "Avisos"],
     ];
     return items
       .map(
         ([route, ico, label]) =>
-          `<button type="button" data-route="${route}" class="mobile-more-item ${state.route === route ? "active" : ""}"><span class="mico">${navIcon(ico)}</span><span>${label}</span></button>`
+          `<button type="button" data-route="${route}" class="mobile-more-item ${state.route === route || (route === "reportes" && state.route === "reporte") ? "active" : ""}"><span class="mico">${navIcon(ico)}</span><span>${label}</span></button>`
       )
       .join("");
   }
@@ -647,13 +654,14 @@
       ["productos", "📦", "Productos"],
       ["cajas", "💵", "Cajas"],
       ["combustibles", "⛽", "Combustibles"],
+      ["reportes", "📋", "Reportes"],
       ["nuevo", "＋", "Nuevo"],
       ["agenda", "📅", "Agenda"],
       ["recordatorios", "⏰", "Avisos"],
     ];
     return items
       .map(
-        ([route, ico, label]) => `<button class="nav-btn ${state.route === route ? "active" : ""}" data-route="${route}">
+        ([route, ico, label]) => `<button class="nav-btn ${state.route === route || (route === "reportes" && state.route === "reporte") ? "active" : ""}" data-route="${route}">
           <span class="nav-ico">${ico}</span>${label}
         </button>`
       )
@@ -3660,6 +3668,9 @@
       );
     }
 
+    if (state.route === "reportes") bindReportes();
+    if (state.route === "reporte") bindReporteForm();
+
     if (state.route === "combustibles") {
       $("#btn-new-combustible")?.addEventListener("click", () => openCombustibleModal());
       $("#btn-reporte-comb")?.addEventListener("click", async () => {
@@ -3960,6 +3971,671 @@
     }
   }
 
+  /* ---------- Reportes operativos ---------- */
+  async function ensureFormatosReporte() {
+    if (!state.reporteFormatos) state.reporteFormatos = await API.formatosReportes();
+    return state.reporteFormatos;
+  }
+
+  const formatoReporte = (id) => (state.reporteFormatos || []).find((f) => f.id === id);
+  const seccionesReporte = (fmt) => [...(fmt?.cara || []), ...(fmt?.reverso || [])];
+
+  function medidaReporte(fmt) {
+    const lados = fmt.reverso ? "Cara y reverso" : "Solo cara";
+    return `${lados} · ${fmt.papel.etiqueta}`;
+  }
+
+  function numeroReporte(fmt, numero) {
+    return `${fmt.prefijo}${String(numero).padStart(fmt.digitos, "0")}`;
+  }
+
+  function formatoCardHtml(fmt, count, { picker = false } = {}) {
+    const activo = !picker && state.filtersReporte.formato === fmt.id;
+    return `
+      <div class="rep-card ${activo ? "active" : ""}" ${picker ? `data-rep-nuevo="${fmt.id}"` : `data-rep-filtro="${fmt.id}"`} role="button" tabindex="0">
+        <div class="rep-card-top">
+          <span class="rep-code">${escapeHtml(fmt.codigo)}</span>
+          ${picker ? "" : `<span class="rep-count">${count || 0}</span>`}
+        </div>
+        <strong>${escapeHtml(fmt.titulo)}</strong>
+        <small>${escapeHtml(medidaReporte(fmt))}</small>
+        ${picker ? "" : `<button type="button" class="btn btn-secondary btn-sm" data-rep-nuevo="${fmt.id}">＋ Llenar</button>`}
+      </div>`;
+  }
+
+  async function viewReportes() {
+    const [formatos, lista, conteo] = await Promise.all([
+      ensureFormatosReporte(),
+      API.listReportes(state.filtersReporte),
+      API.conteoReportes(),
+    ]);
+    state.reportes = lista;
+    const f = state.filtersReporte;
+    return `
+      <div class="page-head">
+        <div>
+          <h1>Reportes</h1>
+          <p>Llena los formatos de operación por formulario e imprímelos a su medida (cara y reverso).</p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary" id="btn-nuevo-reporte">＋ Nuevo reporte</button>
+        </div>
+      </div>
+      <div class="rep-cards">${formatos.map((fmt) => formatoCardHtml(fmt, conteo[fmt.id])).join("")}</div>
+      <div class="toolbar panel">
+        <select id="f-rep-formato">
+          <option value="">Todos los formatos</option>
+          ${formatos.map((fmt) => `<option value="${fmt.id}" ${f.formato === fmt.id ? "selected" : ""}>${escapeHtml(fmt.codigo)} · ${escapeHtml(fmt.titulo)}</option>`).join("")}
+        </select>
+        <input id="f-rep-desde" type="date" title="Desde" value="${escapeHtml(f.fecha_desde)}" />
+        <input id="f-rep-hasta" type="date" title="Hasta" value="${escapeHtml(f.fecha_hasta)}" />
+        <input id="f-rep-q" placeholder="N°, equipo, responsable o turno..." value="${escapeHtml(f.q)}" style="flex:1;min-width:160px" />
+        <button class="btn btn-secondary" id="btn-filtrar-rep">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-limpiar-rep">Limpiar</button>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        ${
+          lista.length
+            ? `<div class="table-wrap"><table>
+              <thead><tr>
+                <th>N°</th><th>Formato</th><th>Fecha</th><th>Turno</th><th>Equipo / ref.</th><th>Responsable</th><th class="col-actions">Acciones</th>
+              </tr></thead>
+              <tbody>
+              ${lista
+                .map((r) => {
+                  const fmt = formatoReporte(r.formato);
+                  return `<tr>
+                    <td><strong>${escapeHtml(r.numero_display)}</strong></td>
+                    <td><span class="badge rep-badge">${escapeHtml(fmt?.codigo || r.formato)}</span> ${escapeHtml(r.formato_titulo)}</td>
+                    <td>${fmtDate(r.fecha)}</td>
+                    <td>${escapeHtml(r.turno || "—")}</td>
+                    <td>${escapeHtml(r.equipo || "—")}</td>
+                    <td>${escapeHtml(r.responsable || "—")}</td>
+                    <td class="actions">
+                      ${iconBtn(`data-rep-edit="${r.id}"`, "Editar", "edit")}
+                      ${iconBtn(`data-rep-pdf="${r.id}"`, "Descargar PDF", "pdf")}
+                      ${iconBtn(`data-rep-dup="${r.id}"`, "Duplicar", "copy")}
+                      ${iconBtn(`data-rep-del="${r.id}"`, "Eliminar", "delete", "btn-danger")}
+                    </td>
+                  </tr>`;
+                })
+                .join("")}
+              </tbody></table></div>`
+            : `<div class="empty"><strong>Sin reportes</strong>Elige un formato y llena tu primer reporte.</div>`
+        }
+      </div>
+      <div class="modal-backdrop" id="modal-rep-formato"></div>`;
+  }
+
+  function openFormatoPicker() {
+    const modal = $("#modal-rep-formato");
+    if (!modal) return;
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal modal-wide">
+        <div class="modal-head">
+          <h2>¿Qué reporte vas a llenar?</h2>
+          <button class="btn btn-ghost btn-sm" id="close-rep-formato">Cerrar</button>
+        </div>
+        <div class="rep-cards">${state.reporteFormatos.map((fmt) => formatoCardHtml(fmt, 0, { picker: true })).join("")}</div>
+      </div>`;
+    $("#close-rep-formato").onclick = () => modal.classList.remove("open");
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.classList.remove("open");
+    };
+    $$("[data-rep-nuevo]", modal).forEach((el) =>
+      el.addEventListener("click", () => navigate("reporte", `formato=${el.dataset.repNuevo}`))
+    );
+  }
+
+  async function descargarPdfReporte(rep) {
+    const blob = await API.pdfReporte(rep.id);
+    downloadBlob(blob, `${rep.numero_display.replace(/[^A-Za-z0-9-]+/g, "")}.pdf`);
+  }
+
+  function bindReportes() {
+    $("#btn-nuevo-reporte")?.addEventListener("click", openFormatoPicker);
+    $$("[data-rep-filtro]").forEach((card) =>
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("[data-rep-nuevo]")) return;
+        const id = card.dataset.repFiltro;
+        state.filtersReporte.formato = state.filtersReporte.formato === id ? "" : id;
+        renderApp();
+      })
+    );
+    $$(".rep-cards [data-rep-nuevo]").forEach((b) =>
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigate("reporte", `formato=${b.dataset.repNuevo}`);
+      })
+    );
+    $("#btn-filtrar-rep")?.addEventListener("click", () => {
+      state.filtersReporte = {
+        formato: $("#f-rep-formato")?.value || "",
+        fecha_desde: $("#f-rep-desde")?.value || "",
+        fecha_hasta: $("#f-rep-hasta")?.value || "",
+        q: ($("#f-rep-q")?.value || "").trim(),
+      };
+      renderApp();
+    });
+    $("#btn-limpiar-rep")?.addEventListener("click", () => {
+      state.filtersReporte = { formato: "", q: "", fecha_desde: "", fecha_hasta: "" };
+      renderApp();
+    });
+    $$("[data-rep-edit]").forEach((b) =>
+      b.addEventListener("click", () => navigate("reporte", `id=${b.dataset.repEdit}`))
+    );
+    $$("[data-rep-pdf]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const rep = state.reportes.find((r) => r.id === Number(b.dataset.repPdf));
+        try {
+          await descargarPdfReporte(rep);
+          toast("PDF generado");
+        } catch (ex) {
+          toast(ex.message);
+        }
+      })
+    );
+    $$("[data-rep-dup]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        try {
+          const copia = await API.duplicarReporte(b.dataset.repDup);
+          toast(`Copia creada: ${copia.numero_display}`);
+          navigate("reporte", `id=${copia.id}`);
+        } catch (ex) {
+          toast(ex.message);
+        }
+      })
+    );
+    $$("[data-rep-del]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const rep = state.reportes.find((r) => r.id === Number(b.dataset.repDel));
+        if (!confirm(`¿Eliminar el reporte ${rep?.numero_display || ""}?`)) return;
+        try {
+          await API.deleteReporte(b.dataset.repDel);
+          toast("Reporte eliminado");
+          renderApp();
+        } catch (ex) {
+          toast(ex.message);
+        }
+      })
+    );
+  }
+
+  function valorInicialCampo(c, previo) {
+    if (c.auto === "hoy") return localIsoDate();
+    if (c.recordar && previo && previo[c.id] != null) return previo[c.id];
+    return c.default ?? null;
+  }
+
+  function limiteTexto(c, valor) {
+    const l = c.limite;
+    if (!l || valor === "" || valor == null || Number.isNaN(Number(valor))) return "";
+    const n = Number(valor);
+    const nc = (l.min != null && n <= l.min) || (l.max != null && n >= l.max);
+    return `<span class="badge ${nc ? "anulado" : "pagado"}">${nc ? "NC" : "C"}</span>`;
+  }
+
+  function campoReporteHtml(c, valor) {
+    const v = valor ?? "";
+    const span = c.span >= 3 ? "full" : c.span === 2 ? "span-2" : "";
+    const req = c.requerido ? "required" : "";
+    let input = "";
+    if (c.tipo === "textarea") {
+      input = `<textarea data-rf="${c.id}" rows="${Math.min(c.filas || 3, 8)}" maxlength="${c.max || 4000}" ${req}>${escapeHtml(v)}</textarea>`;
+    } else if (c.tipo === "radio") {
+      input = `<div class="rep-radios">${c.opciones
+        .map(
+          (o) => `<label class="rep-chip"><input type="radio" name="rf-${c.id}" data-rf="${c.id}" value="${escapeHtml(o)}" ${v === o ? "checked" : ""} /><span>${escapeHtml(o)}</span></label>`
+        )
+        .join("")}</div>`;
+    } else if (c.tipo === "select") {
+      input = `<select data-rf="${c.id}" ${req}><option value="">—</option>${c.opciones
+        .map((o) => `<option ${v === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
+        .join("")}</select>`;
+    } else if (c.tipo === "checks") {
+      const elegidos = Array.isArray(v) ? v : [];
+      input = `<div class="rep-checks">${c.opciones
+        .map(
+          (o) => `<label class="rep-chip"><input type="checkbox" data-rf-checks="${c.id}" value="${escapeHtml(o)}" ${elegidos.includes(o) ? "checked" : ""} /><span>${escapeHtml(o)}</span></label>`
+        )
+        .join("")}</div>`;
+    } else if (c.tipo === "check") {
+      input = `<label class="check-row"><input type="checkbox" data-rf="${c.id}" ${v ? "checked" : ""} /> Sí</label>`;
+    } else {
+      const tipo = { number: "number", date: "date", time: "time" }[c.tipo] || "text";
+      const extra = c.tipo === "number" ? 'step="any" inputmode="decimal"' : `maxlength="${c.max || 500}"`;
+      const ro = c.auto?.startsWith("copia:") ? "readonly" : "";
+      input = `<input type="${tipo}" data-rf="${c.id}" value="${escapeHtml(v)}" ${extra} ${req} ${ro} />`;
+      if (c.limite) {
+        input = `<div class="rep-lim-wrap">${input}<span class="rep-lim" data-rf-lim="${c.id}">${limiteTexto(c, v)}</span></div>
+          <small class="field-hint">${escapeHtml(c.limite.texto)}</small>`;
+      }
+    }
+    const ayuda = c.ayuda ? `<small class="field-hint">${escapeHtml(c.ayuda)}</small>` : "";
+    return `<div class="field ${span}"><label>${escapeHtml(c.label)}${c.requerido ? " *" : ""}</label>${input}${ayuda}</div>`;
+  }
+
+  function celdaReporteHtml(sec, col, i, valor) {
+    const attrs = `data-rt="${sec.id}" data-row="${i}" data-col="${col.id}"`;
+    const v = valor ?? "";
+    if (col.tipo === "check") return `<input type="checkbox" ${attrs} ${v ? "checked" : ""} />`;
+    if (col.tipo === "select") {
+      return `<select ${attrs}><option value=""></option>${col.opciones
+        .map((o) => `<option ${v === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
+        .join("")}</select>`;
+    }
+    if (col.tipo === "multi") {
+      const elegidos = Array.isArray(v) ? v : [];
+      return `<div class="rep-multi">${col.opciones
+        .map(
+          (o) => `<label><input type="checkbox" ${attrs} value="${escapeHtml(o)}" ${elegidos.includes(o) ? "checked" : ""} /><span>${escapeHtml(o)}</span></label>`
+        )
+        .join("")}</div>`;
+    }
+    if (col.tipo === "calc") return `<input type="text" ${attrs} readonly tabindex="-1" class="rep-calc" />`;
+    const tipo = { number: "number", time: "time", date: "date" }[col.tipo] || "text";
+    const extra = col.tipo === "number" ? 'step="any" inputmode="decimal"' : `maxlength="${col.max || 200}"`;
+    const lista = col.tipo === "codigo" ? `list="dl-rep-codigos"` : "";
+    return `<input type="${tipo}" ${attrs} value="${escapeHtml(v)}" ${extra} ${lista} />`;
+  }
+
+  function tablaReporteHtml(sec, filas, esNuevo) {
+    const cols = sec.columnas.filter((c) => !c.solo_impresion);
+    const etiquetas = sec.etiquetas_filas;
+    const guia = sec.numerar !== false || etiquetas;
+    const prefill = esNuevo ? sec.prefill || {} : {};
+    const prefillMax = Math.max(0, ...Object.values(prefill).map((l) => l.length));
+    const ultimaConDatos = filas.reduce(
+      (acc, f, i) => (f && Object.values(f).some((x) => x !== "" && x != null && x !== false) ? i : acc),
+      -1
+    );
+    const visibles = etiquetas
+      ? sec.filas
+      : Math.min(sec.filas, Math.max(ultimaConDatos + 2, prefillMax + 1, Math.min(sec.filas, 5)));
+    const hayGrupos = cols.some((c) => c.grupo);
+    let head1 = guia ? `<th rowspan="${hayGrupos ? 2 : 1}">${sec.numerar !== false ? "#" : ""}</th>` : "";
+    let head2 = "";
+    for (let i = 0; i < cols.length; ) {
+      const g = cols[i].grupo;
+      if (!g) {
+        head1 += `<th rowspan="${hayGrupos ? 2 : 1}" style="min-width:${Math.round((cols[i].ancho || 1) * 46)}px">${escapeHtml(cols[i].label)}</th>`;
+        i += 1;
+        continue;
+      }
+      let j = i;
+      while (j < cols.length && cols[j].grupo === g) j += 1;
+      head1 += `<th colspan="${j - i}" class="rep-grupo">${escapeHtml(g)}</th>`;
+      head2 += cols
+        .slice(i, j)
+        .map((c) => `<th style="min-width:${Math.round((c.ancho || 1) * 46)}px">${escapeHtml(c.label)}</th>`)
+        .join("");
+      i = j;
+    }
+    const cuerpo = Array.from({ length: sec.filas }, (_, i) => {
+      const fila = filas[i] || {};
+      const celdas = cols
+        .map((c) => {
+          const v = fila[c.id] ?? (prefill[c.id] ? prefill[c.id][i] : undefined);
+          return `<td>${celdaReporteHtml(sec, c, i, v)}</td>`;
+        })
+        .join("");
+      const etiqueta = etiquetas ? etiquetas[i] : i + 1;
+      return `<tr data-rt-row="${i}" ${i >= visibles ? "hidden" : ""}>${guia ? `<td class="rep-item">${escapeHtml(etiqueta)}</td>` : ""}${celdas}</tr>`;
+    }).join("");
+    const hayTotales = cols.some((c) => c.total) || sec.contar_filas;
+    const totales = hayTotales
+      ? `<tfoot><tr>${guia ? `<td class="rep-item">Σ</td>` : ""}${cols
+          .map((c, idx) =>
+            c.total
+              ? `<td data-rt-total="${c.id}" class="rep-total"></td>`
+              : idx === 0 && sec.contar_filas
+                ? `<td data-rt-count class="rep-total"></td>`
+                : "<td></td>"
+          )
+          .join("")}</tr></tfoot>`
+      : "";
+    const mas =
+      visibles < sec.filas
+        ? `<button type="button" class="btn btn-ghost btn-sm" data-rt-mas="${sec.id}">＋ Agregar fila <small>(hasta ${sec.filas})</small></button>`
+        : "";
+    return `
+      <div class="rep-table-wrap"><table class="rep-table" data-rt-table="${sec.id}">
+        <thead><tr>${head1}</tr>${hayGrupos ? `<tr>${head2}</tr>` : ""}</thead>
+        <tbody>${cuerpo}</tbody>${totales}
+      </table></div>${mas}`;
+  }
+
+  function checklistReporteHtml(sec, marcas) {
+    const evs = sec.evaluadores;
+    const filas = sec.grupos
+      .map(
+        (g) => `
+        <tr class="rep-check-grupo"><td colspan="${2 + evs.length}">${escapeHtml(g.titulo)}</td></tr>
+        ${g.items
+          .map((it) => {
+            const m = marcas?.[it.id] || {};
+            return `<tr>
+              <td class="rep-check-txt">${/^\d+$/.test(it.id) ? `<strong>${it.id}.</strong> ` : ""}${escapeHtml(it.texto)}</td>
+              <td class="rep-item">${escapeHtml(it.rb || "")}</td>
+              ${evs
+                .map(
+                  (ev) => `<td><select data-rc="${sec.id}" data-item="${it.id}" data-ev="${ev.id}">
+                    <option value=""></option>${sec.opciones
+                      .map((o) => `<option ${m[ev.id] === o ? "selected" : ""}>${o}</option>`)
+                      .join("")}</select></td>`
+                )
+                .join("")}
+            </tr>`;
+          })
+          .join("")}`
+      )
+      .join("");
+    return `
+      ${sec.nota ? `<p class="rep-nota">${escapeHtml(sec.nota)}</p>` : ""}
+      <div class="rep-table-wrap"><table class="rep-table rep-checklist">
+        <thead><tr><th>Criterio</th><th>RB</th>${evs.map((e) => `<th>${escapeHtml(e.label)}</th>`).join("")}</tr></thead>
+        <tbody>${filas}</tbody>
+      </table></div>`;
+  }
+
+  function catalogoReporteHtml(sec) {
+    return `
+      <details class="rep-catalogo">
+        <summary>Ver ${escapeHtml(sec.titulo.toLowerCase())} (${sec.grupos.reduce((n, g) => n + g.items.length, 0)})</summary>
+        ${sec.nota ? `<p class="rep-nota">${escapeHtml(sec.nota)}</p>` : ""}
+        <div class="rep-catalogo-grid">
+          ${sec.grupos
+            .map(
+              (g) => `<div><h4>${escapeHtml(g.titulo)}</h4><ul>${g.items
+                .map((it) => `<li><strong>${escapeHtml(it.codigo)}</strong> ${escapeHtml(it.descripcion)}</li>`)
+                .join("")}</ul></div>`
+            )
+            .join("")}
+        </div>
+      </details>`;
+  }
+
+  function seccionReporteHtml(sec, datos, previo, esNuevo) {
+    let cuerpo = "";
+    if (sec.tipo === "campos") {
+      cuerpo = `<div class="form-grid rep-grid">${sec.campos
+        .map((c) => campoReporteHtml(c, esNuevo ? valorInicialCampo(c, previo) : datos[c.id]))
+        .join("")}</div>`;
+    } else if (sec.tipo === "tabla") {
+      cuerpo = tablaReporteHtml(sec, datos[sec.id] || [], esNuevo);
+    } else if (sec.tipo === "checklist") {
+      cuerpo = checklistReporteHtml(sec, datos[sec.id]);
+    } else if (sec.tipo === "catalogo" || sec.tipo === "lista") {
+      cuerpo = catalogoReporteHtml(sec);
+    }
+    return `<section class="panel rep-section">${sec.titulo ? `<h3>${escapeHtml(sec.titulo)}</h3>` : ""}${cuerpo}</section>`;
+  }
+
+  async function viewReporteForm(params) {
+    await ensureFormatosReporte();
+    let rep = null;
+    let fmt = null;
+    let numero = null;
+    let previo = null;
+    if (params.id) {
+      rep = await API.getReporte(params.id);
+      fmt = formatoReporte(rep.formato);
+      numero = rep.numero;
+    } else {
+      fmt = formatoReporte(params.formato);
+      if (!fmt) return `<div class="panel empty"><strong>Formato no encontrado</strong>Vuelve a Reportes y elige un formato.</div>`;
+      const [sig, ultimo] = await Promise.all([API.siguienteReporte(fmt.id), API.ultimoReporte(fmt.id)]);
+      numero = sig.numero;
+      previo = ultimo?.datos || null;
+    }
+    state.reporteEdit = { fmt, rep };
+    const datos = rep?.datos || {};
+    const esNuevo = !rep;
+    const codigos = seccionesReporte(fmt)
+      .filter((s) => s.tipo === "catalogo")
+      .flatMap((s) => s.grupos.flatMap((g) => g.items));
+    const vistos = new Set();
+    const datalist = codigos
+      .filter((it) => (vistos.has(it.codigo) ? false : vistos.add(it.codigo)))
+      .map((it) => `<option value="${escapeHtml(it.codigo)}">${escapeHtml(it.descripcion)}</option>`)
+      .join("");
+    return `
+      <div class="page-head">
+        <div>
+          <h1>${escapeHtml(fmt.titulo)}</h1>
+          <p><span class="badge rep-badge">${escapeHtml(fmt.codigo)}</span> ${escapeHtml(medidaReporte(fmt))}${fmt.papel.a4 ? "" : " · medida del formato"}</p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-ghost" id="btn-rep-cancelar">Volver</button>
+          <button class="btn btn-secondary" id="btn-rep-guardar-pdf">Guardar y PDF</button>
+          <button class="btn btn-primary" id="btn-rep-guardar">${rep ? "Guardar cambios" : "Guardar reporte"}</button>
+        </div>
+      </div>
+      <form id="form-reporte" novalidate>
+        <section class="panel rep-section rep-numero">
+          <div class="field">
+            <label>N° de reporte</label>
+            <div class="rep-numero-input"><span>${escapeHtml(fmt.prefijo)}</span><input type="number" id="rep-numero" min="1" step="1" value="${numero}" required /></div>
+            <small class="field-hint">Correlativo automático; cámbialo si llenas un talonario físico.</small>
+          </div>
+          <div class="rep-papel"><strong>${escapeHtml(fmt.papel.etiqueta)}</strong><small>${escapeHtml(fmt.material || "")}</small></div>
+        </section>
+        <div class="rep-lado">Cara</div>
+        ${(fmt.cara || []).map((s) => seccionReporteHtml(s, datos, previo, esNuevo)).join("")}
+        ${fmt.reverso ? `<div class="rep-lado">Reverso</div>${fmt.reverso.map((s) => seccionReporteHtml(s, datos, previo, esNuevo)).join("")}` : ""}
+        <datalist id="dl-rep-codigos">${datalist}</datalist>
+      </form>`;
+  }
+
+  function valorInputReporte(el, tipo) {
+    if (el.type === "checkbox") return el.checked ? true : null;
+    const v = (el.value || "").trim();
+    if (!v) return null;
+    if (tipo === "number") return Number(v);
+    return v;
+  }
+
+  function recolectarReporte(fmt) {
+    const form = $("#form-reporte");
+    const datos = {};
+    seccionesReporte(fmt).forEach((sec) => {
+      if (sec.tipo === "campos") {
+        sec.campos.forEach((c) => {
+          if (c.tipo === "checks") {
+            datos[c.id] = $$(`[data-rf-checks="${c.id}"]:checked`, form).map((el) => el.value);
+          } else if (c.tipo === "radio") {
+            datos[c.id] = $(`[data-rf="${c.id}"]:checked`, form)?.value || null;
+          } else {
+            const el = $(`[data-rf="${c.id}"]`, form);
+            if (el) datos[c.id] = valorInputReporte(el, c.tipo);
+          }
+        });
+      } else if (sec.tipo === "tabla") {
+        const cols = sec.columnas.filter((c) => !c.solo_impresion && c.tipo !== "calc");
+        datos[sec.id] = Array.from({ length: sec.filas }, (_, i) => {
+          const fila = {};
+          cols.forEach((c) => {
+            const sel = `[data-rt="${sec.id}"][data-row="${i}"][data-col="${c.id}"]`;
+            if (c.tipo === "multi") {
+              const elegidos = $$(`${sel}:checked`, form).map((el) => el.value);
+              if (elegidos.length) fila[c.id] = elegidos;
+              return;
+            }
+            const el = $(sel, form);
+            const v = el ? valorInputReporte(el, c.tipo) : null;
+            if (v !== null) fila[c.id] = v;
+          });
+          return fila;
+        });
+      } else if (sec.tipo === "checklist") {
+        const marcas = {};
+        $$(`[data-rc="${sec.id}"]`, form).forEach((el) => {
+          if (!el.value) return;
+          marcas[el.dataset.item] = { ...(marcas[el.dataset.item] || {}), [el.dataset.ev]: el.value };
+        });
+        datos[sec.id] = marcas;
+      }
+    });
+    return datos;
+  }
+
+  function minutosHora(v) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(v || "");
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+
+  function valorCalc(col, leer) {
+    const calc = col.calc || {};
+    if (calc.tipo === "duracion") {
+      const a = minutosHora(leer(calc.desde));
+      const b = minutosHora(leer(calc.hasta));
+      return a == null || b == null ? null : (((b - a) % 1440) + 1440) % 1440;
+    }
+    if (calc.tipo === "resta") {
+      const a = leer(calc.a);
+      const b = leer(calc.b);
+      return a === "" || b === "" || a == null || b == null ? null : Math.round((Number(a) - Number(b)) * 100) / 100;
+    }
+    return null;
+  }
+
+  const duracionTexto = (min) => (min == null ? "" : `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "0")}`);
+
+  function recalcularTabla(sec) {
+    const form = $("#form-reporte");
+    const cols = sec.columnas.filter((c) => !c.solo_impresion);
+    const totales = {};
+    let conDatos = 0;
+    for (let i = 0; i < sec.filas; i++) {
+      const leer = (id) => $(`[data-rt="${sec.id}"][data-row="${i}"][data-col="${id}"]`, form)?.value ?? "";
+      let fila = false;
+      cols.forEach((c) => {
+        const el = $(`[data-rt="${sec.id}"][data-row="${i}"][data-col="${c.id}"]`, form);
+        let valor = null;
+        if (c.tipo === "calc") {
+          valor = valorCalc(c, leer);
+          if (el) el.value = valor == null ? "" : c.calc.tipo === "duracion" ? duracionTexto(valor) : valor;
+        } else if (el) {
+          const v = el.type === "checkbox" ? el.checked : el.value;
+          if (v) fila = true;
+          if (c.tipo === "number" && el.value !== "") valor = Number(el.value);
+        }
+        if (c.total && valor != null) totales[c.id] = (totales[c.id] || 0) + valor;
+      });
+      if (fila) conDatos += 1;
+    }
+    cols
+      .filter((c) => c.total)
+      .forEach((c) => {
+        const cell = $(`[data-rt-table="${sec.id}"] [data-rt-total="${c.id}"]`, form);
+        if (!cell) return;
+        const v = totales[c.id];
+        cell.textContent = v == null ? "" : c.calc?.tipo === "duracion" ? duracionTexto(v) : Math.round(v * 100) / 100;
+      });
+    const count = $(`[data-rt-table="${sec.id}"] [data-rt-count]`, form);
+    if (count) count.textContent = `${conDatos} ${String(sec.contar_filas || "").toLowerCase()}`;
+  }
+
+  async function guardarReporte({ conPdf = false } = {}) {
+    const { fmt, rep } = state.reporteEdit || {};
+    if (!fmt) return;
+    const faltan = seccionesReporte(fmt)
+      .filter((s) => s.tipo === "campos")
+      .flatMap((s) => s.campos)
+      .filter((c) => c.requerido && !$(`[data-rf="${c.id}"]`)?.value?.trim());
+    if (faltan.length) {
+      toast(`Complete: ${faltan.map((c) => c.label).join(", ")}`);
+      $(`[data-rf="${faltan[0].id}"]`)?.focus();
+      return;
+    }
+    const numero = Number($("#rep-numero")?.value) || null;
+    const datos = recolectarReporte(fmt);
+    try {
+      const saved = rep
+        ? await API.updateReporte(rep.id, { numero, datos })
+        : await API.createReporte({ formato: fmt.id, numero, datos });
+      toast(rep ? "Reporte actualizado" : `Reporte ${saved.numero_display} guardado`);
+      if (conPdf) await descargarPdfReporte(saved);
+      navigate("reportes");
+    } catch (ex) {
+      toast(ex.message);
+    }
+  }
+
+  function bindReporteForm() {
+    const { fmt } = state.reporteEdit || {};
+    const form = $("#form-reporte");
+    if (!fmt || !form) return;
+    $("#btn-rep-cancelar")?.addEventListener("click", () => navigate("reportes"));
+    $("#btn-rep-guardar")?.addEventListener("click", () => guardarReporte());
+    $("#btn-rep-guardar-pdf")?.addEventListener("click", () => guardarReporte({ conPdf: true }));
+    form.addEventListener("submit", (e) => e.preventDefault());
+
+    const campos = seccionesReporte(fmt)
+      .filter((s) => s.tipo === "campos")
+      .flatMap((s) => s.campos);
+    campos
+      .filter((c) => c.auto?.startsWith("copia:"))
+      .forEach((c) => {
+        const origen = $(`[data-rf="${c.auto.slice(6)}"]`, form);
+        const destino = $(`[data-rf="${c.id}"]`, form);
+        if (!origen || !destino) return;
+        const copiar = () => (destino.value = origen.value);
+        origen.addEventListener("input", copiar);
+        if (!destino.value) copiar();
+      });
+    campos
+      .filter((c) => c.limite)
+      .forEach((c) => {
+        const el = $(`[data-rf="${c.id}"]`, form);
+        el?.addEventListener("input", () => {
+          const badge = $(`[data-rf-lim="${c.id}"]`, form);
+          if (badge) badge.innerHTML = limiteTexto(c, el.value);
+        });
+      });
+    $$(".rep-radios input[type=radio]", form).forEach((r) =>
+      r.addEventListener("click", () => {
+        if (r.dataset.wasChecked === "1") {
+          r.checked = false;
+          r.dataset.wasChecked = "0";
+        } else {
+          $$(`[name="${r.name}"]`, form).forEach((o) => (o.dataset.wasChecked = "0"));
+          r.dataset.wasChecked = "1";
+        }
+      })
+    );
+    $$(".rep-radios input[type=radio]:checked", form).forEach((r) => (r.dataset.wasChecked = "1"));
+
+    seccionesReporte(fmt)
+      .filter((s) => s.tipo === "tabla")
+      .forEach((sec) => {
+        const tabla = $(`[data-rt-table="${sec.id}"]`, form);
+        if (!tabla) return;
+        if (sec.columnas.some((c) => c.calc || c.total) || sec.contar_filas) {
+          tabla.addEventListener("input", () => recalcularTabla(sec));
+          tabla.addEventListener("change", () => recalcularTabla(sec));
+          recalcularTabla(sec);
+        }
+        $(`[data-rt-mas="${sec.id}"]`, form)?.addEventListener("click", (e) => {
+          const oculta = $("tr[hidden]", tabla);
+          if (oculta) {
+            oculta.removeAttribute("hidden");
+            $("input,select", oculta)?.focus();
+          }
+          if (!$("tr[hidden]", tabla)) e.currentTarget.remove();
+        });
+      });
+    $$("[list=dl-rep-codigos]", form).forEach((el) => {
+      const describir = () => {
+        const op = $(`#dl-rep-codigos option[value="${CSS.escape(el.value)}"]`);
+        el.title = op ? op.textContent : "";
+      };
+      el.addEventListener("change", describir);
+      describir();
+    });
+  }
+
   /* ---------- Render ---------- */
   let renderSeq = 0;
   async function renderApp() {
@@ -3981,6 +4657,8 @@
       else if (state.route === "productos") html = await viewProductos();
       else if (state.route === "cajas") html = await viewCajas();
       else if (state.route === "combustibles") html = await viewCombustibles();
+      else if (state.route === "reportes") html = await viewReportes();
+      else if (state.route === "reporte") html = await viewReporteForm(params);
       else if (state.route === "nuevo") {
         const editId = params.id ? Number(params.id) : null;
         const [clientes, productos, doc, cajas] = await Promise.all([

@@ -372,4 +372,41 @@ const API = {
     [...files].forEach((f) => fd.append("archivos", f));
     return this.request(`/api/combustibles/${id}/adjuntos`, { method: "POST", body: fd });
   },
+  formatosReportes() {
+    return this.request("/api/reportes/formatos");
+  },
+  conteoReportes() {
+    return this.request("/api/reportes/conteo");
+  },
+  listReportes(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/reportes${qs ? `?${qs}` : ""}`);
+  },
+  getReporte(id) {
+    return this.request(`/api/reportes/${id}`);
+  },
+  siguienteReporte(formato) {
+    return this.request(`/api/reportes/siguiente?formato=${encodeURIComponent(formato)}`);
+  },
+  ultimoReporte(formato) {
+    return this.request(`/api/reportes/ultimo?formato=${encodeURIComponent(formato)}`);
+  },
+  createReporte(body) {
+    return this.request("/api/reportes", { method: "POST", body: JSON.stringify(body) });
+  },
+  updateReporte(id, body) {
+    return this.request(`/api/reportes/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  duplicarReporte(id) {
+    return this.request(`/api/reportes/${id}/duplicar`, { method: "POST" });
+  },
+  deleteReporte(id) {
+    return this.request(`/api/reportes/${id}`, { method: "DELETE" });
+  },
+  pdfReporte(id) {
+    return this.request(`/api/reportes/${id}/pdf`, { asBlob: true });
+  },
 };

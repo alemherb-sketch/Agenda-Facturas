@@ -534,3 +534,29 @@ class CombustibleResumenOut(BaseModel):
     por_conductor: list[dict] = []
     por_marca: list[dict] = []
     movimientos: list[MovimientoCombustibleOut] = []
+
+
+class ReporteIn(BaseModel):
+    formato: str = Field(min_length=1, max_length=20)
+    numero: int | None = Field(default=None, ge=1, le=999_999_999)
+    datos: dict = {}
+
+
+class ReporteUpdate(BaseModel):
+    numero: int | None = Field(default=None, ge=1, le=999_999_999)
+    datos: dict | None = None
+
+
+class ReporteOut(BaseModel):
+    id: int
+    formato: str
+    formato_titulo: str
+    numero: int
+    numero_display: str
+    fecha: date
+    turno: str | None = None
+    equipo: str | None = None
+    responsable: str | None = None
+    datos: dict | None = None
+    creado_en: datetime
+    actualizado_en: datetime | None = None

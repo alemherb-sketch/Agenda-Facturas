@@ -358,6 +358,27 @@ class MovimientoCombustible(Base):
     usuario: Mapped[Usuario] = relationship(back_populates="movimientos_combustible")
 
 
+class ReporteOperativo(Base):
+    """Reporte llenado sobre uno de los formatos de app/services/reportes_formatos.py."""
+
+    __tablename__ = "reportes_operativos"
+    __table_args__ = (UniqueConstraint("usuario_id", "formato", "numero", name="uq_reporte_numero"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    formato: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    numero: Mapped[int] = mapped_column(Integer, nullable=False)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    turno: Mapped[str | None] = mapped_column(String(30))
+    equipo: Mapped[str | None] = mapped_column(String(80))
+    responsable: Mapped[str | None] = mapped_column(String(200))
+    datos: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
 class PanelEstado(Base):
     """Lo que el panel de ERPGEST (el proveedor) le ordeno a este sistema: una sola fila, id=1. Ver panel_erpgest.py."""
 
