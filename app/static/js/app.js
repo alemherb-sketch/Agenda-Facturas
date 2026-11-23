@@ -15,9 +15,13 @@
     contactos: [],
     combustibles: [],
     combustibleResumen: null,
+    gastosExternos: [],
+    gastoResumen: null,
+    gastoTipos: [],
     filtersCaja: { caja_id: "", tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
     filtersContacto: { q: "" },
     filtersCombustible: { tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
+    filtersGasto: { tipo: "", q: "", fecha_desde: "", fecha_hasta: "" },
     reportes: [],
     reporteFormatos: null,
     reporteEdit: null,
@@ -603,13 +607,14 @@
       fuel: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h7.5A1.5 1.5 0 0 1 15 5v12.5a2.5 2.5 0 0 1-2.5 2.5h-4A2.5 2.5 0 0 1 6 17.5V5A1.5 1.5 0 0 1 7.5 3.5H6Zm9.5 3.2 2.2 2.2v7.6a1.8 1.8 0 1 0 1.8-1.8h-.3V9.2L16.8 6.7h-1.3V6.7ZM8 8h4.5v2H8V8Z"/></svg>`,
       bell: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.2 2.2 0 0 0 2.1-1.6H9.9A2.2 2.2 0 0 0 12 22Zm7-5.2V11a7 7 0 1 0-14 0v5.8L3 19v1h18v-1l-2-2.2Z"/></svg>`,
       report: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3.5h8V5h2.5A1.5 1.5 0 0 1 20 6.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5v-13A1.5 1.5 0 0 1 5.5 5H8V3.5Zm1.5 1.5v1.5h5V5h-5ZM7 10v1.6h10V10H7Zm0 3.5v1.6h10v-1.6H7Zm0 3.5v1.6h6V17H7Z"/></svg>`,
+      expense: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12A1.5 1.5 0 0 1 19.5 5v15.2L16.2 18l-2.2 2.2L12 18l-2.2 2.2L7.6 18 4.5 20.2V5A1.5 1.5 0 0 1 6 3.5Z"/><path d="M8 8.2h8M8 11.6h5.2"/></svg>`,
       phone: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 3.8c.5-.5 1.3-.6 1.9-.2l2 1.3c.6.4.8 1.2.5 1.8l-.9 1.8a1.4 1.4 0 0 0 .3 1.6l2.9 2.9c.4.4 1 .5 1.6.3l1.8-.9c.6-.3 1.4-.1 1.8.5l1.3 2c.4.6.3 1.4-.2 1.9l-1.2 1.2c-.6.6-1.5.9-2.4.7-2.2-.4-4.7-1.9-7.3-4.5S5.4 10.2 5 8c-.2-.9.1-1.8.7-2.4L8.2 3.8Z"/></svg>`,
     };
     return icons[name] || "";
   }
 
   function mobileNavHtml() {
-    const moreActive = ["clientes", "productos", "cajas", "combustibles", "reportes", "reporte", "contactos", "recordatorios"].includes(state.route);
+    const moreActive = ["clientes", "productos", "cajas", "combustibles", "gastos", "reportes", "reporte", "contactos", "recordatorios"].includes(state.route);
     const items = [
       ["dashboard", "home", "Inicio"],
       ["comprobantes", "docs", "Docs"],
@@ -633,6 +638,7 @@
       ["productos", "box", "Productos"],
       ["cajas", "cash", "Cajas"],
       ["combustibles", "fuel", "Combustibles"],
+      ["gastos", "expense", "Gasto externo"],
       ["reportes", "report", "Reportes"],
       ["recordatorios", "bell", "Avisos"],
     ];
@@ -654,6 +660,7 @@
       ["productos", "📦", "Productos"],
       ["cajas", "💵", "Cajas"],
       ["combustibles", "⛽", "Combustibles"],
+      ["gastos", "💸", "Gasto externo"],
       ["reportes", "📋", "Reportes"],
       ["nuevo", "＋", "Nuevo"],
       ["agenda", "📅", "Agenda"],
@@ -1997,6 +2004,216 @@
       </div>
       <div class="modal-backdrop" id="modal-caja"></div>
       <div class="modal-backdrop" id="modal-mov" data-today="${today}"></div>`;
+  }
+
+  function tiposGasto() {
+    const base = [...(state.meta?.tipos_gasto_externo || [])];
+    (state.gastoTipos || []).forEach((tipo) => {
+      if (!base.some((item) => item.localeCompare(tipo, "es", { sensitivity: "base" }) === 0)) base.push(tipo);
+    });
+    return base;
+  }
+
+  function opcionesTipoGasto(actual = "") {
+    const tipos = tiposGasto();
+    if (actual && !tipos.some((tipo) => tipo.localeCompare(actual, "es", { sensitivity: "base" }) === 0)) {
+      tipos.push(actual);
+    }
+    return tipos;
+  }
+
+  async function viewGastos() {
+    const params = {};
+    if (state.filtersGasto.tipo) params.tipo = state.filtersGasto.tipo;
+    if (state.filtersGasto.q) params.q = state.filtersGasto.q;
+    if (state.filtersGasto.fecha_desde) params.fecha_desde = state.filtersGasto.fecha_desde;
+    if (state.filtersGasto.fecha_hasta) params.fecha_hasta = state.filtersGasto.fecha_hasta;
+    const resumen = await API.resumenGastos(params);
+    state.gastoResumen = resumen;
+    state.gastosExternos = resumen.gastos || [];
+    state.gastoTipos = resumen.tipos || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const tipos = tiposGasto();
+
+    return `
+      <div class="page-head">
+        <div>
+          <h1>Gasto externo</h1>
+          <p>Registra peajes, alimentación, hospedaje y cualquier otro tipo de gasto.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-gasto">＋ Gasto</button>
+      </div>
+      <div class="toolbar panel">
+        <select id="f-gasto-tipo">
+          <option value="">Todos los tipos</option>
+          ${tipos
+            .map(
+              (tipo) =>
+                `<option value="${escapeHtml(tipo)}" ${state.filtersGasto.tipo === tipo ? "selected" : ""}>${escapeHtml(tipo)}</option>`
+            )
+            .join("")}
+        </select>
+        <input id="f-gasto-desde" type="date" title="Desde" value="${escapeHtml(state.filtersGasto.fecha_desde)}" />
+        <input id="f-gasto-hasta" type="date" title="Hasta" value="${escapeHtml(state.filtersGasto.fecha_hasta)}" />
+        <input id="f-gasto-q" placeholder="Concepto, proveedor o comprobante..." value="${escapeHtml(state.filtersGasto.q)}" style="flex:1;min-width:160px" />
+        <button class="btn btn-secondary" id="btn-filtrar-gasto">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-limpiar-gasto">Limpiar</button>
+      </div>
+      <div class="grid-stats">
+        <div class="stat warn"><label>Total</label><strong>${money(resumen.total)}</strong></div>
+        <div class="stat"><label>Registros</label><strong>${resumen.cantidad}</strong></div>
+        <div class="stat"><label>Tipos con gasto</label><strong>${(resumen.por_tipo || []).length}</strong></div>
+      </div>
+      ${
+        (resumen.por_tipo || []).length
+          ? `<div class="grid-stats">
+              ${resumen.por_tipo
+                .map(
+                  (item) => `<div class="stat">
+                    <label>${escapeHtml(item.tipo)}</label>
+                    <strong>${money(item.total)}</strong>
+                    <span class="stat-meta">${item.cantidad} ${item.cantidad === 1 ? "gasto" : "gastos"}</span>
+                  </div>`
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+      <div class="panel" style="padding:0;overflow:hidden">
+        ${
+          state.gastosExternos.length
+            ? `<div class="table-wrap"><table>
+              <thead><tr>
+                <th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Proveedor</th><th>Comprobante</th><th>Pago</th><th>Monto</th><th class="col-actions">Acciones</th>
+              </tr></thead>
+              <tbody>
+              ${state.gastosExternos
+                .map(
+                  (g) => `<tr>
+                  <td>${fmtDate(g.fecha)}</td>
+                  <td><span class="badge nota">${escapeHtml(g.tipo)}</span></td>
+                  <td>${escapeHtml(g.concepto)}</td>
+                  <td>${escapeHtml(g.proveedor || "—")}</td>
+                  <td>${escapeHtml(g.comprobante || "—")}</td>
+                  <td>${escapeHtml(metodoPagoLabel(g.metodo_pago))}</td>
+                  <td><strong>${money(g.monto)}</strong></td>
+                  <td class="actions">
+                    ${iconBtn(`data-gasto-edit="${g.id}"`, "Editar", "edit")}
+                    ${adjuntoBtnHtml(g.id, g.adjuntos, "adjuntos-gasto")}
+                    ${iconBtn(`data-gasto-del="${g.id}"`, "Eliminar", "delete", "btn-danger")}
+                  </td>
+                </tr>`
+                )
+                .join("")}
+              </tbody></table></div>`
+            : `<div class="empty"><strong>Sin gastos</strong>Registra un peaje, alimentación u otro tipo de gasto.</div>`
+        }
+      </div>
+      <div class="modal-backdrop" id="modal-gasto" data-today="${today}"></div>`;
+  }
+
+  function openGastoModal(gasto = null) {
+    const modal = $("#modal-gasto");
+    if (!modal) return;
+    const today = modal.dataset.today || new Date().toISOString().slice(0, 10);
+    const tipos = opcionesTipoGasto(gasto?.tipo || "");
+    const conocido = gasto && tipos.some((tipo) => tipo.localeCompare(gasto.tipo, "es", { sensitivity: "base" }) === 0);
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-head">
+          <h2>${gasto ? "Editar gasto" : "Nuevo gasto externo"}</h2>
+          <button class="btn btn-ghost btn-sm" id="close-gasto" type="button">Cerrar</button>
+        </div>
+        <form id="form-gasto" class="form-grid">
+          <div class="field">
+            <label>Tipo de gasto</label>
+            <select name="tipo" id="gasto-tipo" required>
+              ${tipos
+                .map(
+                  (tipo) =>
+                    `<option value="${escapeHtml(tipo)}" ${conocido && tipo.localeCompare(gasto.tipo, "es", { sensitivity: "base" }) === 0 ? "selected" : ""}>${escapeHtml(tipo)}</option>`
+                )
+                .join("")}
+              <option value="__otro__" ${gasto && !conocido ? "selected" : ""}>Otro tipo…</option>
+            </select>
+          </div>
+          <div class="field" id="gasto-otro-wrap" ${gasto && !conocido ? "" : "hidden"}>
+            <label>Nuevo tipo</label>
+            <input name="tipo_otro" maxlength="80" value="${escapeHtml(gasto && !conocido ? gasto.tipo : "")}" placeholder="Ej. Guardianía, lavado" />
+          </div>
+          <div class="field">
+            <label>Fecha</label>
+            <input name="fecha" type="date" required value="${gasto?.fecha || today}" />
+          </div>
+          <div class="field">
+            <label>Monto (S/)</label>
+            <input name="monto" type="number" min="0.01" step="0.01" required value="${gasto ? Number(gasto.monto).toFixed(2) : ""}" placeholder="0.00" />
+          </div>
+          <div class="field full">
+            <label>Concepto</label>
+            <input name="concepto" required maxlength="300" value="${escapeHtml(gasto?.concepto || "")}" placeholder="Qué se pagó" />
+          </div>
+          <div class="field">
+            <label>Proveedor o a quién se pagó</label>
+            <input name="proveedor" maxlength="200" value="${escapeHtml(gasto?.proveedor || "")}" placeholder="Opcional" />
+          </div>
+          <div class="field">
+            <label>N° de comprobante</label>
+            <input name="comprobante" maxlength="40" value="${escapeHtml(gasto?.comprobante || "")}" placeholder="Boleta, factura o recibo" />
+          </div>
+          <div class="field">
+            <label>Método de pago</label>
+            <select name="metodo_pago">
+              ${METODOS_PAGO_CAJA.map(
+                (m) =>
+                  `<option value="${m.value}" ${(gasto?.metodo_pago || "efectivo") === m.value ? "selected" : ""}>${m.label}</option>`
+              ).join("")}
+            </select>
+          </div>
+          <div class="field full">
+            <label>Notas (opcional)</label>
+            <input name="notas" maxlength="300" value="${escapeHtml(gasto?.notas || "")}" placeholder="Detalle adicional" />
+          </div>
+          ${adjuntoFieldHtml(gasto, "gasto")}
+          <div class="field full">
+            <button class="btn btn-primary" type="submit">${gasto ? "Guardar" : "Registrar gasto"}</button>
+          </div>
+        </form>
+      </div>`;
+    const otro = $("#gasto-otro-wrap");
+    $("#gasto-tipo").addEventListener("change", (e) => {
+      if (e.target.value === "__otro__") otro.removeAttribute("hidden");
+      else otro.setAttribute("hidden", "");
+    });
+    $("#close-gasto").onclick = () => modal.classList.remove("open");
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.classList.remove("open");
+    };
+    bindAdjuntosWidget("gasto", gasto?.adjuntos || []);
+    $("#form-gasto").onsubmit = async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const body = Object.fromEntries(new FormData(form).entries());
+      if (body.tipo === "__otro__") {
+        body.tipo = (body.tipo_otro || "").trim();
+        if (!body.tipo) return toast("Escribe el tipo de gasto");
+      }
+      delete body.tipo_otro;
+      body.monto = Number(body.monto);
+      body.proveedor = (body.proveedor || "").trim() || null;
+      body.comprobante = (body.comprobante || "").trim() || null;
+      body.notas = (body.notas || "").trim() || null;
+      try {
+        const saved = gasto ? await API.updateGasto(gasto.id, body) : await API.createGasto(body);
+        await flushPendingAdjuntos("gasto", saved.id, API.uploadAdjuntosGasto.bind(API));
+        toast(gasto ? "Gasto actualizado" : "Gasto registrado");
+        modal.classList.remove("open");
+        renderApp();
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
   }
 
   async function viewCombustibles() {
@@ -3671,6 +3888,41 @@
     if (state.route === "reportes") bindReportes();
     if (state.route === "reporte") bindReporteForm();
 
+    if (state.route === "gastos") {
+      $("#btn-new-gasto")?.addEventListener("click", () => openGastoModal());
+      $("#btn-filtrar-gasto")?.addEventListener("click", () => {
+        state.filtersGasto.tipo = $("#f-gasto-tipo")?.value || "";
+        state.filtersGasto.q = ($("#f-gasto-q")?.value || "").trim();
+        state.filtersGasto.fecha_desde = $("#f-gasto-desde")?.value || "";
+        state.filtersGasto.fecha_hasta = $("#f-gasto-hasta")?.value || "";
+        renderApp();
+      });
+      $("#btn-limpiar-gasto")?.addEventListener("click", () => {
+        state.filtersGasto = { tipo: "", q: "", fecha_desde: "", fecha_hasta: "" };
+        renderApp();
+      });
+      $$("[data-gasto-edit]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const gasto = state.gastosExternos.find((g) => g.id === Number(b.dataset.gastoEdit));
+          openGastoModal(gasto);
+        })
+      );
+      $$("[data-adjuntos-gasto]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const gasto = state.gastosExternos.find((g) => g.id === Number(b.dataset.adjuntosGasto));
+          openAdjuntosViewer(gasto?.adjuntos || []);
+        })
+      );
+      $$("[data-gasto-del]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (!confirm("¿Eliminar este gasto?")) return;
+          await API.deleteGasto(b.dataset.gastoDel);
+          toast("Gasto eliminado");
+          renderApp();
+        })
+      );
+    }
+
     if (state.route === "combustibles") {
       $("#btn-new-combustible")?.addEventListener("click", () => openCombustibleModal());
       $("#btn-reporte-comb")?.addEventListener("click", async () => {
@@ -4657,6 +4909,7 @@
       else if (state.route === "productos") html = await viewProductos();
       else if (state.route === "cajas") html = await viewCajas();
       else if (state.route === "combustibles") html = await viewCombustibles();
+      else if (state.route === "gastos") html = await viewGastos();
       else if (state.route === "reportes") html = await viewReportes();
       else if (state.route === "reporte") html = await viewReporteForm(params);
       else if (state.route === "nuevo") {

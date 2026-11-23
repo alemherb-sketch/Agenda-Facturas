@@ -47,6 +47,7 @@ MAX_POR_ENTIDAD = 12
 ENTIDAD_COMPROBANTE = "comprobante"
 ENTIDAD_CAJA = "caja"
 ENTIDAD_COMBUSTIBLE = "combustible"
+ENTIDAD_GASTO = "gasto_externo"
 ENTIDAD_AGENDA = "agenda"
 ENTIDAD_CLIENTE = "cliente"
 ENTIDAD_PRODUCTO = "producto"

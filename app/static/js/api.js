@@ -372,6 +372,27 @@ const API = {
     [...files].forEach((f) => fd.append("archivos", f));
     return this.request(`/api/combustibles/${id}/adjuntos`, { method: "POST", body: fd });
   },
+  resumenGastos(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/gastos-externos/resumen${qs ? `?${qs}` : ""}`);
+  },
+  createGasto(body) {
+    return this.request("/api/gastos-externos", { method: "POST", body: JSON.stringify(body) });
+  },
+  updateGasto(id, body) {
+    return this.request(`/api/gastos-externos/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  deleteGasto(id) {
+    return this.request(`/api/gastos-externos/${id}`, { method: "DELETE" });
+  },
+  uploadAdjuntosGasto(id, files) {
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append("archivos", f));
+    return this.request(`/api/gastos-externos/${id}/adjuntos`, { method: "POST", body: fd });
+  },
   formatosReportes() {
     return this.request("/api/reportes/formatos");
   },

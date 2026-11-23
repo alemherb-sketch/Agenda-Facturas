@@ -110,6 +110,9 @@ class Usuario(Base):
     movimientos_combustible: Mapped[list[MovimientoCombustible]] = relationship(
         back_populates="usuario", cascade="all, delete-orphan"
     )
+    gastos_externos: Mapped[list[GastoExterno]] = relationship(
+        back_populates="usuario", cascade="all, delete-orphan"
+    )
 
 
 class Cliente(Base):
@@ -356,6 +359,26 @@ class MovimientoCombustible(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     usuario: Mapped[Usuario] = relationship(back_populates="movimientos_combustible")
+
+
+class GastoExterno(Base):
+    """Gasto que no pasa por la caja: peaje, alimentación, hospedaje u otro tipo."""
+
+    __tablename__ = "gastos_externos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    tipo: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    concepto: Mapped[str] = mapped_column(String(300), nullable=False)
+    monto: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    proveedor: Mapped[str | None] = mapped_column(String(200))
+    comprobante: Mapped[str | None] = mapped_column(String(40))
+    metodo_pago: Mapped[str] = mapped_column(String(20), default="efectivo", nullable=False)
+    notas: Mapped[str | None] = mapped_column(String(300))
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    usuario: Mapped[Usuario] = relationship(back_populates="gastos_externos")
 
 
 class ReporteOperativo(Base):

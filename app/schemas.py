@@ -536,6 +536,59 @@ class CombustibleResumenOut(BaseModel):
     movimientos: list[MovimientoCombustibleOut] = []
 
 
+class GastoExternoCreate(BaseModel):
+    tipo: str = Field(min_length=1, max_length=80)
+    concepto: str = Field(min_length=1, max_length=300)
+    monto: Decimal = Field(gt=0, le=Decimal("999999999.99"))
+    fecha: date
+    proveedor: str | None = Field(default=None, max_length=200)
+    comprobante: str | None = Field(default=None, max_length=40)
+    metodo_pago: Literal["efectivo", "deposito", "yape", "plin"] = "efectivo"
+    notas: str | None = Field(default=None, max_length=300)
+
+
+class GastoExternoUpdate(BaseModel):
+    tipo: str | None = Field(default=None, min_length=1, max_length=80)
+    concepto: str | None = Field(default=None, min_length=1, max_length=300)
+    monto: Decimal | None = Field(default=None, gt=0, le=Decimal("999999999.99"))
+    fecha: date | None = None
+    proveedor: str | None = Field(default=None, max_length=200)
+    comprobante: str | None = Field(default=None, max_length=40)
+    metodo_pago: Literal["efectivo", "deposito", "yape", "plin"] | None = None
+    notas: str | None = Field(default=None, max_length=300)
+
+
+class GastoExternoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tipo: str
+    concepto: str
+    monto: Decimal
+    fecha: date
+    proveedor: str | None = None
+    comprobante: str | None = None
+    metodo_pago: str
+    notas: str | None = None
+    adjuntos: list[AdjuntoOut] = []
+    tiene_adjunto: bool = False
+    creado_en: datetime
+
+
+class GastoTipoTotal(BaseModel):
+    tipo: str
+    total: Decimal
+    cantidad: int
+
+
+class GastoExternoResumenOut(BaseModel):
+    total: Decimal = Decimal("0.00")
+    cantidad: int = 0
+    por_tipo: list[GastoTipoTotal] = []
+    tipos: list[str] = []
+    gastos: list[GastoExternoOut] = []
+
+
 class ReporteIn(BaseModel):
     formato: str = Field(min_length=1, max_length=20)
     numero: int | None = Field(default=None, ge=1, le=999_999_999)

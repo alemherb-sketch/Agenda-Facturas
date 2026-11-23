@@ -191,6 +191,7 @@ a { color: inherit; }
   font-family: var(--font-display);
   font-size: 1.45rem; letter-spacing: -0.02em;
 }
+.stat .stat-meta { display: block; margin-top: .25rem; color: var(--muted); font-size: .8rem; }
 .stat.ok strong { color: var(--ok); }
 .stat.warn strong { color: var(--warn); }
 .stat.danger strong { color: var(--danger); }

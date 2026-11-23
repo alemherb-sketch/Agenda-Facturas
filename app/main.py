@@ -17,6 +17,7 @@ from app.routers import (
     clientes,
     combustibles,
     comprobantes,
+    gastos,
     consulta,
     contactos,
     cron,
@@ -76,6 +77,7 @@ app.include_router(clientes.router)
 app.include_router(productos.router)
 app.include_router(cajas.router)
 app.include_router(combustibles.router)
+app.include_router(gastos.router)
 app.include_router(contactos.router)
 app.include_router(reportes.router)
 app.include_router(adjuntos.router)
@@ -126,6 +128,19 @@ def meta():
         "tipos_movimiento_combustible": [
             {"value": "ingreso", "label": "Ingreso"},
             {"value": "salida", "label": "Salida"},
+        ],
+        "tipos_gasto_externo": [
+            "Peaje",
+            "Alimentación",
+            "Hospedaje",
+            "Pasajes",
+            "Movilidad",
+            "Repuestos",
+            "Materiales",
+            "Servicios",
+            "Viáticos",
+            "Mantenimiento",
+            "Otros",
         ],
     }
 
