@@ -777,6 +777,14 @@
     const principal = cajas.find((c) => c.es_principal);
     const rango = dash ? `${fmtDate(dash.fecha_desde)} — ${fmtDate(dash.fecha_hasta)}` : "Mes en curso";
     const movimientos = dash?.movimientos || [];
+    const saldoPeriodo = Number(dash?.saldo_periodo || 0);
+    const periodoHtml = dash
+      ? `<div class="grid-stats" style="margin:0 0 1rem">
+          <div class="stat ok"><label>Ingresos del período</label><strong>${money(dash.total_ingresos)}</strong><span class="stat-meta">${dash.cantidad_movimientos} movimiento(s) escrito(s)</span></div>
+          <div class="stat warn"><label>Egresos del período</label><strong>${money(dash.total_egresos)}</strong><span class="stat-meta">En la principal, los comprobantes del rango</span></div>
+          <div class="stat ${saldoPeriodo < 0 ? "danger" : ""}"><label>Saldo del período</label><strong>${money(saldoPeriodo)}</strong><span class="stat-meta">${rango}</span></div>
+        </div>`
+      : "";
     return `
       <div class="panel" style="margin-bottom:1rem;padding:0;overflow:hidden">
         <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:center">
@@ -790,6 +798,7 @@
           <button class="btn btn-secondary btn-sm" data-go="cajas">Ver cajas</button>
         </div>
         <div style="padding:1rem">
+          ${periodoHtml}
           ${formulaCajaHtml(cajas, resumen)}
         </div>
         <div class="charts" style="padding:0 1rem">
@@ -797,27 +806,33 @@
             <h3>Ingresos y egresos por día</h3>
             ${dash?.por_dia?.length ? `<canvas id="chart-dash-caja"></canvas>` : `<div class="empty"><strong>Sin movimientos en el período</strong></div>`}
           </div>
-          <div class="panel" style="box-shadow:none;padding:0;overflow:hidden">
-            <div style="padding:.2rem 0 .6rem"><h3 style="margin:0">Últimos movimientos</h3></div>
-            ${
-              movimientos.length
-                ? `<div class="table-wrap"><table>
-                    <thead><tr><th>Fecha</th><th>Caja</th><th>Detalle</th><th>Monto</th></tr></thead>
-                    <tbody>
-                    ${movimientos
-                      .map(
-                        (m) => `<tr>
-                        <td>${fmtDate(m.fecha)}</td>
-                        <td>${escapeHtml(m.caja_nombre || "")}</td>
-                        <td>${escapeHtml(m.concepto)}${m.comprobante_id ? `<br><span class="badge venta">Comprobante</span>` : ""}</td>
-                        <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
-                      </tr>`
-                      )
-                      .join("")}
-                    </tbody></table></div>`
-                : `<div class="empty"><strong>Sin movimientos</strong>Los egresos de la caja principal salen de los comprobantes. Aquí se listan los movimientos escritos a mano.</div>`
-            }
+          <div class="panel chart-box chart-box-pie" style="box-shadow:none">
+            <h3>Movimiento por caja</h3>
+            ${dash?.por_caja?.length ? `<div class="chart-pie-wrap"><canvas id="chart-dash-caja-pie"></canvas></div>` : `<div class="empty"><strong>Sin cajas con movimiento</strong></div>`}
           </div>
+        </div>
+        <div style="padding:0 1rem 1rem">
+          <h3 style="margin:0 0 .6rem">Últimos movimientos</h3>
+          ${
+            movimientos.length
+              ? `<div class="table-wrap"><table>
+                  <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>Pago</th><th>Detalle</th><th>Monto</th></tr></thead>
+                  <tbody>
+                  ${movimientos
+                    .map(
+                      (m) => `<tr>
+                      <td class="nowrap">${fmtDate(m.fecha)}</td>
+                      <td>${escapeHtml(m.caja_nombre || "")}</td>
+                      <td>${escapeHtml(movCajaLabel(m.tipo))}</td>
+                      <td>${escapeHtml(metodoPagoLabel(m.metodo_pago))}${m.numero_transaccion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(m.numero_transaccion)}</span>` : ""}</td>
+                      <td>${escapeHtml(m.concepto)}${m.comprobante_id ? `<br><span class="badge venta">Comprobante</span>` : ""}</td>
+                      <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
+                    </tr>`
+                    )
+                    .join("")}
+                  </tbody></table></div>`
+              : `<div class="empty"><strong>Sin movimientos</strong>Los egresos de la caja principal salen de los comprobantes. Aquí se listan los movimientos escritos a mano.</div>`
+          }
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>Caja</th><th>Apertura</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th></tr></thead>
@@ -828,7 +843,7 @@
               <td><strong>${escapeHtml(c.nombre)}</strong>
                 ${c.es_principal ? `<span class="badge principal">Principal</span>` : ""}
                 ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
-              <td>${money(c.monto_apertura || 0)}</td>
+              <td>${money(c.monto_apertura || 0)}${c.fecha_apertura ? `<br><span style="color:var(--muted);font-size:.8rem">${fmtDate(String(c.fecha_apertura).slice(0, 10))}</span>` : ""}</td>
               <td style="color:var(--ok)">${money(c.total_ingresos)}</td>
               <td style="color:var(--danger)">${money(c.total_egresos)}${c.es_principal ? `<br><span style="color:var(--muted);font-size:.8rem">Comprobantes</span>` : ""}</td>
               <td><strong>${money(c.saldo)}</strong></td>
@@ -859,13 +874,18 @@
     } catch (_) {
       cajaError = true;
     }
+    state.cajas = cajas;
+    state.docs = d.recientes || [];
     state.cajaDashHome = cajaDash;
+    const saldoCajas = cajas.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
+    const principal = cajas.find((c) => c.es_principal);
+    const vencidos = Number(d.documentos_vencidos || 0);
     const hero = isDesktop()
       ? `<div class="dashboard-hero desktop-only">
           <div class="hero-panel">
             <img class="dash-brand-logo" src="/static/img/logo-jaelin.png" alt="JAELIN" />
             <h2>Panel de control</h2>
-            <p>Resumen de tu facturación, cobranzas y agenda. Los datos se sincronizan en tiempo real con tu app móvil.</p>
+            <p>Comprobantes y cajas: facturación, cobros, egresos y saldos.</p>
             <div class="hero-metrics">
               <div><span>Facturado</span><strong>${money(d.total_facturado)}</strong></div>
               <div><span>Cobrado</span><strong>${money(d.total_cobrado)}</strong></div>
@@ -873,39 +893,61 @@
             </div>
           </div>
           <div class="panel">
-            <h3>Hoy en agenda</h3>
-            <p style="margin:0 0 .8rem;color:var(--muted)">${d.agendas_hoy} evento(s) hoy · ${d.agendas_proximas} en los próximos 7 días</p>
-            <p style="margin:0;color:${d.documentos_vencidos ? "var(--danger)" : "var(--ok)"};font-weight:700">
-              ${d.documentos_vencidos} documento(s) vencido(s) sin pago
+            <h3>Cajas y vencimientos</h3>
+            <p style="margin:0 0 .8rem;color:var(--muted)">
+              ${
+                cajaError
+                  ? "No se pudo cargar el saldo de las cajas."
+                  : principal
+                    ? `Caja principal: ${escapeHtml(principal.nombre)}. Saldo de todas las cajas: <strong>${money(saldoCajas)}</strong>.`
+                    : cajas.length
+                      ? `Sin caja principal. Saldo de todas las cajas: <strong>${money(saldoCajas)}</strong>.`
+                      : "Aún no hay cajas configuradas."
+              }
             </p>
+            <p style="margin:0;color:${vencidos ? "var(--danger)" : "var(--ok)"};font-weight:700">
+              ${vencidos} comprobante(s) vencido(s) sin pago
+            </p>
+            <p style="margin:.7rem 0 0;color:var(--muted)">Egresos por comprobantes: <strong>${money(d.total_egresos_comprobantes)}</strong></p>
             <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
               <button class="btn btn-primary btn-sm" data-go="nuevo">Nuevo comprobante</button>
-              <button class="btn btn-secondary btn-sm" data-go="agenda">Programar cita</button>
+              <button class="btn btn-secondary btn-sm" data-go="cajas">Ver cajas</button>
             </div>
           </div>
         </div>`
       : `<div class="panel mobile-hint" style="margin-bottom:1rem">
           <img class="dash-brand-logo" src="/static/img/logo-jaelin.png" alt="JAELIN" style="width:56px;height:56px" />
-          <h3 style="margin:0 0 .4rem;font-family:var(--font-display)">Resumen rápido</h3>
-          <p style="margin:0;color:var(--muted)">Misma información que en PC, optimizada para móvil.</p>
+          <h3 style="margin:0 0 .4rem;font-family:var(--font-display)">Comprobantes y cajas</h3>
+          <p style="margin:0;color:var(--muted)">${vencidos} vencido(s) sin pago · Saldo de cajas ${cajaError ? "no disponible" : money(saldoCajas)}</p>
         </div>`;
 
     return `
       <div class="page-head">
         <div>
           <h1>Dashboard</h1>
-          <p>Indicadores de comprobantes, cajas y agenda.</p>
+          <p>Comprobantes, cajas y los saldos que salen de ellos.</p>
         </div>
-        <button class="btn btn-primary" data-go="nuevo">＋ Registrar comprobante</button>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-secondary" data-go="comprobantes">Comprobantes</button>
+          <button class="btn btn-primary" data-go="nuevo">＋ Registrar comprobante</button>
+        </div>
       </div>
       ${hero}
+      <div style="display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
+        <div>
+          <h2 style="margin:0;font-family:var(--font-display);font-size:1.35rem">Comprobantes</h2>
+          <p style="margin:.25rem 0 0;color:var(--muted)">Cantidad, cobros, anulados, vencidos y documentos recientes.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" data-go="comprobantes">Ver comprobantes</button>
+      </div>
       <div class="grid-stats">
-        <div class="stat"><label>Comprobantes</label><strong>${d.total_comprobantes}</strong></div>
+        <div class="stat"><label>Comprobantes</label><strong>${d.total_comprobantes}</strong><span class="stat-meta">Registrados</span></div>
+        <div class="stat"><label>Facturado</label><strong>${money(d.total_facturado)}</strong><span class="stat-meta">Ventas no anuladas</span></div>
         <div class="stat ok"><label>Cobrado</label><strong>${money(d.total_cobrado)}</strong></div>
         <div class="stat warn"><label>Por cobrar</label><strong>${money(d.total_pendiente)}</strong></div>
         <div class="stat danger"><label>Anulado</label><strong>${money(d.total_anulado)}</strong></div>
+        <div class="stat ${vencidos ? "danger" : "ok"}"><label>Vencidos</label><strong>${vencidos}</strong><span class="stat-meta">Sin pago y con fecha vencida</span></div>
       </div>
-      ${seccionCajasDashboard(cajas, cajaDash, cajaError, d)}
       <div class="charts">
         <div class="panel chart-box"><h3>Facturación mensual</h3><canvas id="chart-mes"></canvas></div>
         <div class="panel chart-box"><h3>Por estado</h3><canvas id="chart-estado"></canvas></div>
@@ -917,13 +959,16 @@
           ${
             d.recientes.length
               ? `<div class="table-wrap"><table>
-                  <thead><tr><th>Documento</th><th>Cliente</th><th>Total</th><th>Estado</th></tr></thead>
+                  <thead><tr><th>Fecha</th><th>Documento</th><th>Cliente</th><th>Zona</th><th>Vence</th><th>Total</th><th>Estado</th></tr></thead>
                   <tbody>
                   ${d.recientes
                     .map(
-                      (r) => `<tr>
-                      <td>${tipoLabel(r.tipo)} ${r.serie}-${r.numero}</td>
+                      (r) => `<tr class="doc-row" data-ver-doc="${r.id}" tabindex="0" title="Ver detalle">
+                      <td class="nowrap">${fmtDate(r.fecha_emision)}</td>
+                      <td>${tipoLabel(r.tipo)} ${escapeHtml(r.serie)}-${escapeHtml(r.numero)}</td>
                       <td>${escapeHtml(r.cliente_nombre)}</td>
+                      <td>${escapeHtml(r.zona || "—")}</td>
+                      <td class="nowrap">${r.fecha_vencimiento ? fmtDate(r.fecha_vencimiento) : "—"}</td>
                       <td>${money(r.total)}</td>
                       <td><span class="badge ${r.estado}">${estadoLabel(r.estado)}</span></td>
                     </tr>`
@@ -933,7 +978,8 @@
               : `<div class="empty"><strong>Sin datos aún</strong>Registra tu primer comprobante.</div>`
           }
         </div>
-      </div>`;
+      </div>
+      ${seccionCajasDashboard(cajas, cajaDash, cajaError, d)}`;
   }
 
   function paintCharts(d) {
@@ -1070,7 +1116,26 @@
   function paintDashCajaChart(dash) {
     state.charts.dashCaja?.destroy?.();
     state.charts.dashCaja = null;
-    if (typeof Chart === "undefined" || !dash?.por_dia?.length) return;
+    state.charts.cajaPie?.destroy?.();
+    state.charts.cajaPie = null;
+    if (typeof Chart === "undefined" || !dash) return;
+    const pieEl = $("#chart-dash-caja-pie");
+    if (pieEl && dash.por_caja?.length) {
+      state.charts.cajaPie = new Chart(pieEl, {
+        type: "doughnut",
+        data: {
+          labels: dash.por_caja.map((x) => x.caja),
+          datasets: [
+            {
+              data: dash.por_caja.map((x) => Math.abs(x.ingresos) + Math.abs(x.egresos)),
+              backgroundColor: ["#0f3d2e", "#1f6b4f", "#c9852a", "#175cd3", "#0f766e", "#b54708", "#475467"],
+            },
+          ],
+        },
+        options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+      });
+    }
+    if (!dash.por_dia?.length) return;
     const el = $("#chart-dash-caja");
     if (!el) return;
     state.charts.dashCaja = new Chart(el, {
