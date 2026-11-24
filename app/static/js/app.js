@@ -361,7 +361,7 @@
       backdrop.className = "modal-backdrop";
       document.body.appendChild(backdrop);
     }
-    backdrop.classList.add("open");
+    backdrop.classList.add("open", "modal-stack");
     backdrop.innerHTML = `
       <div class="modal" style="max-width:720px">
         <div class="modal-head">
@@ -1269,7 +1269,7 @@
     const botones = numerosDePagina(pagina, totalPaginas)
       .map((n) =>
         n
-          ? `<button type="button" class="pager-btn ${n === pagina ? "active" : ""}" data-pagina="${n}" aria-current="${n === pagina ? "page" : "false"}">${n}</button>`
+          ? `<button type="button" class="pager-btn ${n === pagina ? "active" : ""}" data-pagina="${n}"${n === pagina ? ' aria-current="page"' : ""}>${n}</button>`
           : `<span class="pager-gap">…</span>`
       )
       .join("");
@@ -1281,28 +1281,188 @@
     </nav>`;
   }
 
+  function textoPlanoHtml(valor) {
+    const texto = String(valor || "").trim();
+    if (!texto) return "—";
+    return escapeHtml(texto).replace(/\n/g, "<br>");
+  }
+
+  function itemsDescripcionHtml(doc) {
+    const partes = (doc?.items || [])
+      .map((it) => {
+        const desc = (it.descripcion || "").trim();
+        if (!desc) return "";
+        const precio = Number(it.precio_unitario || 0).toLocaleString("es-PE", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        const cant = Number(it.cantidad || 1);
+        const qty =
+          Math.abs(cant - 1) > 0.0001
+            ? ` x ${cant.toLocaleString("es-PE", { maximumFractionDigits: 3 })}`
+            : "";
+        return `${escapeHtml(desc)} - S/ ${precio}${escapeHtml(qty)}`;
+      })
+      .filter(Boolean);
+    if (!partes.length) return "—";
+    return partes.join("<br>");
+  }
+
   function tablaComprobantesHtml() {
     const rows = state.docs
       .map(
-        (d) => `<tr>
-          <td>${docLineHtml(d)}</td>
-          ${clienteDocHtml(d)}
+        (d) => `<tr class="doc-row" data-ver-doc="${d.id}" tabindex="0" title="Ver detalle">
           <td class="nowrap">${fmtDate(d.fecha_emision)}</td>
-          <td class="nowrap">${money(d.total)}</td>
-          <td>${estadoQuickHtml(d)}</td>
-          ${accionesDocHtml(d)}
+          <td>${escapeHtml(tipoLabel(d.tipo))}</td>
+          <td class="nowrap">${escapeHtml(d.serie)}-${escapeHtml(d.numero)}</td>
+          <td>${escapeHtml(d.cliente_nombre)}</td>
+          <td>${textoPlanoHtml(d.zona)}</td>
+          <td>${textoPlanoHtml(d.motivo)}</td>
+          <td>${itemsDescripcionHtml(d)}</td>
         </tr>`
       )
       .join("");
-    return `<div class="table-wrap"><table class="table-fit table-listado">
-      <colgroup>
-        <col class="c-doc"><col class="c-cli"><col class="c-fecha"><col class="c-total"><col class="c-estado"><col class="c-act">
-      </colgroup>
+    return `<div class="table-wrap"><table class="table-docs">
       <thead><tr>
-        <th>Documento</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
+        <th>Fecha</th><th>Tipo</th><th>Serie-N°</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
+  }
+
+  function openDetalleComprobante(id) {
+    const d = (state.docs || []).find((item) => String(item.id) === String(id));
+    if (!d) return;
+    let modal = $("#modal-detalle");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "modal-detalle";
+      modal.className = "modal-backdrop";
+      document.body.appendChild(modal);
+    }
+    const items = d.items || [];
+    const filas = items.length
+      ? items
+          .map(
+            (it) => `<tr>
+              <td>${textoPlanoHtml(it.descripcion)}</td>
+              <td class="nowrap">${Number(it.cantidad || 0).toLocaleString("es-PE")}</td>
+              <td class="nowrap">${money(it.precio_unitario)}</td>
+              <td class="nowrap">${money(it.subtotal)}</td>
+            </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="4">Sin ítems</td></tr>`;
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="detalle-titulo">
+        <div class="modal-head">
+          <h2 id="detalle-titulo">${escapeHtml(tipoLabel(d.tipo))} ${escapeHtml(d.serie)}-${escapeHtml(d.numero)}</h2>
+          <button class="btn btn-ghost btn-sm" type="button" id="cerrar-detalle">Cerrar</button>
+        </div>
+        <div class="detalle-acciones">
+          <button class="btn btn-secondary btn-sm" type="button" id="detalle-edit">Editar</button>
+          <button class="btn btn-secondary btn-sm" type="button" id="detalle-pdf">PDF</button>
+          <button class="btn btn-secondary btn-sm" type="button" id="detalle-mail">Correo</button>
+          <button class="btn btn-accent btn-sm" type="button" id="detalle-wa">WhatsApp</button>
+          ${(d.adjuntos || []).length ? `<button class="btn btn-secondary btn-sm" type="button" id="detalle-adj">Adjuntos (${d.adjuntos.length})</button>` : ""}
+          <button class="btn btn-danger btn-sm" type="button" id="detalle-del">Eliminar</button>
+        </div>
+        <div class="detalle-grid">
+          <div><span class="detalle-k">Fecha</span>${fmtDate(d.fecha_emision)}</div>
+          <div><span class="detalle-k">Vencimiento</span>${d.fecha_vencimiento ? fmtDate(d.fecha_vencimiento) : "—"}</div>
+          <div><span class="detalle-k">Cliente</span>${escapeHtml(d.cliente_nombre)}</div>
+          <div><span class="detalle-k">RUC / DNI</span>${escapeHtml(d.cliente_documento || "—")}</div>
+          <div><span class="detalle-k">Zona</span>${textoPlanoHtml(d.zona)}</div>
+          <div><span class="detalle-k">Motivo</span>${textoPlanoHtml(d.motivo)}</div>
+          <div>
+            <span class="detalle-k">Estado</span>
+            <select class="estado-quick badge ${d.estado}" id="detalle-estado" aria-label="Cambiar estado">
+              ${(state.meta?.estados || [])
+                .map((e) => `<option value="${e.value}" ${d.estado === e.value ? "selected" : ""}>${e.label}</option>`)
+                .join("")}
+            </select>
+          </div>
+          <div><span class="detalle-k">Movimiento</span><span class="badge compra">Egreso</span></div>
+          <div class="full"><span class="detalle-k">Observaciones</span>${textoPlanoHtml(d.observaciones)}</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Descripción</th><th>Cantidad</th><th>P. unitario</th><th>Subtotal</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+        <div class="detalle-totales">
+          <span>Subtotal <strong>${money(d.subtotal)}</strong></span>
+          <span>IGV <strong>${money(d.igv)}</strong></span>
+          <span>Total <strong>${money(d.total)}</strong></span>
+        </div>
+      </div>`;
+    const cerrar = () => {
+      modal.classList.remove("open");
+      document.removeEventListener("keydown", onKey);
+    };
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      const share = $("#modal-share");
+      if (share?.classList.contains("open")) {
+        share.classList.remove("open");
+        return;
+      }
+      const adjuntos = $("#modal-adjuntos");
+      if (adjuntos?.classList.contains("open")) {
+        adjuntos.classList.remove("open");
+        return;
+      }
+      cerrar();
+    };
+    document.addEventListener("keydown", onKey);
+    modal.onclick = (e) => {
+      if (e.target === modal) cerrar();
+    };
+    $("#cerrar-detalle").onclick = cerrar;
+    $("#detalle-edit").onclick = () => {
+      cerrar();
+      navigate("nuevo", `id=${d.id}`);
+    };
+    $("#detalle-pdf").onclick = async () => {
+      try {
+        const blob = await API.pdfComprobante(d.id);
+        downloadBlob(blob, `comprobante-${d.id}.pdf`);
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
+    $("#detalle-mail").onclick = () => openShareModal(d.id, "mail");
+    $("#detalle-wa").onclick = () => openShareModal(d.id, "wa");
+    $("#detalle-adj")?.addEventListener("click", () => openAdjuntosViewer(d.adjuntos || []));
+    $("#detalle-del").onclick = async () => {
+      if (!confirm("¿Eliminar este comprobante?")) return;
+      try {
+        await API.deleteComprobante(d.id);
+        cerrar();
+        toast("Eliminado");
+        renderApp();
+      } catch (ex) {
+        toast(ex.message);
+      }
+    };
+    $("#detalle-estado").addEventListener("change", async (e) => {
+      const estado = e.target.value;
+      e.target.disabled = true;
+      try {
+        await API.cambiarEstado(d.id, estado);
+        toast(`Estado: ${estadoLabel(estado)}`);
+        cerrar();
+        await renderApp();
+        openDetalleComprobante(d.id);
+      } catch (ex) {
+        e.target.value = d.estado;
+        toast(ex.message || "No se pudo cambiar el estado");
+      } finally {
+        e.target.disabled = false;
+      }
+    });
   }
 
   function resumenComprobantesHtml(resumen, mostrados, pagina, porPagina) {
@@ -1370,7 +1530,7 @@
       <div class="page-head">
         <div>
           <h1>Comprobantes</h1>
-          <p>Diez comprobantes por página.</p>
+          <p>Diez comprobantes por página. Clic en una fila para ver el detalle.</p>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-comp">🖨 Imprimir reporte</button>
@@ -3376,7 +3536,7 @@
       modal.id = "modal-share";
       document.body.appendChild(modal);
     }
-    modal.classList.add("open");
+    modal.classList.add("open", "modal-stack");
     modal.innerHTML = `
       <div class="modal">
         <div class="modal-head"><h2>${mode === "mail" ? "Enviar por correo" : "Compartir por WhatsApp"}</h2><button class="btn btn-ghost btn-sm" id="x">Cerrar</button></div>
@@ -3504,6 +3664,18 @@
   /* ---------- Bind per view ---------- */
   function bindView() {
     $$("[data-go]").forEach((b) => b.addEventListener("click", () => navigate(b.dataset.go)));
+    if (state.route === "dashboard") {
+      $$("[data-ver-doc]").forEach((row) => {
+        const abrir = () => openDetalleComprobante(row.dataset.verDoc);
+        row.addEventListener("click", abrir);
+        row.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            abrir();
+          }
+        });
+      });
+    }
 
     if (state.route === "comprobantes") {
       $("#btn-filtrar")?.addEventListener("click", () => {
@@ -3547,15 +3719,16 @@
           toast(ex.message);
         }
       });
-      $$("[data-edit]").forEach((b) =>
-        b.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const id = b.getAttribute("data-edit");
-          if (!id) return;
-          navigate("nuevo", `id=${id}`);
-        })
-      );
+      $$("[data-ver-doc]").forEach((row) => {
+        const abrir = () => openDetalleComprobante(row.dataset.verDoc);
+        row.addEventListener("click", abrir);
+        row.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            abrir();
+          }
+        });
+      });
       $$("[data-del]").forEach((b) =>
         b.addEventListener("click", async () => {
           if (!confirm("¿Eliminar este comprobante?")) return;

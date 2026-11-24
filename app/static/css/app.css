@@ -457,6 +457,54 @@ td.actions .btn + .btn { margin-left: 0.25rem; }
   background: rgba(15, 61, 46, 0.08);
   font-size: 0.75rem;
 }
+.table-docs { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; }
+.table-docs th,
+.table-docs td {
+  vertical-align: top;
+  white-space: normal;
+  overflow: visible;
+}
+.table-docs .nowrap { white-space: nowrap; }
+tr.doc-row { cursor: pointer; }
+tr.doc-row:hover td { background: #f3faf6; }
+tr.doc-row:focus-visible { outline: 2px solid rgba(31, 107, 79, 0.45); outline-offset: -2px; }
+.detalle-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+.detalle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.detalle-grid .full { grid-column: 1 / -1; }
+.detalle-k {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.detalle-totales {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 1rem 1.4rem;
+  margin-top: 0.85rem;
+  color: var(--muted);
+}
+.detalle-totales strong {
+  color: var(--ink);
+  margin-left: 0.35rem;
+}
+@media (max-width: 720px) {
+  .detalle-grid { grid-template-columns: 1fr; }
+}
 .pager {
   display: flex;
   flex-wrap: wrap;
