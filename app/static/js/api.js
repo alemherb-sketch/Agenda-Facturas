@@ -102,6 +102,10 @@ const API = {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/api/comprobantes${qs ? `?${qs}` : ""}`);
   },
+  resumenComprobantes(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/comprobantes/resumen${qs ? `?${qs}` : ""}`);
+  },
   createComprobante(body) {
     return this.request("/api/comprobantes", { method: "POST", body: JSON.stringify(body) });
   },

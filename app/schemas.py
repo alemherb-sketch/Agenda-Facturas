@@ -147,6 +147,23 @@ class ComprobanteUpdate(BaseModel):
     items: list[ItemCreate] | None = None
 
 
+class ComprobanteEstadoTotal(BaseModel):
+    estado: str
+    etiqueta: str
+    cantidad: int
+    total: Decimal
+
+
+class ComprobanteResumenOut(BaseModel):
+    cantidad: int
+    subtotal: Decimal
+    igv: Decimal
+    total: Decimal
+    cantidad_vigente: int
+    total_vigente: Decimal
+    por_estado: list[ComprobanteEstadoTotal] = []
+
+
 class ComprobanteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

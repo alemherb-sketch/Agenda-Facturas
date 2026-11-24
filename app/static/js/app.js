@@ -1204,6 +1204,44 @@
     }
   }
 
+  function resumenComprobantesHtml(resumen, mostrados) {
+    const cantidad = Number(resumen?.cantidad || 0);
+    const vigente = Number(resumen?.cantidad_vigente || 0);
+    const corte =
+      mostrados < cantidad
+        ? `Se listan ${mostrados} de ${cantidad}`
+        : cantidad === 1
+          ? "1 comprobante"
+          : `${cantidad} comprobantes`;
+    const notaTotal =
+      cantidad === vigente
+        ? "Sin anulados en este filtro"
+        : `${vigente} no anulados · ${money(resumen?.total_vigente || 0)}`;
+    const porEstado = resumen?.por_estado || [];
+    return `
+      <div class="grid-stats">
+        <div class="stat"><label>Cantidad</label><strong>${cantidad}</strong><span class="stat-meta">${corte}</span></div>
+        <div class="stat"><label>Subtotal</label><strong>${money(resumen?.subtotal || 0)}</strong></div>
+        <div class="stat"><label>IGV</label><strong>${money(resumen?.igv || 0)}</strong></div>
+        <div class="stat warn"><label>Total</label><strong>${money(resumen?.total || 0)}</strong><span class="stat-meta">${notaTotal}</span></div>
+      </div>
+      ${
+        porEstado.length
+          ? `<div class="grid-stats">
+              ${porEstado
+                .map(
+                  (item) => `<div class="stat">
+                    <label>${escapeHtml(item.etiqueta)}</label>
+                    <strong>${money(item.total)}</strong>
+                    <span class="stat-meta">${item.cantidad} ${Number(item.cantidad) === 1 ? "comprobante" : "comprobantes"}</span>
+                  </div>`
+                )
+                .join("")}
+            </div>`
+          : ""
+      }`;
+  }
+
   async function viewComprobantes() {
     const zonas = ["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio", "Otros"];
     const params = {};
@@ -1213,8 +1251,12 @@
     if (state.filters.zona) params.zona = state.filters.zona;
     if (state.filters.fecha_desde) params.fecha_desde = state.filters.fecha_desde;
     if (state.filters.fecha_hasta) params.fecha_hasta = state.filters.fecha_hasta;
-    const docs = await API.listComprobantes(params);
+    const [docs, resumen] = await Promise.all([
+      API.listComprobantes(params),
+      API.resumenComprobantes(params),
+    ]);
     state.docs = docs;
+    state.resumenComprobantes = resumen;
 
     return `
       <div class="page-head">
@@ -1253,6 +1295,7 @@
         <button class="btn btn-secondary" id="btn-filtrar">Filtrar</button>
         <button class="btn btn-ghost" id="btn-limpiar-filtros">Limpiar</button>
       </div>
+      ${resumenComprobantesHtml(resumen, state.docs.length)}
       <div class="panel" style="padding:0;overflow:hidden">
         ${
           state.docs.length
@@ -3434,6 +3477,7 @@
             sel.classList.remove("emitido", "pagado", "no_pagado", "anulado");
             sel.classList.add(estado);
             toast(`Estado: ${estadoLabel(estado)}`);
+            renderApp();
           } catch (ex) {
             if (prev) sel.value = prev;
             toast(ex.message || "No se pudo cambiar el estado");

@@ -4,17 +4,22 @@ from datetime import date
 from typing import Annotated
 from urllib.parse import quote
 
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Caja, Comprobante, ComprobanteItem, Usuario
+from app.models import Caja, Comprobante, ComprobanteItem, EstadoComprobante, Usuario
 from app.schemas import (
     AdjuntoOut,
     ComprobanteCreate,
+    ComprobanteEstadoTotal,
     ComprobanteOut,
+    ComprobanteResumenOut,
     ComprobanteUpdate,
     EmailShareIn,
     WhatsAppShareOut,
@@ -115,7 +120,7 @@ def _operacion_guardada(valor: str | None) -> str | None:
     return _OPERACION_FILTRO[clave]
 
 
-def _filtrar_comprobantes(
+def _consulta_comprobantes(
     db: Session,
     user: Usuario,
     *,
@@ -130,12 +135,7 @@ def _filtrar_comprobantes(
 ):
     if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
         raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
-    query = (
-        db.query(Comprobante)
-        .options(joinedload(Comprobante.items), joinedload(Comprobante.caja))
-        .filter(Comprobante.usuario_id == user.id)
-        .order_by(Comprobante.fecha_emision.desc(), Comprobante.id.desc())
-    )
+    query = db.query(Comprobante).filter(Comprobante.usuario_id == user.id)
     if estado:
         query = query.filter(Comprobante.estado == estado)
     if tipo:
@@ -160,6 +160,109 @@ def _filtrar_comprobantes(
             | (Comprobante.cliente_documento.ilike(like))
         )
     return query
+
+
+def _filtrar_comprobantes(
+    db: Session,
+    user: Usuario,
+    *,
+    estado: str | None = None,
+    tipo: str | None = None,
+    zona: str | None = None,
+    operacion: str | None = None,
+    caja_id: int | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    q: str | None = None,
+):
+    return (
+        _consulta_comprobantes(
+            db,
+            user,
+            estado=estado,
+            tipo=tipo,
+            zona=zona,
+            operacion=operacion,
+            caja_id=caja_id,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            q=q,
+        )
+        .options(joinedload(Comprobante.items), joinedload(Comprobante.caja))
+        .order_by(Comprobante.fecha_emision.desc(), Comprobante.id.desc())
+    )
+
+
+@router.get("/resumen", response_model=ComprobanteResumenOut)
+def resumen(
+    user: Annotated[Usuario, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    estado: str | None = None,
+    tipo: str | None = None,
+    zona: str | None = None,
+    operacion: str | None = None,
+    caja_id: int | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    q: str | None = None,
+):
+    base = _consulta_comprobantes(
+        db,
+        user,
+        estado=estado,
+        tipo=tipo,
+        zona=zona,
+        operacion=operacion,
+        caja_id=caja_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        q=q,
+    )
+    cantidad, subtotal, igv, total = base.with_entities(
+        func.count(Comprobante.id),
+        func.coalesce(func.sum(Comprobante.subtotal), 0),
+        func.coalesce(func.sum(Comprobante.igv), 0),
+        func.coalesce(func.sum(Comprobante.total), 0),
+    ).one()
+    cantidad_vigente, total_vigente = (
+        base.filter(Comprobante.estado != EstadoComprobante.ANULADO)
+        .with_entities(
+            func.count(Comprobante.id),
+            func.coalesce(func.sum(Comprobante.total), 0),
+        )
+        .one()
+    )
+    filas = (
+        base.with_entities(
+            Comprobante.estado,
+            func.count(Comprobante.id),
+            func.coalesce(func.sum(Comprobante.total), 0),
+        )
+        .group_by(Comprobante.estado)
+        .all()
+    )
+    por_estado = [
+        ComprobanteEstadoTotal(
+            estado=item.value if isinstance(item, EstadoComprobante) else str(item),
+            etiqueta=ESTADO_LABELS.get(
+                item.value if isinstance(item, EstadoComprobante) else str(item),
+                str(item),
+            ),
+            cantidad=int(n or 0),
+            total=Decimal(str(monto or 0)),
+        )
+        for item, n, monto in filas
+    ]
+    por_estado.sort(key=lambda fila: fila.etiqueta)
+    return ComprobanteResumenOut(
+        cantidad=int(cantidad or 0),
+        subtotal=Decimal(str(subtotal or 0)),
+        igv=Decimal(str(igv or 0)),
+        total=Decimal(str(total or 0)),
+        cantidad_vigente=int(cantidad_vigente or 0),
+        total_vigente=Decimal(str(total_vigente or 0)),
+        por_estado=por_estado,
+    )
 
 
 @router.get("/reporte")

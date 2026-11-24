@@ -306,3 +306,39 @@ def test_egresos_principal_incluyen_cotizacion_y_guia_y_el_periodo():
     assert float(por_nombre["Caja principal"]["egresos"]) == 300
     assert float(por_nombre["Banco"]["egresos"]) == 7
     assert float(fuera["total"]) == 150
+
+
+def test_resumen_comprobantes_informa_cantidad_totales_y_excluye_anulados():
+    client = _cliente()
+    headers = _auth(client, "resumen-comp@negocio.pe")
+    _doc(client, headers, numero="1")
+    _doc(
+        client,
+        headers,
+        numero="2",
+        tipo="factura",
+        serie="F001",
+        items=[{"descripcion": "Servicio", "cantidad": 1, "precio_unitario": 118, "aplica_igv": True}],
+    )
+    anulado = _doc(client, headers, numero="3")
+    baja = client.patch(f"/api/comprobantes/{anulado['id']}/estado?estado=anulado", headers=headers)
+    assert baja.status_code == 200, baja.text
+
+    res = client.get("/api/comprobantes/resumen", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["cantidad"] == 3
+    assert body["cantidad_vigente"] == 2
+    assert float(body["total"]) == 150 + 118 + 150
+    assert float(body["total_vigente"]) == 150 + 118
+    assert float(body["igv"]) == 18
+    assert float(body["subtotal"]) == 150 + 100 + 150
+    estados = {fila["estado"]: fila for fila in body["por_estado"]}
+    assert estados["anulado"]["cantidad"] == 1
+    assert estados["emitido"]["cantidad"] == 2
+
+    solo_anulados = client.get("/api/comprobantes/resumen", headers=headers, params={"estado": "anulado"})
+    assert solo_anulados.status_code == 200, solo_anulados.text
+    assert solo_anulados.json()["cantidad"] == 1
+    assert solo_anulados.json()["cantidad_vigente"] == 0
+    assert float(solo_anulados.json()["total"]) == 150
