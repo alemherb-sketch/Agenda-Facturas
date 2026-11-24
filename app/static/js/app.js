@@ -35,6 +35,7 @@
     editingAgenda: null,
     editingCliente: null,
     editingProducto: null,
+    vistaComprobantes: "listado",
     filters: { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" },
   };
 
@@ -48,6 +49,18 @@
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   };
   const tipoLabel = (v) => state.meta?.tipos_documento.find((t) => t.value === v)?.label || v;
+  const tipoCorto = (v) =>
+    ({
+      factura: "Factura",
+      boleta: "Boleta",
+      nota_venta: "N. venta",
+      cotizacion: "Cotización",
+      nota_credito: "N. crédito",
+      nota_debito: "N. débito",
+      recibo_honorarios: "Honorarios",
+      guia_remision: "Guía",
+      ticket: "Ticket",
+    })[v] || tipoLabel(v);
   const estadoLabel = (v) => state.meta?.estados.find((t) => t.value === v)?.label || v;
   const agendaLabel = (v) => state.meta?.tipos_agenda.find((t) => t.value === v)?.label || v;
   const movCajaLabel = (v) =>
@@ -1205,6 +1218,97 @@
     }
   }
 
+  function docLineHtml(d) {
+    return `<div class="doc-line"><strong>${escapeHtml(tipoCorto(d.tipo))}</strong><span class="cell-muted">${escapeHtml(d.serie)}-${escapeHtml(d.numero)}</span><span class="badge compra">Egreso</span></div>`;
+  }
+
+  function clienteDocHtml(d) {
+    return `<td><span class="cell-clip" title="${escapeHtml(d.cliente_nombre)}">${escapeHtml(d.cliente_nombre)}</span>${
+      d.cliente_documento ? `<span class="cell-muted">${escapeHtml(d.cliente_documento)}</span>` : ""
+    }</td>`;
+  }
+
+  function estadoQuickHtml(d) {
+    return `<label class="estado-quick-wrap" title="Cambiar estado">
+      <span class="sr-only">Estado</span>
+      <select class="estado-quick badge ${d.estado}" data-estado-id="${d.id}" aria-label="Cambiar estado">
+        ${(state.meta?.estados || [])
+          .map((e) => `<option value="${e.value}" ${d.estado === e.value ? "selected" : ""}>${e.label}</option>`)
+          .join("")}
+      </select>
+    </label>`;
+  }
+
+  function accionesDocHtml(d) {
+    return `<td class="actions actions-wrap">
+      ${iconBtn(`data-edit="${d.id}"`, "Editar", "edit")}
+      ${iconBtn(`data-pdf="${d.id}"`, "PDF", "pdf")}
+      ${adjuntoBtnHtml(d.id, d.adjuntos, "adjuntos-doc")}
+      ${iconBtn(`data-mail="${d.id}"`, "Correo", "mail")}
+      ${iconBtn(`data-wa="${d.id}"`, "WhatsApp", "whatsapp", "btn-accent")}
+      ${iconBtn(`data-del="${d.id}"`, "Eliminar", "delete", "btn-danger")}
+    </td>`;
+  }
+
+  function comprobantesTabsHtml() {
+    const vista = state.vistaComprobantes === "detalle" ? "detalle" : "listado";
+    const tabs = [
+      ["listado", "Listado", "Documento, cliente, fecha, total y estado"],
+      ["detalle", "Detalle", "Zona, motivo y descripción"],
+    ];
+    return `<div class="doc-tabs" role="tablist" aria-label="Vistas de comprobantes">
+      ${tabs
+        .map(
+          ([id, label, hint]) =>
+            `<button type="button" class="doc-tab ${vista === id ? "active" : ""}" role="tab" id="tab-comp-${id}" aria-selected="${vista === id}" aria-controls="panel-comp" data-vista-comp="${id}" title="${hint}">${label}</button>`
+        )
+        .join("")}
+    </div>`;
+  }
+
+  function tablaComprobantesHtml(vista) {
+    const detalle = vista === "detalle";
+    const head = detalle
+      ? `<colgroup>
+          <col class="c-doc"><col class="c-cli"><col class="c-zona"><col class="c-mot"><col class="c-desc"><col class="c-fecha"><col class="c-total"><col class="c-act">
+        </colgroup>
+        <thead><tr>
+          <th>Documento</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th><th>Fecha</th><th>Total</th><th class="col-actions">Acciones</th>
+        </tr></thead>`
+      : `<colgroup>
+          <col class="c-doc"><col class="c-cli"><col class="c-fecha"><col class="c-total"><col class="c-estado"><col class="c-act">
+        </colgroup>
+        <thead><tr>
+          <th>Documento</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
+        </tr></thead>`;
+    const rows = state.docs
+      .map((d) => {
+        if (detalle) {
+          const desc = itemsDescripcion(d);
+          return `<tr>
+            <td>${docLineHtml(d)}</td>
+            ${clienteDocHtml(d)}
+            <td><span class="cell-clip" title="${escapeHtml(d.zona || "")}">${escapeHtml(d.zona || "—")}</span></td>
+            <td><span class="clip-lines" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</span></td>
+            <td><span class="clip-lines" title="${escapeHtml(desc)}">${escapeHtml(desc || "—")}</span></td>
+            <td class="nowrap">${fmtDate(d.fecha_emision)}</td>
+            <td class="nowrap">${money(d.total)}</td>
+            ${accionesDocHtml(d)}
+          </tr>`;
+        }
+        return `<tr>
+          <td>${docLineHtml(d)}</td>
+          ${clienteDocHtml(d)}
+          <td class="nowrap">${fmtDate(d.fecha_emision)}</td>
+          <td class="nowrap">${money(d.total)}</td>
+          <td>${estadoQuickHtml(d)}</td>
+          ${accionesDocHtml(d)}
+        </tr>`;
+      })
+      .join("");
+    return `<div class="table-wrap"><table class="table-fit ${detalle ? "table-detalle" : "table-listado"}">${head}<tbody>${rows}</tbody></table></div>`;
+  }
+
   function resumenComprobantesHtml(resumen, mostrados) {
     const cantidad = Number(resumen?.cantidad || 0);
     const vigente = Number(resumen?.cantidad_vigente || 0);
@@ -1297,55 +1401,15 @@
         <button class="btn btn-ghost" id="btn-limpiar-filtros">Limpiar</button>
       </div>
       ${resumenComprobantesHtml(resumen, state.docs.length)}
-      <div class="panel" style="padding:0;overflow:hidden">
+      <div class="panel panel-tabs" style="padding:0;overflow:hidden">
+        ${comprobantesTabsHtml()}
+        <div id="panel-comp" role="tabpanel" aria-labelledby="tab-comp-${state.vistaComprobantes === "detalle" ? "detalle" : "listado"}">
         ${
           state.docs.length
-            ? `<div class="table-wrap"><table class="table-fit">
-              <colgroup>
-                <col class="c-doc"><col class="c-cli"><col class="c-zona"><col class="c-mot"><col class="c-desc"><col class="c-fecha"><col class="c-total"><col class="c-estado"><col class="c-act">
-              </colgroup>
-              <thead><tr>
-                <th>Documento</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th><th>Fecha</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
-              </tr></thead>
-              <tbody>
-              ${state.docs
-                .map((d) => {
-                  const desc = itemsDescripcion(d);
-                  return `<tr>
-                  <td><span class="clip-lines" title="${escapeHtml(tipoLabel(d.tipo))} ${d.serie}-${d.numero}"><strong>${tipoLabel(d.tipo)}</strong><br><span style="color:var(--muted)">${d.serie}-${d.numero}</span></span><br><span class="badge compra">Egreso</span></td>
-                  <td><span class="clip-lines" title="${escapeHtml(d.cliente_nombre)}">${escapeHtml(d.cliente_nombre)}</span><span class="cell-clip" style="color:var(--muted);font-size:.8rem">${escapeHtml(d.cliente_documento || "")}</span></td>
-                  <td><span class="cell-clip" title="${escapeHtml(d.zona || "")}">${escapeHtml(d.zona || "—")}</span></td>
-                  <td><span class="cell-clip" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</span></td>
-                  <td><span class="cell-clip" title="${escapeHtml(desc)}">${escapeHtml(desc || "—")}</span></td>
-                  <td>${fmtDate(d.fecha_emision)}</td>
-                  <td>${money(d.total)}</td>
-                  <td>
-                    <label class="estado-quick-wrap" title="Cambiar estado">
-                      <span class="sr-only">Estado</span>
-                      <select class="estado-quick badge ${d.estado}" data-estado-id="${d.id}" aria-label="Cambiar estado">
-                        ${(state.meta?.estados || [])
-                          .map(
-                            (e) =>
-                              `<option value="${e.value}" ${d.estado === e.value ? "selected" : ""}>${e.label}</option>`
-                          )
-                          .join("")}
-                      </select>
-                    </label>
-                  </td>
-                  <td class="actions actions-wrap">
-                    ${iconBtn(`data-edit="${d.id}"`, "Editar", "edit")}
-                    ${iconBtn(`data-pdf="${d.id}"`, "PDF", "pdf")}
-                    ${adjuntoBtnHtml(d.id, d.adjuntos, "adjuntos-doc")}
-                    ${iconBtn(`data-mail="${d.id}"`, "Correo", "mail")}
-                    ${iconBtn(`data-wa="${d.id}"`, "WhatsApp", "whatsapp", "btn-accent")}
-                    ${iconBtn(`data-del="${d.id}"`, "Eliminar", "delete", "btn-danger")}
-                  </td>
-                </tr>`;
-                })
-                .join("")}
-              </tbody></table></div>`
+            ? tablaComprobantesHtml(state.vistaComprobantes === "detalle" ? "detalle" : "listado")
             : `<div class="empty"><strong>No hay comprobantes</strong>Registra facturas, boletas u otros documentos.</div>`
         }
+        </div>
       </div>
       <div class="modal-backdrop" id="modal-share"></div>`;
   }
@@ -3462,6 +3526,14 @@
         state.filters = { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" };
         renderApp();
       });
+      $$("[data-vista-comp]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const vista = b.dataset.vistaComp === "detalle" ? "detalle" : "listado";
+          if (state.vistaComprobantes === vista) return;
+          state.vistaComprobantes = vista;
+          renderApp();
+        })
+      );
       $("#btn-reporte-comp")?.addEventListener("click", async () => {
         try {
           const blob = await API.reporteComprobantes({ ...state.filters });
