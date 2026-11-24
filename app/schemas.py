@@ -154,6 +154,13 @@ class ComprobanteEstadoTotal(BaseModel):
     total: Decimal
 
 
+class ComprobanteMesTotal(BaseModel):
+    mes: str
+    etiqueta: str
+    cantidad: int
+    total: Decimal
+
+
 class ComprobanteResumenOut(BaseModel):
     cantidad: int
     subtotal: Decimal
@@ -162,6 +169,7 @@ class ComprobanteResumenOut(BaseModel):
     cantidad_vigente: int
     total_vigente: Decimal
     por_estado: list[ComprobanteEstadoTotal] = []
+    por_mes: list[ComprobanteMesTotal] = []
 
 
 class ComprobanteOut(BaseModel):

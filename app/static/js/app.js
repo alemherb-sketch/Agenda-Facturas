@@ -35,7 +35,7 @@
     editingAgenda: null,
     editingCliente: null,
     editingProducto: null,
-    vistaComprobantes: "listado",
+    mesComprobantes: null,
     filters: { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" },
   };
 
@@ -1250,63 +1250,81 @@
     </td>`;
   }
 
-  function comprobantesTabsHtml() {
-    const vista = state.vistaComprobantes === "detalle" ? "detalle" : "listado";
+  function rangoMes(ym) {
+    const [y, m] = ym.split("-").map(Number);
+    const ultimo = new Date(y, m, 0).getDate();
+    const mm = String(m).padStart(2, "0");
+    return { desde: `${y}-${mm}-01`, hasta: `${y}-${mm}-${String(ultimo).padStart(2, "0")}` };
+  }
+
+  function mesDeRango(desde, hasta) {
+    if (!/^\d{4}-\d{2}-01$/.test(desde || "")) return "";
+    const ym = desde.slice(0, 7);
+    return rangoMes(ym).hasta === hasta ? ym : "";
+  }
+
+  function aplicarRangoMes() {
+    if (!state.mesComprobantes) return;
+    const rango = rangoMes(state.mesComprobantes);
+    state.filters.fecha_desde = rango.desde;
+    state.filters.fecha_hasta = rango.hasta;
+  }
+
+  function tabMesActiva(id) {
+    const desde = state.filters.fecha_desde;
+    const hasta = state.filters.fecha_hasta;
+    if (!id) return !desde && !hasta;
+    return state.mesComprobantes === id && mesDeRango(desde, hasta) === id;
+  }
+
+  function comprobantesTabsHtml(porMes) {
+    const meses = [...(porMes || [])].sort((a, b) => b.mes.localeCompare(a.mes));
+    const total = meses.reduce((n, item) => n + Number(item.cantidad || 0), 0);
     const tabs = [
-      ["listado", "Listado", "Documento, cliente, fecha, total y estado"],
-      ["detalle", "Detalle", "Zona, motivo y descripción"],
+      ...meses.map((item) => ({ id: item.mes, label: item.etiqueta, cantidad: item.cantidad })),
+      { id: "", label: "Todos", cantidad: total },
     ];
-    return `<div class="doc-tabs" role="tablist" aria-label="Vistas de comprobantes">
+    return `<div class="doc-tabs" role="tablist" aria-label="Comprobantes por mes">
       ${tabs
-        .map(
-          ([id, label, hint]) =>
-            `<button type="button" class="doc-tab ${vista === id ? "active" : ""}" role="tab" id="tab-comp-${id}" aria-selected="${vista === id}" aria-controls="panel-comp" data-vista-comp="${id}" title="${hint}">${label}</button>`
-        )
+        .map((tab) => {
+          const activo = tabMesActiva(tab.id);
+          return `<button type="button" class="doc-tab ${activo ? "active" : ""}" role="tab" aria-selected="${activo ? "true" : "false"}" data-mes-comp="${tab.id}">${escapeHtml(tab.label)}<span class="doc-tab-count">${tab.cantidad}</span></button>`;
+        })
         .join("")}
     </div>`;
   }
 
-  function tablaComprobantesHtml(vista) {
-    const detalle = vista === "detalle";
-    const head = detalle
-      ? `<colgroup>
-          <col class="c-doc"><col class="c-cli"><col class="c-zona"><col class="c-mot"><col class="c-desc"><col class="c-fecha"><col class="c-total"><col class="c-act">
-        </colgroup>
-        <thead><tr>
-          <th>Documento</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th><th>Fecha</th><th>Total</th><th class="col-actions">Acciones</th>
-        </tr></thead>`
-      : `<colgroup>
-          <col class="c-doc"><col class="c-cli"><col class="c-fecha"><col class="c-total"><col class="c-estado"><col class="c-act">
-        </colgroup>
-        <thead><tr>
-          <th>Documento</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
-        </tr></thead>`;
+  function tablaComprobantesHtml() {
+    let dia = "";
     const rows = state.docs
       .map((d) => {
-        if (detalle) {
-          const desc = itemsDescripcion(d);
-          return `<tr>
-            <td>${docLineHtml(d)}</td>
-            ${clienteDocHtml(d)}
-            <td><span class="cell-clip" title="${escapeHtml(d.zona || "")}">${escapeHtml(d.zona || "—")}</span></td>
-            <td><span class="clip-lines" title="${escapeHtml(d.motivo || "")}">${escapeHtml(d.motivo || "—")}</span></td>
-            <td><span class="clip-lines" title="${escapeHtml(desc)}">${escapeHtml(desc || "—")}</span></td>
-            <td class="nowrap">${fmtDate(d.fecha_emision)}</td>
-            <td class="nowrap">${money(d.total)}</td>
-            ${accionesDocHtml(d)}
-          </tr>`;
+        let grupo = "";
+        if (d.fecha_emision !== dia) {
+          dia = d.fecha_emision;
+          const delDia = state.docs.filter((item) => item.fecha_emision === dia);
+          const suma = delDia.reduce((n, item) => n + Number(item.total || 0), 0);
+          const etiqueta =
+            delDia.length === 1 ? "1 comprobante" : `${delDia.length} comprobantes`;
+          grupo = `<tr class="dia-sep"><td colspan="5">${fmtDate(dia)} · ${etiqueta} · ${money(suma)}</td></tr>`;
         }
-        return `<tr>
+        return `${grupo}<tr>
           <td>${docLineHtml(d)}</td>
           ${clienteDocHtml(d)}
-          <td class="nowrap">${fmtDate(d.fecha_emision)}</td>
           <td class="nowrap">${money(d.total)}</td>
           <td>${estadoQuickHtml(d)}</td>
           ${accionesDocHtml(d)}
         </tr>`;
       })
       .join("");
-    return `<div class="table-wrap"><table class="table-fit ${detalle ? "table-detalle" : "table-listado"}">${head}<tbody>${rows}</tbody></table></div>`;
+    return `<div class="table-wrap"><table class="table-fit table-listado">
+      <colgroup>
+        <col class="c-doc"><col class="c-cli"><col class="c-total"><col class="c-estado"><col class="c-act">
+      </colgroup>
+      <thead><tr>
+        <th>Documento</th><th>Cliente</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
   }
 
   function resumenComprobantesHtml(resumen, mostrados) {
@@ -1349,25 +1367,44 @@
 
   async function viewComprobantes() {
     const zonas = ["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio", "Otros"];
-    const params = {};
-    if (state.filters.q) params.q = state.filters.q;
-    if (state.filters.estado) params.estado = state.filters.estado;
-    if (state.filters.tipo) params.tipo = state.filters.tipo;
-    if (state.filters.zona) params.zona = state.filters.zona;
+    const paramsBase = {};
+    if (state.filters.q) paramsBase.q = state.filters.q;
+    if (state.filters.estado) paramsBase.estado = state.filters.estado;
+    if (state.filters.tipo) paramsBase.tipo = state.filters.tipo;
+    if (state.filters.zona) paramsBase.zona = state.filters.zona;
+    if (state.mesComprobantes === null) {
+      const previo = await API.resumenComprobantes(paramsBase);
+      const meses = [...(previo.por_mes || [])].sort((a, b) => b.mes.localeCompare(a.mes));
+      state.mesComprobantes = meses[0]?.mes || "";
+      aplicarRangoMes();
+    }
+    const params = { ...paramsBase, limit: 500 };
     if (state.filters.fecha_desde) params.fecha_desde = state.filters.fecha_desde;
     if (state.filters.fecha_hasta) params.fecha_hasta = state.filters.fecha_hasta;
     const [docs, resumen] = await Promise.all([
       API.listComprobantes(params),
       API.resumenComprobantes(params),
     ]);
+    const mesesVisibles = resumen.por_mes || [];
+    if (state.mesComprobantes && !mesesVisibles.some((item) => item.mes === state.mesComprobantes)) {
+      const meses = [...mesesVisibles].sort((a, b) => b.mes.localeCompare(a.mes));
+      state.mesComprobantes = meses[0]?.mes || "";
+      if (state.mesComprobantes) aplicarRangoMes();
+      else {
+        state.filters.fecha_desde = "";
+        state.filters.fecha_hasta = "";
+      }
+      return viewComprobantes();
+    }
     state.docs = docs;
     state.resumenComprobantes = resumen;
+    const mesActivo = (resumen.por_mes || []).find((item) => item.mes === state.mesComprobantes);
 
     return `
       <div class="page-head">
         <div>
           <h1>Comprobantes</h1>
-          <p>Facturas, boletas, notas de venta y más, según legislación peruana.</p>
+          <p>${mesActivo ? escapeHtml(mesActivo.etiqueta) : "Todos los meses"}. Cada pestaña es un mes, y dentro los documentos van por día.</p>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-comp">🖨 Imprimir reporte</button>
@@ -1402,12 +1439,12 @@
       </div>
       ${resumenComprobantesHtml(resumen, state.docs.length)}
       <div class="panel panel-tabs" style="padding:0;overflow:hidden">
-        ${comprobantesTabsHtml()}
-        <div id="panel-comp" role="tabpanel" aria-labelledby="tab-comp-${state.vistaComprobantes === "detalle" ? "detalle" : "listado"}">
+        ${comprobantesTabsHtml(resumen.por_mes)}
+        <div id="panel-comp" role="tabpanel">
         ${
           state.docs.length
-            ? tablaComprobantesHtml(state.vistaComprobantes === "detalle" ? "detalle" : "listado")
-            : `<div class="empty"><strong>No hay comprobantes</strong>Registra facturas, boletas u otros documentos.</div>`
+            ? tablaComprobantesHtml()
+            : `<div class="empty"><strong>No hay comprobantes</strong>${mesActivo ? `Nada en ${escapeHtml(mesActivo.etiqueta)}.` : "Registra facturas, boletas u otros documentos."}</div>`
         }
         </div>
       </div>
@@ -3510,17 +3547,24 @@
         state.filters.zona = $("#f-zona")?.value || "";
         state.filters.fecha_desde = $("#f-desde")?.value || "";
         state.filters.fecha_hasta = $("#f-hasta")?.value || "";
+        state.mesComprobantes = mesDeRango(state.filters.fecha_desde, state.filters.fecha_hasta);
         renderApp();
       });
       $("#btn-limpiar-filtros")?.addEventListener("click", () => {
         state.filters = { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" };
+        state.mesComprobantes = null;
         renderApp();
       });
-      $$("[data-vista-comp]").forEach((b) =>
+      $$("[data-mes-comp]").forEach((b) =>
         b.addEventListener("click", () => {
-          const vista = b.dataset.vistaComp === "detalle" ? "detalle" : "listado";
-          if (state.vistaComprobantes === vista) return;
-          state.vistaComprobantes = vista;
+          const mes = b.dataset.mesComp || "";
+          if (tabMesActiva(mes)) return;
+          state.mesComprobantes = mes;
+          if (mes) aplicarRangoMes();
+          else {
+            state.filters.fecha_desde = "";
+            state.filters.fecha_hasta = "";
+          }
           renderApp();
         })
       );

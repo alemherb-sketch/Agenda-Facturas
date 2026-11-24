@@ -18,6 +18,7 @@ from app.schemas import (
     AdjuntoOut,
     ComprobanteCreate,
     ComprobanteEstadoTotal,
+    ComprobanteMesTotal,
     ComprobanteOut,
     ComprobanteResumenOut,
     ComprobanteUpdate,
@@ -39,6 +40,22 @@ from app.services.excel_service import generar_excel_reporte_comprobantes
 from app.services.pdf_service import generar_pdf_comprobante, generar_pdf_reporte_comprobantes
 
 router = APIRouter(prefix="/api/comprobantes", tags=["comprobantes"])
+
+_NOMBRES_MES = (
+    "",
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
+)
 
 
 def _doc_out(db: Session, doc: Comprobante, adjuntos_rows=None) -> ComprobanteOut:
@@ -254,6 +271,42 @@ def resumen(
         for item, n, monto in filas
     ]
     por_estado.sort(key=lambda fila: fila.etiqueta)
+    # Las pestañas muestran todos los meses del resto de filtros, aunque la tabla sea de un mes.
+    sin_fechas = _consulta_comprobantes(
+        db,
+        user,
+        estado=estado,
+        tipo=tipo,
+        zona=zona,
+        operacion=operacion,
+        caja_id=caja_id,
+        q=q,
+    )
+    anio = func.extract("year", Comprobante.fecha_emision)
+    nmes = func.extract("month", Comprobante.fecha_emision)
+    filas_mes = (
+        sin_fechas.with_entities(
+            anio,
+            nmes,
+            func.count(Comprobante.id),
+            func.coalesce(func.sum(Comprobante.total), 0),
+        )
+        .group_by(anio, nmes)
+        .all()
+    )
+    por_mes = []
+    for y, m, n, monto in filas_mes:
+        anio_n = int(y)
+        mes_n = int(m)
+        por_mes.append(
+            ComprobanteMesTotal(
+                mes=f"{anio_n:04d}-{mes_n:02d}",
+                etiqueta=f"{_NOMBRES_MES[mes_n]} {anio_n}",
+                cantidad=int(n or 0),
+                total=Decimal(str(monto or 0)),
+            )
+        )
+    por_mes.sort(key=lambda fila: fila.mes, reverse=True)
     return ComprobanteResumenOut(
         cantidad=int(cantidad or 0),
         subtotal=Decimal(str(subtotal or 0)),
@@ -262,6 +315,7 @@ def resumen(
         cantidad_vigente=int(cantidad_vigente or 0),
         total_vigente=Decimal(str(total_vigente or 0)),
         por_estado=por_estado,
+        por_mes=por_mes,
     )
 
 

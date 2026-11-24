@@ -336,6 +336,23 @@ def test_resumen_comprobantes_informa_cantidad_totales_y_excluye_anulados():
     estados = {fila["estado"]: fila for fila in body["por_estado"]}
     assert estados["anulado"]["cantidad"] == 1
     assert estados["emitido"]["cantidad"] == 2
+    assert body["por_mes"][0]["mes"] == "2026-11"
+    assert body["por_mes"][0]["etiqueta"] == "Noviembre 2026"
+    assert body["por_mes"][0]["cantidad"] == 3
+
+    octubre = _doc(client, headers, numero="4", fecha_emision="2026-10-15")
+    assert float(octubre["total"]) == 150
+    de_noviembre = client.get(
+        "/api/comprobantes/resumen",
+        headers=headers,
+        params={"fecha_desde": "2026-11-01", "fecha_hasta": "2026-11-30"},
+    )
+    assert de_noviembre.status_code == 200, de_noviembre.text
+    cuerpo = de_noviembre.json()
+    assert cuerpo["cantidad"] == 3
+    meses = {fila["mes"]: fila["cantidad"] for fila in cuerpo["por_mes"]}
+    assert meses["2026-11"] == 3
+    assert meses["2026-10"] == 1
 
     solo_anulados = client.get("/api/comprobantes/resumen", headers=headers, params={"estado": "anulado"})
     assert solo_anulados.status_code == 200, solo_anulados.text

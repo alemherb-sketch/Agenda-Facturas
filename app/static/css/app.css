@@ -443,6 +443,28 @@ td.actions .btn + .btn { margin-left: 0.25rem; }
   color: var(--brand);
   border-bottom-color: var(--brand);
 }
+.doc-tab.active .doc-tab-count {
+  background: rgba(15, 61, 46, 0.14);
+}
+.doc-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(15, 61, 46, 0.08);
+  font-size: 0.75rem;
+}
+tr.dia-sep td {
+  background: #f3f7f4;
+  color: var(--brand);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  padding: 0.45rem 0.7rem;
+}
 .doc-line {
   display: flex;
   flex-wrap: wrap;
