@@ -11,6 +11,7 @@
     productos: [],
     cajas: [],
     movimientosCaja: [],
+    cajaAbiertaId: null,
     cajaDash: null,
     contactos: [],
     combustibles: [],
@@ -1946,7 +1947,10 @@
       </div>
       <div class="panel" style="margin-bottom:1rem;padding:0;overflow:hidden">
         <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:center">
-          <strong style="font-family:var(--font-display)">Saldo acumulado por caja</strong>
+          <div>
+            <strong style="font-family:var(--font-display)">Saldo acumulado por caja</strong>
+            <p style="margin:.2rem 0 0;color:var(--muted);font-size:.8rem">Clic en una caja para ver sus datos y movimientos.</p>
+          </div>
           <span style="color:var(--muted);font-size:.85rem">Total: ${money(saldoTotal)}</span>
         </div>
         ${
@@ -1956,7 +1960,7 @@
               <tbody>
               ${cajas
                 .map(
-                  (c) => `<tr class="${c.es_principal ? "row-principal" : ""}">
+                  (c) => `<tr class="caja-row ${c.es_principal ? "row-principal" : ""}" data-caja-ver="${c.id}">
                   <td><strong>${escapeHtml(c.nombre)}</strong>
                     ${c.es_principal ? `<span class="badge principal">Principal</span>` : ""}
                     ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
@@ -1977,63 +1981,8 @@
             : `<div class="empty"><strong>Sin cajas</strong>Crea tu primera caja (ej. Caja principal, Yape, Banco).</div>`
         }
       </div>
-      ${
-        dash.por_caja?.length
-          ? `<div class="panel" style="margin-bottom:1rem;padding:0;overflow:hidden">
-              <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line)">
-                <strong style="font-family:var(--font-display)">Resumen del período por caja</strong>
-                <span style="color:var(--muted);font-size:.85rem;margin-left:.5rem">${fmtDate(dash.fecha_desde)} — ${fmtDate(dash.fecha_hasta)}</span>
-              </div>
-              <div class="table-wrap"><table>
-                <thead><tr><th>Caja</th><th>Ingresos</th><th>Egresos</th><th>Saldo período</th></tr></thead>
-                <tbody>
-                ${dash.por_caja
-                  .map(
-                    (c) => `<tr>
-                    <td>${escapeHtml(c.caja)}</td>
-                    <td style="color:var(--ok)">${money(c.ingresos)}</td>
-                    <td style="color:var(--danger)">${money(c.egresos)}${principal && c.caja === principal.nombre ? `<br><span style="color:var(--muted);font-size:.8rem">Comprobantes del período</span>` : ""}</td>
-                    <td><strong>${money(c.saldo)}</strong></td>
-                  </tr>`
-                  )
-                  .join("")}
-                </tbody>
-              </table></div>
-            </div>`
-          : ""
-      }
-      <div class="panel" style="padding:0;overflow:hidden">
-        <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line)">
-          <strong style="font-family:var(--font-display)">Movimientos del período</strong>
-        </div>
-        ${
-          state.movimientosCaja.length
-            ? `<div class="table-wrap"><table>
-              <thead><tr><th>Fecha</th><th>Caja</th><th>Tipo</th><th>Método</th><th>N° transacción</th><th>Concepto</th><th>Monto</th><th class="col-actions">Acciones</th></tr></thead>
-              <tbody>
-              ${state.movimientosCaja
-                .map(
-                  (m) => `<tr>
-                  <td>${fmtDate(m.fecha)}</td>
-                  <td>${escapeHtml(m.caja_nombre)}</td>
-                  <td><span class="badge ${m.tipo === "ingreso" ? "pagado" : "anulado"}">${movCajaLabel(m.tipo)}</span></td>
-                  <td>${escapeHtml(metodoPagoLabel(m.metodo_pago))}</td>
-                  <td>${escapeHtml(m.numero_transaccion || "—")}</td>
-                  <td>${escapeHtml(m.concepto)}${m.comprobante_id ? `<br><span class="badge venta">Comprobante</span>` : ""}</td>
-                  <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
-                  <td class="actions">
-                    ${iconBtn(`data-mov-edit="${m.id}"`, "Editar", "edit")}
-                    ${adjuntoBtnHtml(m.id, m.adjuntos, "adjuntos-mov")}
-                    ${iconBtn(`data-mov-del="${m.id}"`, "Eliminar", "delete", "btn-danger")}
-                  </td>
-                </tr>`
-                )
-                .join("")}
-              </tbody></table></div>`
-            : `<div class="empty"><strong>Sin movimientos</strong>No hay movimientos en el rango de fechas seleccionado.</div>`
-        }
-      </div>
       <div class="modal-backdrop" id="modal-caja"></div>
+      <div class="modal-backdrop" id="modal-caja-detalle"></div>
       <div class="modal-backdrop" id="modal-mov" data-today="${today}"></div>`;
   }
 
@@ -2609,6 +2558,112 @@
     await load();
   }
 
+  function filasMovimientosCaja(movs) {
+    if (!movs.length) {
+      return `<div class="empty"><strong>Sin movimientos</strong>Esta caja no tiene movimientos escritos a mano.</div>`;
+    }
+    return `<div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Método</th><th>N° transacción</th><th>Concepto</th><th>Monto</th><th class="col-actions">Acciones</th></tr></thead>
+      <tbody>
+      ${movs
+        .map(
+          (m) => `<tr>
+          <td>${fmtDate(m.fecha)}</td>
+          <td><span class="badge ${m.tipo === "ingreso" ? "pagado" : "anulado"}">${movCajaLabel(m.tipo)}</span></td>
+          <td>${escapeHtml(metodoPagoLabel(m.metodo_pago))}</td>
+          <td>${escapeHtml(m.numero_transaccion || "—")}</td>
+          <td>${escapeHtml(m.concepto)}${m.comprobante_id ? `<br><span class="badge venta">Comprobante</span>` : ""}</td>
+          <td style="color:${m.tipo === "ingreso" ? "var(--ok)" : "var(--danger)"}"><strong>${m.tipo === "egreso" ? "−" : "+"}${money(m.monto)}</strong></td>
+          <td class="actions">
+            ${iconBtn(`data-mov-edit="${m.id}"`, "Editar", "edit")}
+            ${adjuntoBtnHtml(m.id, m.adjuntos, "adjuntos-mov")}
+            ${iconBtn(`data-mov-del="${m.id}"`, "Eliminar", "delete", "btn-danger")}
+          </td>
+        </tr>`
+        )
+        .join("")}
+      </tbody></table></div>`;
+  }
+
+  async function openCajaDetalle(caja) {
+    const modal = $("#modal-caja-detalle");
+    if (!modal || !caja) return;
+    state.cajaAbiertaId = caja.id;
+    modal.classList.add("open");
+    modal.innerHTML = `<div class="modal modal-wide"><div class="empty"><strong>Cargando</strong>Movimientos de la caja…</div></div>`;
+    let movs = [];
+    try {
+      movs = await API.listMovimientosCaja({ caja_id: caja.id, limit: 500 });
+    } catch (ex) {
+      toast(ex.message || "No se pudieron cargar los movimientos");
+      modal.classList.remove("open");
+      state.cajaAbiertaId = null;
+      return;
+    }
+    if (state.cajaAbiertaId !== caja.id || !$("#modal-caja-detalle")) return;
+    state.movimientosCaja = movs;
+    const actual = state.cajas.find((c) => c.id === caja.id) || caja;
+    modal.innerHTML = `
+      <div class="modal modal-wide">
+        <div class="modal-head">
+          <h2>${escapeHtml(actual.nombre)}</h2>
+          <button class="btn btn-ghost btn-sm" id="close-caja-detalle" type="button">Cerrar</button>
+        </div>
+        <p style="margin:.2rem 0 .8rem;color:var(--muted)">
+          ${actual.es_principal ? `<span class="badge principal">Principal</span> ` : ""}
+          ${actual.descripcion ? escapeHtml(actual.descripcion) : "Sin descripción"}
+          ${actual.fecha_apertura ? ` · Apertura ${fmtDate(String(actual.fecha_apertura).slice(0, 10))}` : ""}
+        </p>
+        <div class="grid-stats" style="margin-bottom:.8rem">
+          <div class="stat"><label>Apertura</label><strong>${money(actual.monto_apertura || 0)}</strong></div>
+          <div class="stat ok"><label>Ingresos</label><strong>${money(actual.total_ingresos)}</strong></div>
+          <div class="stat warn"><label>Egresos</label><strong>${money(actual.total_egresos)}</strong><span class="stat-meta">${actual.es_principal ? "Comprobantes no anulados" : "Movimientos de egreso"}</span></div>
+          <div class="stat ${Number(actual.saldo) < 0 ? "danger" : ""}"><label>Saldo</label><strong>${money(actual.saldo)}</strong></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:center;margin-bottom:.4rem">
+          <strong style="font-family:var(--font-display)">Movimientos</strong>
+          <button class="btn btn-primary btn-sm" id="btn-mov-esta-caja" type="button">＋ Movimiento</button>
+        </div>
+        ${filasMovimientosCaja(movs)}
+        ${movs.length >= 500 ? `<p style="color:var(--muted);font-size:.8rem">Se muestran los 500 movimientos más recientes.</p>` : ""}
+      </div>`;
+    $("#close-caja-detalle").onclick = () => {
+      modal.classList.remove("open");
+      state.cajaAbiertaId = null;
+    };
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        modal.classList.remove("open");
+        state.cajaAbiertaId = null;
+      }
+    };
+    $("#btn-mov-esta-caja").onclick = () => openMovimientoModal();
+    modal.querySelectorAll("[data-mov-edit]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.movEdit));
+        openMovimientoModal(mov);
+      })
+    );
+    modal.querySelectorAll("[data-adjuntos-mov]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.adjuntosMov));
+        openAdjuntosViewer(mov?.adjuntos || []);
+      })
+    );
+    modal.querySelectorAll("[data-mov-del]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.movDel));
+        const pregunta = mov?.comprobante_id
+          ? "Este movimiento viene de un comprobante. Si lo eliminas, deja de figurar en esta lista. ¿Continuar?"
+          : "¿Eliminar este movimiento?";
+        if (!confirm(pregunta)) return;
+        await API.deleteMovimientoCaja(b.dataset.movDel);
+        toast("Movimiento eliminado");
+        renderApp();
+      })
+    );
+  }
+
   function openMovimientoModal(mov = null) {
     const modal = $("#modal-mov");
     if (!modal) return;
@@ -2618,7 +2673,7 @@
     }
     const today = modal.dataset.today || new Date().toISOString().slice(0, 10);
     const linked = Boolean(mov?.comprobante_id);
-    const cajaMarcada = mov?.caja_id || state.filtersCaja.caja_id || cajaPrincipalId() || "";
+    const cajaMarcada = mov?.caja_id || state.cajaAbiertaId || state.filtersCaja.caja_id || cajaPrincipalId() || "";
     modal.classList.add("open");
     modal.innerHTML = `
       <div class="modal">
@@ -3826,6 +3881,13 @@
         state.filtersCaja.fecha_hasta = d.hasta;
         renderApp();
       });
+      $$("[data-caja-ver]").forEach((row) =>
+        row.addEventListener("click", (e) => {
+          if (e.target.closest("button, a, select")) return;
+          const caja = state.cajas.find((c) => c.id === Number(row.dataset.cajaVer));
+          if (caja) openCajaDetalle(caja);
+        })
+      );
       $$("[data-caja-principal]").forEach((b) =>
         b.addEventListener("click", async () => {
           try {
@@ -3870,30 +3932,6 @@
           } catch (ex) {
             toast(ex.message);
           }
-        })
-      );
-      $$("[data-mov-edit]").forEach((b) =>
-        b.addEventListener("click", () => {
-          const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.movEdit));
-          openMovimientoModal(mov);
-        })
-      );
-      $$("[data-adjuntos-mov]").forEach((b) =>
-        b.addEventListener("click", () => {
-          const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.adjuntosMov));
-          openAdjuntosViewer(mov?.adjuntos || []);
-        })
-      );
-      $$("[data-mov-del]").forEach((b) =>
-        b.addEventListener("click", async () => {
-          const mov = state.movimientosCaja.find((m) => m.id === Number(b.dataset.movDel));
-          const pregunta = mov?.comprobante_id
-            ? "Este movimiento viene de una venta o compra. Si lo eliminas, ese comprobante dejará de afectar la caja. ¿Continuar?"
-            : "¿Eliminar este movimiento?";
-          if (!confirm(pregunta)) return;
-          await API.deleteMovimientoCaja(b.dataset.movDel);
-          toast("Movimiento eliminado");
-          renderApp();
         })
       );
     }
@@ -4959,6 +4997,11 @@
     }
     if (state.route === "cajas" && state.cajaDash) {
       paintCajaCharts(state.cajaDash);
+      if (state.cajaAbiertaId) {
+        const abierta = state.cajas.find((c) => c.id === state.cajaAbiertaId);
+        if (abierta) openCajaDetalle(abierta);
+        else state.cajaAbiertaId = null;
+      }
     }
     if (state.route === "combustibles" && state.combustibleResumen) {
       paintCombustibleCharts(state.combustibleResumen);

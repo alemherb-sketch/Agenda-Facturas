@@ -432,6 +432,8 @@ td.actions .btn + .btn { margin-left: 0.25rem; }
 .badge.venta { background: #dcfae6; color: #067647; }
 .badge.compra { background: #ffefd6; color: #b54708; }
 tr.row-principal td { background: rgba(15, 61, 46, 0.045); }
+tr.caja-row { cursor: pointer; }
+tr.caja-row:hover td { background: rgba(15, 61, 46, 0.08); }
 .caja-banner {
   margin-bottom: 1rem;
   display: flex;
