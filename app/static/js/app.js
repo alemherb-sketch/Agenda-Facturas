@@ -1616,11 +1616,14 @@
     return escapeHtml(texto).replace(/\n/g, "<br>");
   }
 
-  function itemsDescripcionHtml(doc) {
-    const partes = (doc?.items || [])
+  function itemsListaHtml(doc) {
+    const items = (doc?.items || []).filter((it) => (it.descripcion || "").trim());
+    if (!items.length) return `<span class="doc-vacio">—</span>`;
+    const visibles = items.slice(0, 3);
+    const resto = items.length - visibles.length;
+    const filas = visibles
       .map((it) => {
         const desc = (it.descripcion || "").trim();
-        if (!desc) return "";
         const precio = Number(it.precio_unitario || 0).toLocaleString("es-PE", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
@@ -1628,30 +1631,35 @@
         const cant = Number(it.cantidad || 1);
         const qty =
           Math.abs(cant - 1) > 0.0001
-            ? ` x ${cant.toLocaleString("es-PE", { maximumFractionDigits: 3 })}`
+            ? ` × ${cant.toLocaleString("es-PE", { maximumFractionDigits: 3 })}`
             : "";
-        return `${escapeHtml(desc)} - S/ ${precio}${escapeHtml(qty)}`;
+        return `<li><span class="doc-item-name">${escapeHtml(desc)}${escapeHtml(qty)}</span><span class="doc-item-price">S/ ${precio}</span></li>`;
       })
-      .filter(Boolean);
-    if (!partes.length) return "—";
-    return partes.join("<br>");
+      .join("");
+    const mas = resto > 0 ? `<li class="doc-item-mas">y ${resto} más</li>` : "";
+    return `<ul class="doc-items">${filas}${mas}</ul>`;
   }
 
   function tablaComprobantesHtml() {
     const rows = state.docs
-      .map(
-        (d) => `<tr class="doc-row" data-ver-doc="${d.id}" tabindex="0" title="Ver detalle">
-          <td class="nowrap">${fmtDate(d.fecha_emision)}</td>
-          <td>${escapeHtml(tipoLabel(d.tipo))}</td>
-          <td class="nowrap">${escapeHtml(d.serie)}-${escapeHtml(d.numero)}</td>
-          <td>${escapeHtml(d.cliente_nombre)}</td>
-          <td>${textoPlanoHtml(d.zona)}</td>
-          <td>${textoPlanoHtml(d.motivo)}</td>
-          <td>${itemsDescripcionHtml(d)}</td>
-        </tr>`
-      )
+      .map((d) => {
+        const zona = (d.zona || "").trim();
+        const motivo = (d.motivo || "").trim();
+        return `<tr class="doc-row" data-ver-doc="${d.id}" tabindex="0" title="Ver detalle">
+          <td class="nowrap doc-fecha">${fmtDate(d.fecha_emision)}</td>
+          <td><span class="doc-tipo" title="${escapeHtml(tipoLabel(d.tipo))}">${escapeHtml(tipoCorto(d.tipo))}</span></td>
+          <td class="nowrap"><span class="doc-serie">${escapeHtml(d.serie)}-${escapeHtml(d.numero)}</span></td>
+          <td class="doc-cliente" title="${escapeHtml(d.cliente_nombre)}">${escapeHtml(d.cliente_nombre)}</td>
+          <td>${zona ? `<span class="doc-zona">${escapeHtml(zona)}</span>` : `<span class="doc-vacio">—</span>`}</td>
+          <td><span class="doc-motivo" title="${escapeHtml(motivo)}">${motivo ? textoPlanoHtml(motivo) : `<span class="doc-vacio">—</span>`}</span></td>
+          <td>${itemsListaHtml(d)}</td>
+        </tr>`;
+      })
       .join("");
     return `<div class="table-wrap"><table class="table-docs">
+      <colgroup>
+        <col class="col-fecha"><col class="col-tipo"><col class="col-serie"><col class="col-cliente"><col class="col-zona"><col class="col-motivo"><col class="col-desc">
+      </colgroup>
       <thead><tr>
         <th>Fecha</th><th>Tipo</th><th>Serie-N°</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th>
       </tr></thead>
