@@ -109,19 +109,35 @@ def test_comprobante_no_mueve_la_caja_y_el_dashboard_resta_egresos():
         },
     )
     assert manual.status_code == 201, manual.text
+    salida = client.post(
+        "/api/cajas/movimientos",
+        headers=headers,
+        json={
+            "caja_id": principal["id"],
+            "tipo": "egreso",
+            "monto": 9,
+            "concepto": "Salida que no entra al total",
+            "fecha": "2026-11-04",
+        },
+    )
+    assert salida.status_code == 201, salida.text
 
     movs = client.get("/api/cajas/movimientos", headers=headers).json()
-    assert len(movs) == 1
-    assert movs[0]["comprobante_id"] is None
-    assert float(movs[0]["monto"]) == 50
+    assert len(movs) == 2
+    assert all(m["comprobante_id"] is None for m in movs)
 
     cajas = client.get("/api/cajas", headers=headers).json()
     caja = next(c for c in cajas if c["id"] == principal["id"])
-    assert float(caja["saldo"]) == 70  # 20 de apertura + 50 manual
+    yape = next(c for c in cajas if c["id"] == otra["id"])
+    assert float(caja["total_egresos"]) == 230
+    assert float(caja["saldo"]) == 20 + 50 - 230
+    assert float(yape["total_egresos"]) == 0
+    assert float(yape["saldo"]) == 0
 
     panel = client.get("/api/dashboard", headers=headers)
     assert panel.status_code == 200, panel.text
     assert float(panel.json()["total_egresos_comprobantes"]) == 230
+    assert float(caja["total_egresos"]) == float(panel.json()["total_egresos_comprobantes"])
 
     cambiada = client.put(
         f"/api/comprobantes/{venta['id']}",
@@ -132,8 +148,7 @@ def test_comprobante_no_mueve_la_caja_y_el_dashboard_resta_egresos():
     assert cambiada.json()["caja_id"] is None
     assert cambiada.json()["operacion"] == "venta"
     movs = client.get("/api/cajas/movimientos", headers=headers).json()
-    assert len(movs) == 1
-    assert movs[0]["comprobante_id"] is None
+    assert len(movs) == 2
 
     anulado = client.patch(
         f"/api/comprobantes/{compra['id']}/estado?estado=anulado",
@@ -143,6 +158,9 @@ def test_comprobante_no_mueve_la_caja_y_el_dashboard_resta_egresos():
     assert anulado.json()["caja_id"] is None
     panel = client.get("/api/dashboard", headers=headers).json()
     assert float(panel["total_egresos_comprobantes"]) == 150
+    caja = next(c for c in client.get("/api/cajas", headers=headers).json() if c["id"] == principal["id"])
+    assert float(caja["total_egresos"]) == 150
+    assert float(caja["saldo"]) == 20 + 50 - 150
 
 
 def test_desvincular_quita_el_movimiento_ligado_y_conserva_el_manual():
@@ -195,7 +213,8 @@ def test_desvincular_quita_el_movimiento_ligado_y_conserva_el_manual():
     assert len(movs) == 1
     assert movs[0]["concepto"] == "Salida manual"
     caja = next(c for c in client.get("/api/cajas", headers=headers).json() if c["id"] == principal["id"])
-    assert float(caja["saldo"]) == 6  # 10 de apertura − 4 manual
+    assert float(caja["total_egresos"]) == float(doc["total"])
+    assert float(caja["saldo"]) == 10 - float(doc["total"])
 
 
 def test_filtra_comprobantes_por_operacion_sin_vincular_caja():
@@ -223,3 +242,67 @@ def test_filtra_comprobantes_por_operacion_sin_vincular_caja():
 
     panel = client.get("/api/dashboard", headers=headers).json()
     assert float(panel["total_egresos_comprobantes"]) == 450
+    principal_out = next(c for c in client.get("/api/cajas", headers=headers).json() if c["id"] == principal["id"])
+    yape_out = next(c for c in client.get("/api/cajas", headers=headers).json() if c["id"] == yape["id"])
+    assert float(principal_out["total_egresos"]) == 450
+    assert float(yape_out["total_egresos"]) == 0
+
+
+def test_egresos_principal_incluyen_cotizacion_y_guia_y_el_periodo():
+    client = _cliente()
+    headers = _auth(client, "periodo@negocio.pe")
+    principal = _caja(client, headers, "Caja principal", principal=True, apertura=10)
+    otra = _caja(client, headers, "Banco", principal=False)
+    _doc(client, headers, numero="1", tipo="cotizacion", serie="COT", fecha_emision="2026-11-02")
+    _doc(client, headers, numero="2", tipo="guia_remision", serie="GR01", fecha_emision="2026-11-05")
+    fuera = _doc(client, headers, numero="3", fecha_emision="2026-10-15")
+    anulado = _doc(client, headers, numero="4", fecha_emision="2026-11-08")
+    baja = client.patch(f"/api/comprobantes/{anulado['id']}/estado?estado=anulado", headers=headers)
+    assert baja.status_code == 200, baja.text
+
+    manual = client.post(
+        "/api/cajas/movimientos",
+        headers=headers,
+        json={
+            "caja_id": principal["id"],
+            "tipo": "egreso",
+            "monto": 40,
+            "concepto": "Egreso manual",
+            "fecha": "2026-11-03",
+        },
+    )
+    assert manual.status_code == 201, manual.text
+    otro = client.post(
+        "/api/cajas/movimientos",
+        headers=headers,
+        json={
+            "caja_id": otra["id"],
+            "tipo": "egreso",
+            "monto": 7,
+            "concepto": "Comisión banco",
+            "fecha": "2026-11-04",
+        },
+    )
+    assert otro.status_code == 201, otro.text
+
+    cajas = client.get("/api/cajas", headers=headers).json()
+    caja = next(c for c in cajas if c["id"] == principal["id"])
+    # Tres comprobantes de 150; el anulado no entra. El egreso manual de 40 tampoco.
+    assert float(caja["total_egresos"]) == 450
+    assert float(caja["saldo"]) == 10 - 450
+    panel = client.get("/api/dashboard", headers=headers).json()
+    assert float(panel["total_egresos_comprobantes"]) == float(caja["total_egresos"])
+
+    periodo = client.get(
+        "/api/cajas/dashboard",
+        headers=headers,
+        params={"fecha_desde": "2026-11-01", "fecha_hasta": "2026-11-30"},
+    )
+    assert periodo.status_code == 200, periodo.text
+    body = periodo.json()
+    # Noviembre: cotización + guía = 300. El de octubre queda fuera. Banco suma 7.
+    assert float(body["total_egresos"]) == 307
+    por_nombre = {fila["caja"]: fila for fila in body["por_caja"]}
+    assert float(por_nombre["Caja principal"]["egresos"]) == 300
+    assert float(por_nombre["Banco"]["egresos"]) == 7
+    assert float(fuera["total"]) == 150

@@ -1,14 +1,18 @@
-"""Los comprobantes no se vinculan a ninguna caja.
+"""Los comprobantes no generan movimientos de caja.
 
-El arranque borra los movimientos que un comprobante hubiera generado
-y deja caja_id en blanco. Los movimientos manuales de caja se conservan.
+El total de egresos de la caja principal es la suma de los comprobantes
+no anulados (cotizaciones y guías incluidas). Al arrancar se borran los
+movimientos viejos ligados a un comprobante para no contarlos dos veces.
+Los movimientos escritos a mano se conservan en el listado.
 """
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -24,6 +28,44 @@ from app.services.adjuntos import ENTIDAD_CAJA, eliminar_adjuntos_entidad
 from app.services.comprobante_calc import TIPO_LABELS
 
 _SIN_EFECTO_EN_CAJA = {TipoDocumento.COTIZACION, TipoDocumento.GUIA_REMISION}
+
+
+def suma_egresos_comprobantes(
+    db: Session,
+    usuario_id: int,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+) -> Decimal:
+    """Total de comprobantes no anulados. Es el egreso de la caja principal."""
+    query = db.query(func.coalesce(func.sum(Comprobante.total), 0)).filter(
+        Comprobante.usuario_id == usuario_id,
+        Comprobante.estado != EstadoComprobante.ANULADO,
+    )
+    if fecha_desde is not None:
+        query = query.filter(Comprobante.fecha_emision >= fecha_desde)
+    if fecha_hasta is not None:
+        query = query.filter(Comprobante.fecha_emision <= fecha_hasta)
+    return Decimal(str(query.scalar() or 0))
+
+
+def egresos_comprobantes_por_dia(
+    db: Session,
+    usuario_id: int,
+    fecha_desde: date,
+    fecha_hasta: date,
+) -> list[tuple[date, Decimal]]:
+    rows = (
+        db.query(Comprobante.fecha_emision, func.coalesce(func.sum(Comprobante.total), 0))
+        .filter(
+            Comprobante.usuario_id == usuario_id,
+            Comprobante.estado != EstadoComprobante.ANULADO,
+            Comprobante.fecha_emision >= fecha_desde,
+            Comprobante.fecha_emision <= fecha_hasta,
+        )
+        .group_by(Comprobante.fecha_emision)
+        .all()
+    )
+    return [(dia, Decimal(str(total or 0))) for dia, total in rows]
 
 
 def validar_caja(db: Session, user: Usuario, caja_id: int, *, permitir_inactiva: bool = False) -> Caja:

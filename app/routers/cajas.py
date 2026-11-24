@@ -29,6 +29,7 @@ from app.services.adjuntos import (
     listar_adjuntos,
     map_adjuntos_por_entidad,
 )
+from app.services.caja_comprobante import egresos_comprobantes_por_dia, suma_egresos_comprobantes
 from app.services.excel_service import generar_excel_reporte_cajas
 from app.services.pdf_service import generar_pdf_reporte_cajas
 
@@ -60,9 +61,69 @@ def _totales_caja(db: Session, caja_id: int) -> tuple[Decimal, Decimal, Decimal]
     return ingresos - egresos, ingresos, egresos
 
 
+def _caja_principal(db: Session, usuario_id: int) -> Caja | None:
+    return (
+        db.query(Caja)
+        .filter(Caja.usuario_id == usuario_id, Caja.es_principal.is_(True), Caja.activo.is_(True))
+        .first()
+    )
+
+
+def _egresos_son_comprobantes(
+    principal: Caja | None,
+    *,
+    caja_id: int | None,
+    tipo: str | None,
+    q: str | None,
+) -> bool:
+    """La caja principal toma sus egresos de los comprobantes, no de los movimientos."""
+    if principal is None or q:
+        return False
+    if tipo == TipoMovimientoCaja.INGRESO.value or tipo == "ingreso":
+        return False
+    if caja_id is not None and caja_id != principal.id:
+        return False
+    return True
+
+
+def _egresos_periodo_con_comprobantes(
+    db: Session,
+    user: Usuario,
+    total_egresos: Decimal,
+    *,
+    fecha_desde: date,
+    fecha_hasta: date,
+    caja_id: int | None,
+    tipo: str | None,
+    q: str | None,
+) -> tuple[Decimal, Caja | None, Decimal]:
+    """Sustituye los egresos manuales de la principal por los comprobantes del período."""
+    principal = _caja_principal(db, user.id)
+    if not _egresos_son_comprobantes(principal, caja_id=caja_id, tipo=tipo, q=q) or principal is None:
+        return total_egresos, None, Decimal("0.00")
+    manual_principal = (
+        db.query(func.coalesce(func.sum(MovimientoCaja.monto), 0))
+        .filter(
+            MovimientoCaja.usuario_id == user.id,
+            MovimientoCaja.caja_id == principal.id,
+            MovimientoCaja.tipo == TipoMovimientoCaja.EGRESO,
+            MovimientoCaja.fecha >= fecha_desde,
+            MovimientoCaja.fecha <= fecha_hasta,
+        )
+        .scalar()
+    )
+    comprobantes = suma_egresos_comprobantes(db, user.id, fecha_desde, fecha_hasta)
+    ajustado = total_egresos - Decimal(str(manual_principal or 0)) + comprobantes
+    return ajustado, principal, comprobantes
+
+
 def _caja_out(db: Session, caja: Caja) -> CajaOut:
     saldo, ingresos, egresos = _totales_caja(db, caja.id)
     apertura = Decimal(str(caja.monto_apertura or 0))
+    if caja.es_principal:
+        # El total de egresos de la principal es el de los comprobantes no anulados.
+        egresos = suma_egresos_comprobantes(db, caja.usuario_id)
+        saldo = ingresos - egresos
     return CajaOut(
         id=caja.id,
         nombre=caja.nombre,
@@ -234,6 +295,17 @@ def dashboard_cajas(
         elif tipo_row == TipoMovimientoCaja.EGRESO:
             total_egresos = valor
 
+    total_egresos, principal, egresos_comprobantes = _egresos_periodo_con_comprobantes(
+        db,
+        user,
+        total_egresos,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+    )
+
     cantidad = (
         db.query(func.count(MovimientoCaja.id)).filter(MovimientoCaja.usuario_id == user.id)
     )
@@ -272,6 +344,8 @@ def dashboard_cajas(
 
     for mov in agg_rows:
         monto = Decimal(str(mov.monto))
+        if principal is not None and mov.caja_id == principal.id and mov.tipo == TipoMovimientoCaja.EGRESO:
+            continue
         caja_nombre = mov.caja.nombre if mov.caja else f"Caja #{mov.caja_id}"
         dia = mov.fecha.isoformat()
         if mov.tipo == TipoMovimientoCaja.INGRESO:
@@ -280,6 +354,11 @@ def dashboard_cajas(
         else:
             por_caja_map[caja_nombre]["egresos"] += monto
             por_dia_map[dia]["egresos"] += monto
+
+    if principal is not None:
+        por_caja_map[principal.nombre]["egresos"] += egresos_comprobantes
+        for dia, monto in egresos_comprobantes_por_dia(db, user.id, fecha_desde, fecha_hasta):
+            por_dia_map[dia.isoformat()]["egresos"] += monto
 
     por_caja = [
         {
@@ -369,6 +448,17 @@ def reporte_pdf(
         elif tipo_row == TipoMovimientoCaja.EGRESO:
             total_egresos = valor
 
+    total_egresos, principal_reporte, _ = _egresos_periodo_con_comprobantes(
+        db,
+        user,
+        total_egresos,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        caja_id=caja_id,
+        tipo=tipo,
+        q=q,
+    )
+
     caja_nombre = None
     if caja_id:
         caja = _get_caja(db, user, caja_id)
@@ -385,6 +475,11 @@ def reporte_pdf(
         },
         total_ingresos=float(total_ingresos),
         total_egresos=float(total_egresos),
+        nota_egresos=(
+            "Los egresos de la caja principal son los comprobantes no anulados del período."
+            if principal_reporte is not None
+            else None
+        ),
     )
     return Response(
         content=pdf,

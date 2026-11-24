@@ -407,6 +407,7 @@ def generar_pdf_reporte_cajas(
     filtros: dict | None = None,
     total_ingresos: float = 0,
     total_egresos: float = 0,
+    nota_egresos: str | None = None,
 ) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -451,6 +452,8 @@ def generar_pdf_reporte_cajas(
             normal,
         )
     )
+    if nota_egresos:
+        story.append(Paragraph(nota_egresos, small))
     story.append(Spacer(1, 8))
 
     rows = [["Fecha", "Caja", "Tipo", "N° Transacción", "Concepto", "Monto"]]

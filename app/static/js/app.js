@@ -723,14 +723,25 @@
   }
 
   function formulaCajaHtml(cajas, resumen) {
-    const saldoTotal = (cajas || []).reduce((acc, c) => acc + Number(c.saldo || 0), 0);
+    const lista = cajas || [];
+    const saldoTotal = lista.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
     const egresos = Number(resumen?.total_egresos_comprobantes || 0);
-    const resultado = saldoTotal - egresos;
-    return `
+    const principal = lista.find((c) => c.es_principal);
+    if (!principal) {
+      const resultado = saldoTotal - egresos;
+      return `
       <div class="grid-stats" style="margin:0">
         <div class="stat"><label>Total de la caja</label><strong>${money(saldoTotal)}</strong><span class="stat-meta">Suma del saldo de todas las cajas</span></div>
         <div class="stat warn"><label>Egresos (comprobantes)</label><strong>${money(egresos)}</strong><span class="stat-meta">Comprobantes no anulados</span></div>
         <div class="stat ${resultado < 0 ? "danger" : "ok"}"><label>Resultado</label><strong>${money(resultado)}</strong><span class="stat-meta">Total de la caja − egresos</span></div>
+      </div>`;
+    }
+    const saldoPrincipal = Number(principal.saldo || 0);
+    return `
+      <div class="grid-stats" style="margin:0">
+        <div class="stat"><label>Total de la caja</label><strong>${money(saldoTotal)}</strong><span class="stat-meta">Saldos, con los comprobantes ya restados en la principal</span></div>
+        <div class="stat warn"><label>Egresos (comprobantes)</label><strong>${money(egresos)}</strong><span class="stat-meta">Igual a los egresos de la caja principal</span></div>
+        <div class="stat ${saldoPrincipal < 0 ? "danger" : "ok"}"><label>Saldo caja principal</label><strong>${money(saldoPrincipal)}</strong><span class="stat-meta">Apertura + ingresos − comprobantes</span></div>
       </div>`;
   }
 
@@ -746,7 +757,7 @@
             <button class="btn btn-secondary btn-sm" data-go="cajas">Configurar cajas</button>
           </div>
           ${formulaCajaHtml([], resumen)}
-          <div class="empty"><strong>Sin cajas</strong>Crea una caja para el efectivo. Los comprobantes se cuentan aparte, como egresos.</div>
+          <div class="empty"><strong>Sin cajas</strong>Crea una caja y márcala como principal. Sus egresos serán el total de los comprobantes.</div>
         </div>`;
     }
     const principal = cajas.find((c) => c.es_principal);
@@ -758,8 +769,8 @@
           <div>
             <strong style="font-family:var(--font-display)">Cajas</strong>
             <p style="margin:.2rem 0 0;color:var(--muted);font-size:.85rem">
-              ${principal ? `Principal: ${escapeHtml(principal.nombre)}. ` : "Sin caja principal. "}
-              Los comprobantes no entran a ninguna caja. Resultado = total de la caja − egresos. Movimientos de caja del ${rango}.
+              ${principal ? `Principal: ${escapeHtml(principal.nombre)}. Sus egresos son el total de comprobantes no anulados. ` : "Sin caja principal. "}
+              Movimientos de caja del ${rango}.
             </p>
           </div>
           <button class="btn btn-secondary btn-sm" data-go="cajas">Ver cajas</button>
@@ -790,7 +801,7 @@
                       )
                       .join("")}
                     </tbody></table></div>`
-                : `<div class="empty"><strong>Sin movimientos</strong>Los comprobantes no mueven la caja. Registra un movimiento manual.</div>`
+                : `<div class="empty"><strong>Sin movimientos</strong>Los egresos de la caja principal salen de los comprobantes. Aquí se listan los movimientos escritos a mano.</div>`
             }
           </div>
         </div>
@@ -805,7 +816,7 @@
                 ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
               <td>${money(c.monto_apertura || 0)}</td>
               <td style="color:var(--ok)">${money(c.total_ingresos)}</td>
-              <td style="color:var(--danger)">${money(c.total_egresos)}</td>
+              <td style="color:var(--danger)">${money(c.total_egresos)}${c.es_principal ? `<br><span style="color:var(--muted);font-size:.8rem">Comprobantes</span>` : ""}</td>
               <td><strong>${money(c.saldo)}</strong></td>
             </tr>`
             )
@@ -1834,14 +1845,14 @@
       ? `<div class="panel caja-banner">
           <div>
             <strong>Caja principal: ${escapeHtml(principal.nombre)}</strong>
-            <p>Los comprobantes no se registran en esta caja. En el Dashboard se restan como egresos del total de las cajas.</p>
+            <p>Sus egresos son el total de los comprobantes no anulados, incluidas cotizaciones y guías. Ese monto es el mismo que Egresos (comprobantes) del Dashboard. Los egresos escritos a mano quedan en el listado y no se suman otra vez.</p>
           </div>
           <span class="badge principal">Principal</span>
         </div>`
       : `<div class="panel caja-banner">
           <div>
             <strong>Sin caja principal</strong>
-            <p>Puedes marcar una caja como principal. Los comprobantes siguen sin vincularse a ninguna caja.</p>
+            <p>Marca una caja como principal para que sus egresos sean el total de los comprobantes.</p>
           </div>
         </div>`;
 
@@ -1849,7 +1860,7 @@
       <div class="page-head">
         <div>
           <h1>Cajas</h1>
-          <p>Movimientos manuales de ingreso y egreso. Los comprobantes no se vinculan a ninguna caja.</p>
+          <p>Los egresos de la caja principal coinciden con el total de comprobantes no anulados.</p>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-caja">🖨 Imprimir reporte</button>
@@ -1908,7 +1919,7 @@
                     ${c.descripcion ? `<br><span style="color:var(--muted);font-size:.8rem">${escapeHtml(c.descripcion)}</span>` : ""}</td>
                   <td>${money(c.monto_apertura || 0)}${c.fecha_apertura ? `<br><span style="color:var(--muted);font-size:.8rem">${fmtDate(String(c.fecha_apertura).slice(0, 10))}</span>` : ""}</td>
                   <td style="color:var(--ok)">${money(c.total_ingresos)}</td>
-                  <td style="color:var(--danger)">${money(c.total_egresos)}</td>
+                  <td style="color:var(--danger)">${money(c.total_egresos)}${c.es_principal ? `<br><span style="color:var(--muted);font-size:.8rem">Comprobantes</span>` : ""}</td>
                   <td><strong>${money(c.saldo)}</strong></td>
                   <td class="actions">
                     ${c.es_principal ? "" : iconBtn(`data-caja-principal="${c.id}"`, "Usar como caja principal", "star")}
@@ -1938,7 +1949,7 @@
                     (c) => `<tr>
                     <td>${escapeHtml(c.caja)}</td>
                     <td style="color:var(--ok)">${money(c.ingresos)}</td>
-                    <td style="color:var(--danger)">${money(c.egresos)}</td>
+                    <td style="color:var(--danger)">${money(c.egresos)}${principal && c.caja === principal.nombre ? `<br><span style="color:var(--muted);font-size:.8rem">Comprobantes del período</span>` : ""}</td>
                     <td><strong>${money(c.saldo)}</strong></td>
                   </tr>`
                   )
@@ -2396,7 +2407,7 @@
                 const marcada = caja ? caja.es_principal : !hayPrincipal;
                 return marcada ? "checked" : "";
               })()} />
-              <span>Caja principal<br><small style="font-weight:500;color:var(--muted)">Solo una caja queda como principal. Los comprobantes no se registran en la caja.</small></span>
+              <span>Caja principal<br><small style="font-weight:500;color:var(--muted)">Solo una caja queda como principal. Sus egresos son el total de los comprobantes.</small></span>
             </label>
           </div>
           <div class="field full">
