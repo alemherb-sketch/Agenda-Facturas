@@ -1934,19 +1934,13 @@
     if (!state.filtersCaja.fecha_desde) state.filtersCaja.fecha_desde = defaults.desde;
     if (!state.filtersCaja.fecha_hasta) state.filtersCaja.fecha_hasta = defaults.hasta;
 
-    const params = {
-      fecha_desde: state.filtersCaja.fecha_desde,
-      fecha_hasta: state.filtersCaja.fecha_hasta,
-    };
-    if (state.filtersCaja.caja_id) params.caja_id = state.filtersCaja.caja_id;
-    if (state.filtersCaja.tipo) params.tipo = state.filtersCaja.tipo;
-    if (state.filtersCaja.q) params.q = state.filtersCaja.q;
-
-    const [cajas, dash] = await Promise.all([API.listCajas(), API.dashboardCajas(params)]);
+    const cajas = await API.listCajas();
     state.cajas = cajas;
-    state.cajaDash = dash;
-    state.movimientosCaja = dash.movimientos || [];
+    state.cajaDash = null;
+    state.movimientosCaja = [];
     const saldoTotal = cajas.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
+    const ingresosTotal = cajas.reduce((acc, c) => acc + Number(c.total_ingresos || 0), 0);
+    const egresosTotal = cajas.reduce((acc, c) => acc + Number(c.total_egresos || 0), 0);
     const principal = cajas.find((c) => c.es_principal);
     const today = new Date().toISOString().slice(0, 10);
     const bannerPrincipal = principal
@@ -1998,16 +1992,12 @@
         <button class="btn btn-secondary" id="btn-filtrar-caja">Filtrar</button>
         <button class="btn btn-ghost" id="btn-caja-mes">Mes actual</button>
       </div>
+      <p style="margin:-.35rem 0 .8rem;color:var(--muted);font-size:.8rem">El rango, la caja y el tipo se usan al imprimir el reporte y al exportar Excel. Los montos de abajo son el acumulado de cada caja.</p>
       ${bannerPrincipal}
       <div class="grid-stats">
-        <div class="stat ok"><label>Ingresos del período</label><strong>${money(dash.total_ingresos)}</strong></div>
-        <div class="stat warn"><label>Egresos del período</label><strong>${money(dash.total_egresos)}</strong></div>
-        <div class="stat"><label>Saldo del período</label><strong>${money(dash.saldo_periodo)}</strong></div>
-        <div class="stat"><label>Movimientos</label><strong>${dash.cantidad_movimientos}</strong></div>
-      </div>
-      <div class="charts">
-        <div class="panel chart-box"><h3>Movimientos por día</h3><canvas id="chart-caja-dia"></canvas></div>
-        <div class="panel chart-box"><h3>Actividad por caja</h3><canvas id="chart-caja-pie"></canvas></div>
+        <div class="stat ok"><label>Ingresos</label><strong>${money(ingresosTotal)}</strong><span class="stat-meta">Suma de los ingresos de las cajas</span></div>
+        <div class="stat warn"><label>Egresos</label><strong>${money(egresosTotal)}</strong><span class="stat-meta">En la principal, los comprobantes no anulados</span></div>
+        <div class="stat ${saldoTotal < 0 ? "danger" : ""}"><label>Saldo</label><strong>${money(saldoTotal)}</strong><span class="stat-meta">Apertura + ingresos − egresos</span></div>
       </div>
       <div class="panel" style="margin-bottom:1rem;padding:0;overflow:hidden">
         <div style="padding:.9rem 1rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;align-items:center">
@@ -5067,13 +5057,10 @@
       paintCharts(state.dashboard);
       paintDashCajaChart(state.cajaDashHome);
     }
-    if (state.route === "cajas" && state.cajaDash) {
-      paintCajaCharts(state.cajaDash);
-      if (state.cajaAbiertaId) {
-        const abierta = state.cajas.find((c) => c.id === state.cajaAbiertaId);
-        if (abierta) openCajaDetalle(abierta);
-        else state.cajaAbiertaId = null;
-      }
+    if (state.route === "cajas" && state.cajaAbiertaId) {
+      const abierta = state.cajas.find((c) => c.id === state.cajaAbiertaId);
+      if (abierta) openCajaDetalle(abierta);
+      else state.cajaAbiertaId = null;
     }
     if (state.route === "combustibles" && state.combustibleResumen) {
       paintCombustibleCharts(state.combustibleResumen);
