@@ -363,6 +363,8 @@ class DashboardOut(BaseModel):
     por_estado: dict[str, int]
     por_tipo: dict[str, int]
     por_mes: list[dict]
+    por_cliente: list[dict] = []
+    por_zona: list[dict] = []
     agendas_proximas: int
     agendas_hoy: int
     documentos_vencidos: int

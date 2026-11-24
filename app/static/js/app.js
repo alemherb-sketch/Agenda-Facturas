@@ -30,7 +30,7 @@
     draftFromContact: null,
     dashboard: null,
     cajaDashHome: null,
-    charts: { estado: null, tipo: null, mes: null, cajaDia: null, cajaPie: null, dashCaja: null, combDia: null, combPlaca: null, combConductor: null, combMarca: null },
+    charts: { estado: null, tipo: null, mes: null, cliente: null, zona: null, cajaDia: null, cajaPie: null, dashCaja: null, combDia: null, combPlaca: null, combConductor: null, combMarca: null },
     editingDoc: null,
     editingAgenda: null,
     editingCliente: null,
@@ -808,6 +808,7 @@
           </div>
           <div class="panel chart-box chart-box-pie" style="box-shadow:none">
             <h3>Movimiento por caja</h3>
+            <p class="chart-note">Porcentaje del movimiento del período.</p>
             ${dash?.por_caja?.length ? `<div class="chart-pie-wrap"><canvas id="chart-dash-caja-pie"></canvas></div>` : `<div class="empty"><strong>Sin cajas con movimiento</strong></div>`}
           </div>
         </div>
@@ -894,21 +895,20 @@
           </div>
           <div class="panel">
             <h3>Cajas y vencimientos</h3>
-            <p style="margin:0 0 .8rem;color:var(--muted)">
-              ${
-                cajaError
-                  ? "No se pudo cargar el saldo de las cajas."
-                  : principal
-                    ? `Caja principal: ${escapeHtml(principal.nombre)}. Saldo de todas las cajas: <strong>${money(saldoCajas)}</strong>.`
-                    : cajas.length
-                      ? `Sin caja principal. Saldo de todas las cajas: <strong>${money(saldoCajas)}</strong>.`
-                      : "Aún no hay cajas configuradas."
-              }
-            </p>
-            <p style="margin:0;color:${vencidos ? "var(--danger)" : "var(--ok)"};font-weight:700">
-              ${vencidos} comprobante(s) vencido(s) sin pago
-            </p>
-            <p style="margin:.7rem 0 0;color:var(--muted)">Egresos por comprobantes: <strong>${money(d.total_egresos_comprobantes)}</strong></p>
+            <div class="hero-facts">
+              <div>
+                <span>${cajaError ? "Cajas" : principal ? escapeHtml(principal.nombre) : "Saldo de cajas"}</span>
+                <strong>${cajaError ? "—" : money(saldoCajas)}</strong>
+              </div>
+              <div class="${vencidos ? "is-danger" : "is-ok"}">
+                <span>Vencidos sin pago</span>
+                <strong>${vencidos}</strong>
+              </div>
+              <div>
+                <span>Egresos por comprobantes</span>
+                <strong>${money(d.total_egresos_comprobantes)}</strong>
+              </div>
+            </div>
             <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
               <button class="btn btn-primary btn-sm" data-go="nuevo">Nuevo comprobante</button>
               <button class="btn btn-secondary btn-sm" data-go="cajas">Ver cajas</button>
@@ -933,14 +933,14 @@
         </div>
       </div>
       ${hero}
-      <div style="display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
+      <div class="dash-block-head">
         <div>
-          <h2 style="margin:0;font-family:var(--font-display);font-size:1.35rem">Comprobantes</h2>
-          <p style="margin:.25rem 0 0;color:var(--muted)">Cantidad, cobros, anulados, vencidos y documentos recientes.</p>
+          <h2>Comprobantes</h2>
+          <p>Cobros, clientes, zonas y documentos recientes.</p>
         </div>
         <button class="btn btn-secondary btn-sm" data-go="comprobantes">Ver comprobantes</button>
       </div>
-      <div class="grid-stats">
+      <div class="grid-stats dash-kpis">
         <div class="stat"><label>Comprobantes</label><strong>${d.total_comprobantes}</strong><span class="stat-meta">Registrados</span></div>
         <div class="stat"><label>Facturado</label><strong>${money(d.total_facturado)}</strong><span class="stat-meta">Ventas no anuladas</span></div>
         <div class="stat ok"><label>Cobrado</label><strong>${money(d.total_cobrado)}</strong></div>
@@ -949,11 +949,23 @@
         <div class="stat ${vencidos ? "danger" : "ok"}"><label>Vencidos</label><strong>${vencidos}</strong><span class="stat-meta">Sin pago y con fecha vencida</span></div>
       </div>
       <div class="charts">
-        <div class="panel chart-box"><h3>Facturación mensual</h3><canvas id="chart-mes"></canvas></div>
-        <div class="panel chart-box"><h3>Por estado</h3><canvas id="chart-estado"></canvas></div>
+        <div class="panel chart-box">
+          <h3>Facturación mensual</h3>
+          <p class="chart-note">Cada barra indica su parte del total del período.</p>
+          <div class="chart-canvas"><canvas id="chart-mes"></canvas></div>
+        </div>
+        <div class="panel chart-box chart-box-pie">
+          <h3>Por estado</h3>
+          <p class="chart-note">Porcentaje sobre la cantidad de comprobantes.</p>
+          <div class="chart-pie-wrap"><canvas id="chart-estado"></canvas></div>
+        </div>
       </div>
       <div class="charts">
-        <div class="panel chart-box"><h3>Por tipo de documento</h3><canvas id="chart-tipo"></canvas></div>
+        <div class="panel chart-box chart-box-pie">
+          <h3>Por tipo de documento</h3>
+          <p class="chart-note">Porcentaje sobre la cantidad de comprobantes.</p>
+          <div class="chart-pie-wrap"><canvas id="chart-tipo"></canvas></div>
+        </div>
         <div class="panel">
           <h3>Últimos comprobantes</h3>
           ${
@@ -979,60 +991,284 @@
           }
         </div>
       </div>
+      <div class="charts charts-even">
+        ${panelGrupoDashboard("Por cliente", "Monto facturado, sin anulados.", "chart-cliente", d.por_cliente, "Sin comprobantes por cliente")}
+        ${panelGrupoDashboard("Por zona", "Misma base que el facturado del panel.", "chart-zona", d.por_zona, "Sin comprobantes por zona")}
+      </div>
       ${seccionCajasDashboard(cajas, cajaDash, cajaError, d)}`;
   }
+
+  function gruposVisibles(items, max = 8) {
+    const lista = items || [];
+    if (lista.length <= max) return lista;
+    const top = lista.slice(0, max - 1);
+    const resto = lista.slice(max - 1);
+    const total = resto.reduce((acc, item) => acc + Number(item.total || 0), 0);
+    const cantidad = resto.reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
+    const porcentaje = resto.reduce((acc, item) => acc + Number(item.porcentaje || 0), 0);
+    return [
+      ...top,
+      {
+        nombre: "Otros",
+        cantidad,
+        total,
+        porcentaje: Math.round(porcentaje * 10) / 10,
+      },
+    ];
+  }
+
+  function rankingDashboardHtml(items) {
+    return `<div class="dash-rank">${items
+      .map((item) => {
+        const ancho = Math.max(2, Math.min(100, Number(item.porcentaje) || 0));
+        const docs = Number(item.cantidad) === 1 ? "comprobante" : "comprobantes";
+        return `<div class="dash-rank-row">
+          <div>
+            <div class="dash-rank-name">${escapeHtml(item.nombre)}</div>
+            <div class="dash-rank-meta">${item.cantidad} ${docs} · ${money(item.total)}</div>
+            <div class="dash-rank-track"><span style="width:${ancho}%"></span></div>
+          </div>
+          <strong class="dash-rank-pct">${Number(item.porcentaje || 0).toFixed(1)}%</strong>
+        </div>`;
+      })
+      .join("")}</div>`;
+  }
+
+  function panelGrupoDashboard(titulo, nota, canvasId, items, vacio) {
+    const visibles = gruposVisibles(items);
+    if (!visibles.length) {
+      return `<div class="panel chart-box"><h3>${titulo}</h3><p class="chart-note">${nota}</p><div class="empty"><strong>${vacio}</strong></div></div>`;
+    }
+    const alto = Math.max(180, Math.min(320, visibles.length * 36 + 28));
+    return `<div class="panel chart-box">
+      <h3>${titulo}</h3>
+      <p class="chart-note">${nota}</p>
+      <div class="chart-canvas" style="height:${alto}px"><canvas id="${canvasId}"></canvas></div>
+      ${rankingDashboardHtml(visibles)}
+    </div>`;
+  }
+
+  const PALETA_DASH = ["#0f3d2e", "#1f6b4f", "#c9852a", "#175cd3", "#0f766e", "#6941c6", "#b54708", "#475467", "#0e7490", "#9a3412"];
+
+  function valorGrafico(ctx) {
+    const punto = ctx.parsed;
+    if (typeof punto === "number") return Number(punto) || 0;
+    if (punto && ctx.chart?.options?.indexAxis === "y" && typeof punto.x === "number") return punto.x;
+    if (punto && typeof punto.y === "number") return punto.y;
+    return Number(ctx.raw) || 0;
+  }
+
+  function tooltipPorcentaje(formatear) {
+    return {
+      callbacks: {
+        label(ctx) {
+          const valores = (ctx.dataset.data || []).map((v) => Number(v) || 0);
+          const total = valores.reduce((acc, v) => acc + v, 0);
+          const valor = valorGrafico(ctx);
+          const pct = total ? (valor / total) * 100 : 0;
+          const texto = formatear ? formatear(valor) : String(valor);
+          const serie = ctx.dataset.label && ctx.dataset.label !== "Total S/" ? `${ctx.dataset.label}: ` : "";
+          return `${serie}${texto} · ${pct.toFixed(1)}%`;
+        },
+      },
+    };
+  }
+
+  function leyendaPorcentaje() {
+    return {
+      position: "bottom",
+      labels: {
+        boxWidth: 12,
+        boxHeight: 12,
+        padding: 12,
+        generateLabels(chart) {
+          const data = chart.data;
+          const ds = data.datasets[0];
+          const valores = (ds.data || []).map((v) => Number(v) || 0);
+          const total = valores.reduce((acc, v) => acc + v, 0);
+          const meta = chart.getDatasetMeta(0);
+          const colores = ds.backgroundColor;
+          return (data.labels || []).map((label, i) => {
+            const pct = total ? ((valores[i] / total) * 100).toFixed(1) : "0.0";
+            return {
+              text: `${label}  ${pct}%`,
+              fillStyle: Array.isArray(colores) ? colores[i] : colores,
+              strokeStyle: "transparent",
+              lineWidth: 0,
+              hidden: Boolean(meta.data[i]?.hidden),
+              index: i,
+              datasetIndex: 0,
+            };
+          });
+        },
+      },
+    };
+  }
+
+  const pluginPorcentaje = {
+    id: "porcentajeDashboard",
+    afterDatasetsDraw(chart) {
+      const tipo = chart.config.type;
+      if (!["bar", "pie", "doughnut"].includes(tipo)) return;
+      if ((chart.data.datasets || []).length !== 1) return;
+      const horizontal = chart.options.indexAxis === "y";
+      const { ctx, chartArea } = chart;
+      const meta = chart.getDatasetMeta(0);
+      const valores = (chart.data.datasets[0].data || []).map((v) => Number(v) || 0);
+      const total = valores.reduce((acc, v) => acc + v, 0);
+      if (!total || !chartArea) return;
+      ctx.save();
+      ctx.font = "700 11px Manrope, sans-serif";
+      valores.forEach((valor, i) => {
+        const el = meta.data[i];
+        if (!el || el.hidden || valor <= 0) return;
+        const pct = (valor / total) * 100;
+        const texto = `${pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)}%`;
+        if (tipo === "bar" && !horizontal) {
+          if (chartArea.width / valores.length < 42) return;
+          ctx.fillStyle = "#14231c";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(texto, el.x, el.y - 3);
+        } else if (tipo === "bar") {
+          const dentro = el.x - chartArea.left > 52;
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = dentro ? "#fff" : "#14231c";
+          ctx.textAlign = dentro ? "right" : "left";
+          ctx.fillText(texto, dentro ? el.x - 8 : Math.min(el.x + 6, chartArea.right - 2), el.y);
+        } else if (pct >= 7) {
+          const pos = el.tooltipPosition();
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.shadowColor = "rgba(20, 35, 28, 0.35)";
+          ctx.shadowBlur = 3;
+          ctx.fillText(texto, pos.x, pos.y);
+        }
+      });
+      ctx.restore();
+    },
+  };
 
   function paintCharts(d) {
     destroyCharts();
     if (typeof Chart === "undefined") return;
-    const mesLabels = d.por_mes.map((x) => x.mes);
-    const mesData = d.por_mes.map((x) => x.total);
-    state.charts.mes = new Chart($("#chart-mes"), {
+    const mesEl = $("#chart-mes");
+    if (mesEl && d.por_mes?.length) {
+      state.charts.mes = new Chart(mesEl, {
+        type: "bar",
+        plugins: [pluginPorcentaje],
+        data: {
+          labels: d.por_mes.map((x) => x.mes),
+          datasets: [
+            {
+              label: "Total S/",
+              data: d.por_mes.map((x) => x.total),
+              backgroundColor: "rgba(15, 61, 46, 0.78)",
+              borderRadius: 8,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { top: 18 } },
+          plugins: { legend: { display: false }, tooltip: tooltipPorcentaje((v) => money(v)) },
+          scales: { y: { beginAtZero: true } },
+        },
+      });
+    }
+
+    const estEl = $("#chart-estado");
+    const estOrden = ["emitido", "pagado", "no_pagado", "anulado"];
+    const estColor = { emitido: "#175cd3", pagado: "#067647", no_pagado: "#b54708", anulado: "#b42318" };
+    const estKeys = Object.keys(d.por_estado || {}).sort(
+      (a, b) => (estOrden.indexOf(a) < 0 ? 99 : estOrden.indexOf(a)) - (estOrden.indexOf(b) < 0 ? 99 : estOrden.indexOf(b))
+    );
+    if (estEl && estKeys.length) {
+      state.charts.estado = new Chart(estEl, {
+        type: "doughnut",
+        plugins: [pluginPorcentaje],
+        data: {
+          labels: estKeys.map(estadoLabel),
+          datasets: [
+            {
+              data: estKeys.map((k) => d.por_estado[k]),
+              backgroundColor: estKeys.map((k) => estColor[k] || "#475467"),
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: leyendaPorcentaje(), tooltip: tooltipPorcentaje((v) => String(v)) },
+        },
+      });
+    }
+
+    const tipoEl = $("#chart-tipo");
+    const tipoLabels = Object.keys(d.por_tipo || {});
+    if (tipoEl && tipoLabels.length) {
+      state.charts.tipo = new Chart(tipoEl, {
+        type: "pie",
+        plugins: [pluginPorcentaje],
+        data: {
+          labels: tipoLabels,
+          datasets: [
+            {
+              data: tipoLabels.map((k) => d.por_tipo[k]),
+              backgroundColor: tipoLabels.map((_, i) => PALETA_DASH[i % PALETA_DASH.length]),
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: leyendaPorcentaje(), tooltip: tooltipPorcentaje((v) => String(v)) },
+        },
+      });
+    }
+
+    paintGrupoDashboard("chart-cliente", "cliente", d.por_cliente);
+    paintGrupoDashboard("chart-zona", "zona", d.por_zona);
+  }
+
+  function paintGrupoDashboard(canvasId, clave, items) {
+    const el = document.getElementById(canvasId);
+    const visibles = gruposVisibles(items);
+    if (!el || !visibles.length) return;
+    state.charts[clave] = new Chart(el, {
       type: "bar",
+      plugins: [pluginPorcentaje],
       data: {
-        labels: mesLabels,
+        labels: visibles.map((x) => x.nombre),
         datasets: [
           {
-            label: "Total S/",
-            data: mesData,
-            backgroundColor: "rgba(15, 61, 46, 0.75)",
-            borderRadius: 8,
+            label: "Facturado",
+            data: visibles.map((x) => Number(x.total) || 0),
+            backgroundColor: visibles.map((_, i) => PALETA_DASH[i % PALETA_DASH.length]),
+            borderRadius: 6,
+            barThickness: 16,
           },
         ],
       },
-      options: { responsive: true, plugins: { legend: { display: false } } },
-    });
-
-    const estLabels = Object.keys(d.por_estado).map(estadoLabel);
-    const estData = Object.values(d.por_estado);
-    state.charts.estado = new Chart($("#chart-estado"), {
-      type: "doughnut",
-      data: {
-        labels: estLabels,
-        datasets: [
-          {
-            data: estData,
-            backgroundColor: ["#175cd3", "#067647", "#b54708", "#b42318"],
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { right: 40 } },
+        plugins: { legend: { display: false }, tooltip: tooltipPorcentaje((v) => money(v)) },
+        scales: {
+          x: { beginAtZero: true, grid: { color: "rgba(15, 61, 46, 0.06)" } },
+          y: {
+            ticks: {
+              font: { size: 11 },
+              callback(value) {
+                const label = this.getLabelForValue(value);
+                return label.length > 22 ? `${label.slice(0, 20)}…` : label;
+              },
+            },
           },
-        ],
+        },
       },
-      options: { responsive: true },
-    });
-
-    const tipoLabels = Object.keys(d.por_tipo);
-    const tipoData = Object.values(d.por_tipo);
-    state.charts.tipo = new Chart($("#chart-tipo"), {
-      type: "pie",
-      data: {
-        labels: tipoLabels,
-        datasets: [
-          {
-            data: tipoData,
-            backgroundColor: ["#0f3d2e", "#1f6b4f", "#c9852a", "#175cd3", "#6941c6", "#0f766e", "#b54708", "#475467"],
-          },
-        ],
-      },
-      options: { responsive: true },
     });
   }
 
@@ -1042,6 +1278,8 @@
       estado: null,
       tipo: null,
       mes: null,
+      cliente: null,
+      zona: null,
       cajaDia: null,
       cajaPie: null,
       dashCaja: null,
@@ -1123,6 +1361,7 @@
     if (pieEl && dash.por_caja?.length) {
       state.charts.cajaPie = new Chart(pieEl, {
         type: "doughnut",
+        plugins: [pluginPorcentaje],
         data: {
           labels: dash.por_caja.map((x) => x.caja),
           datasets: [
@@ -1132,7 +1371,10 @@
             },
           ],
         },
-        options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+        options: {
+          responsive: true,
+          plugins: { legend: leyendaPorcentaje(), tooltip: tooltipPorcentaje((v) => money(v)) },
+        },
       });
     }
     if (!dash.por_dia?.length) return;
@@ -1159,7 +1401,7 @@
       },
       options: {
         responsive: true,
-        plugins: { legend: { position: "bottom" } },
+        plugins: { legend: { position: "bottom" }, tooltip: tooltipPorcentaje((v) => money(v)) },
         scales: { y: { beginAtZero: true } },
       },
     });

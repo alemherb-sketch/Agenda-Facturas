@@ -137,6 +137,11 @@ def test_comprobante_no_mueve_la_caja_y_el_dashboard_resta_egresos():
     panel = client.get("/api/dashboard", headers=headers)
     assert panel.status_code == 200, panel.text
     assert float(panel.json()["total_egresos_comprobantes"]) == 230
+    assert panel.json()["por_cliente"] == [
+        {"nombre": "Cliente Sur", "cantidad": 1, "total": 150.0, "porcentaje": 100.0}
+    ]
+    assert panel.json()["por_zona"][0]["nombre"] == "Sin zona"
+    assert panel.json()["por_zona"][0]["porcentaje"] == 100.0
     assert float(caja["total_egresos"]) == float(panel.json()["total_egresos_comprobantes"])
 
     cambiada = client.put(

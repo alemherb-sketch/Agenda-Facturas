@@ -17,6 +17,30 @@ from app.services.comprobante_calc import TIPO_LABELS
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
+def _grupos_dashboard(mapa: dict[str, dict]) -> list[dict]:
+    filas = [(nombre, vals["cantidad"], vals["total"]) for nombre, vals in mapa.items()]
+    filas.sort(key=lambda fila: (fila[2], fila[1], fila[0].lower()), reverse=True)
+    base = sum((total for _, _, total in filas), Decimal("0"))
+    base_cant = sum(cantidad for _, cantidad, _ in filas)
+    grupos = []
+    for nombre, cantidad, total in filas:
+        if base:
+            pct = total / base * Decimal("100")
+        elif base_cant:
+            pct = Decimal(cantidad) / Decimal(base_cant) * Decimal("100")
+        else:
+            pct = Decimal("0")
+        grupos.append(
+            {
+                "nombre": nombre,
+                "cantidad": int(cantidad),
+                "total": float(total),
+                "porcentaje": float(round(pct, 1)),
+            }
+        )
+    return grupos
+
+
 @router.get("", response_model=DashboardOut)
 def resumen(
     user: Annotated[Usuario, Depends(get_current_user)],
@@ -36,6 +60,8 @@ def resumen(
     por_estado: dict[str, int] = defaultdict(int)
     por_tipo: dict[str, int] = defaultdict(int)
     por_mes_map: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    por_cliente_map: dict[str, dict] = defaultdict(lambda: {"cantidad": 0, "total": Decimal("0")})
+    por_zona_map: dict[str, dict] = defaultdict(lambda: {"cantidad": 0, "total": Decimal("0")})
 
     for doc in docs:
         por_estado[doc.estado.value] += 1
@@ -47,6 +73,12 @@ def resumen(
             total_facturado += doc.total
             key = doc.fecha_emision.strftime("%Y-%m")
             por_mes_map[key] += doc.total
+            cliente = (doc.cliente_nombre or "").strip() or "Sin cliente"
+            zona = (doc.zona or "").strip() or "Sin zona"
+            por_cliente_map[cliente]["cantidad"] += 1
+            por_cliente_map[cliente]["total"] += doc.total
+            por_zona_map[zona]["cantidad"] += 1
+            por_zona_map[zona]["total"] += doc.total
         if doc.estado == EstadoComprobante.PAGADO:
             total_cobrado += doc.total
         elif doc.estado in {EstadoComprobante.NO_PAGADO, EstadoComprobante.EMITIDO}:
@@ -108,6 +140,8 @@ def resumen(
         por_estado=dict(por_estado),
         por_tipo=dict(por_tipo),
         por_mes=por_mes,
+        por_cliente=_grupos_dashboard(por_cliente_map),
+        por_zona=_grupos_dashboard(por_zona_map),
         agendas_proximas=agendas_proximas,
         agendas_hoy=agendas_hoy,
         documentos_vencidos=documentos_vencidos,
