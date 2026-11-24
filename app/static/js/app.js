@@ -35,7 +35,7 @@
     editingAgenda: null,
     editingCliente: null,
     editingProducto: null,
-    mesComprobantes: null,
+    paginaComprobantes: 1,
     filters: { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" },
   };
 
@@ -1250,92 +1250,67 @@
     </td>`;
   }
 
-  function rangoMes(ym) {
-    const [y, m] = ym.split("-").map(Number);
-    const ultimo = new Date(y, m, 0).getDate();
-    const mm = String(m).padStart(2, "0");
-    return { desde: `${y}-${mm}-01`, hasta: `${y}-${mm}-${String(ultimo).padStart(2, "0")}` };
+  const POR_PAGINA_COMPROBANTES = 10;
+
+  function numerosDePagina(actual, total) {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const marcas = new Set([1, total, actual - 1, actual, actual + 1].filter((n) => n >= 1 && n <= total));
+    const orden = [...marcas].sort((a, b) => a - b);
+    const salida = [];
+    orden.forEach((n, i) => {
+      if (i && n - orden[i - 1] > 1) salida.push(null);
+      salida.push(n);
+    });
+    return salida;
   }
 
-  function mesDeRango(desde, hasta) {
-    if (!/^\d{4}-\d{2}-01$/.test(desde || "")) return "";
-    const ym = desde.slice(0, 7);
-    return rangoMes(ym).hasta === hasta ? ym : "";
-  }
-
-  function aplicarRangoMes() {
-    if (!state.mesComprobantes) return;
-    const rango = rangoMes(state.mesComprobantes);
-    state.filters.fecha_desde = rango.desde;
-    state.filters.fecha_hasta = rango.hasta;
-  }
-
-  function tabMesActiva(id) {
-    const desde = state.filters.fecha_desde;
-    const hasta = state.filters.fecha_hasta;
-    if (!id) return !desde && !hasta;
-    return state.mesComprobantes === id && mesDeRango(desde, hasta) === id;
-  }
-
-  function comprobantesTabsHtml(porMes) {
-    const meses = [...(porMes || [])].sort((a, b) => b.mes.localeCompare(a.mes));
-    const total = meses.reduce((n, item) => n + Number(item.cantidad || 0), 0);
-    const tabs = [
-      ...meses.map((item) => ({ id: item.mes, label: item.etiqueta, cantidad: item.cantidad })),
-      { id: "", label: "Todos", cantidad: total },
-    ];
-    return `<div class="doc-tabs" role="tablist" aria-label="Comprobantes por mes">
-      ${tabs
-        .map((tab) => {
-          const activo = tabMesActiva(tab.id);
-          return `<button type="button" class="doc-tab ${activo ? "active" : ""}" role="tab" aria-selected="${activo ? "true" : "false"}" data-mes-comp="${tab.id}">${escapeHtml(tab.label)}<span class="doc-tab-count">${tab.cantidad}</span></button>`;
-        })
-        .join("")}
-    </div>`;
+  function pagerComprobantesHtml(pagina, totalPaginas) {
+    if (totalPaginas <= 1) return "";
+    const botones = numerosDePagina(pagina, totalPaginas)
+      .map((n) =>
+        n
+          ? `<button type="button" class="pager-btn ${n === pagina ? "active" : ""}" data-pagina="${n}" aria-current="${n === pagina ? "page" : "false"}">${n}</button>`
+          : `<span class="pager-gap">…</span>`
+      )
+      .join("");
+    return `<nav class="pager" aria-label="Páginas de comprobantes">
+      <button type="button" class="pager-btn" data-pagina="${pagina - 1}" ${pagina <= 1 ? "disabled" : ""}>Anterior</button>
+      ${botones}
+      <button type="button" class="pager-btn" data-pagina="${pagina + 1}" ${pagina >= totalPaginas ? "disabled" : ""}>Siguiente</button>
+      <span class="pager-meta">Página ${pagina} de ${totalPaginas}</span>
+    </nav>`;
   }
 
   function tablaComprobantesHtml() {
-    let dia = "";
     const rows = state.docs
-      .map((d) => {
-        let grupo = "";
-        if (d.fecha_emision !== dia) {
-          dia = d.fecha_emision;
-          const delDia = state.docs.filter((item) => item.fecha_emision === dia);
-          const suma = delDia.reduce((n, item) => n + Number(item.total || 0), 0);
-          const etiqueta =
-            delDia.length === 1 ? "1 comprobante" : `${delDia.length} comprobantes`;
-          grupo = `<tr class="dia-sep"><td colspan="5">${fmtDate(dia)} · ${etiqueta} · ${money(suma)}</td></tr>`;
-        }
-        return `${grupo}<tr>
+      .map(
+        (d) => `<tr>
           <td>${docLineHtml(d)}</td>
           ${clienteDocHtml(d)}
+          <td class="nowrap">${fmtDate(d.fecha_emision)}</td>
           <td class="nowrap">${money(d.total)}</td>
           <td>${estadoQuickHtml(d)}</td>
           ${accionesDocHtml(d)}
-        </tr>`;
-      })
+        </tr>`
+      )
       .join("");
     return `<div class="table-wrap"><table class="table-fit table-listado">
       <colgroup>
-        <col class="c-doc"><col class="c-cli"><col class="c-total"><col class="c-estado"><col class="c-act">
+        <col class="c-doc"><col class="c-cli"><col class="c-fecha"><col class="c-total"><col class="c-estado"><col class="c-act">
       </colgroup>
       <thead><tr>
-        <th>Documento</th><th>Cliente</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
+        <th>Documento</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th class="col-actions">Acciones</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
 
-  function resumenComprobantesHtml(resumen, mostrados) {
+  function resumenComprobantesHtml(resumen, mostrados, pagina, porPagina) {
     const cantidad = Number(resumen?.cantidad || 0);
     const vigente = Number(resumen?.cantidad_vigente || 0);
-    const corte =
-      mostrados < cantidad
-        ? `Se listan ${mostrados} de ${cantidad}`
-        : cantidad === 1
-          ? "1 comprobante"
-          : `${cantidad} comprobantes`;
+    const desde = cantidad ? (pagina - 1) * porPagina + 1 : 0;
+    const hasta = cantidad ? (pagina - 1) * porPagina + mostrados : 0;
+    const corte = cantidad ? `${desde}–${hasta} de ${cantidad}` : "Sin comprobantes";
     const notaTotal =
       cantidad === vigente
         ? "Sin anulados en este filtro"
@@ -1367,44 +1342,35 @@
 
   async function viewComprobantes() {
     const zonas = ["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio", "Otros"];
-    const paramsBase = {};
-    if (state.filters.q) paramsBase.q = state.filters.q;
-    if (state.filters.estado) paramsBase.estado = state.filters.estado;
-    if (state.filters.tipo) paramsBase.tipo = state.filters.tipo;
-    if (state.filters.zona) paramsBase.zona = state.filters.zona;
-    if (state.mesComprobantes === null) {
-      const previo = await API.resumenComprobantes(paramsBase);
-      const meses = [...(previo.por_mes || [])].sort((a, b) => b.mes.localeCompare(a.mes));
-      state.mesComprobantes = meses[0]?.mes || "";
-      aplicarRangoMes();
-    }
-    const params = { ...paramsBase, limit: 500 };
+    const porPagina = POR_PAGINA_COMPROBANTES;
+    const params = { limit: porPagina, offset: Math.max(0, (state.paginaComprobantes - 1) * porPagina) };
+    if (state.filters.q) params.q = state.filters.q;
+    if (state.filters.estado) params.estado = state.filters.estado;
+    if (state.filters.tipo) params.tipo = state.filters.tipo;
+    if (state.filters.zona) params.zona = state.filters.zona;
     if (state.filters.fecha_desde) params.fecha_desde = state.filters.fecha_desde;
     if (state.filters.fecha_hasta) params.fecha_hasta = state.filters.fecha_hasta;
+    const resumenParams = { ...params };
+    delete resumenParams.limit;
+    delete resumenParams.offset;
     const [docs, resumen] = await Promise.all([
       API.listComprobantes(params),
-      API.resumenComprobantes(params),
+      API.resumenComprobantes(resumenParams),
     ]);
-    const mesesVisibles = resumen.por_mes || [];
-    if (state.mesComprobantes && !mesesVisibles.some((item) => item.mes === state.mesComprobantes)) {
-      const meses = [...mesesVisibles].sort((a, b) => b.mes.localeCompare(a.mes));
-      state.mesComprobantes = meses[0]?.mes || "";
-      if (state.mesComprobantes) aplicarRangoMes();
-      else {
-        state.filters.fecha_desde = "";
-        state.filters.fecha_hasta = "";
-      }
+    const totalPaginas = Math.max(1, Math.ceil(Number(resumen?.cantidad || 0) / porPagina));
+    if (state.paginaComprobantes > totalPaginas) {
+      state.paginaComprobantes = totalPaginas;
       return viewComprobantes();
     }
     state.docs = docs;
     state.resumenComprobantes = resumen;
-    const mesActivo = (resumen.por_mes || []).find((item) => item.mes === state.mesComprobantes);
+    const pagina = state.paginaComprobantes;
 
     return `
       <div class="page-head">
         <div>
           <h1>Comprobantes</h1>
-          <p>${mesActivo ? escapeHtml(mesActivo.etiqueta) : "Todos los meses"}. Cada pestaña es un mes, y dentro los documentos van por día.</p>
+          <p>Diez comprobantes por página.</p>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-secondary" id="btn-reporte-comp">🖨 Imprimir reporte</button>
@@ -1437,15 +1403,15 @@
         <button class="btn btn-secondary" id="btn-filtrar">Filtrar</button>
         <button class="btn btn-ghost" id="btn-limpiar-filtros">Limpiar</button>
       </div>
-      ${resumenComprobantesHtml(resumen, state.docs.length)}
+      ${resumenComprobantesHtml(resumen, state.docs.length, pagina, porPagina)}
       <div class="panel panel-tabs" style="padding:0;overflow:hidden">
-        ${comprobantesTabsHtml(resumen.por_mes)}
-        <div id="panel-comp" role="tabpanel">
+        <div id="panel-comp">
         ${
           state.docs.length
             ? tablaComprobantesHtml()
-            : `<div class="empty"><strong>No hay comprobantes</strong>${mesActivo ? `Nada en ${escapeHtml(mesActivo.etiqueta)}.` : "Registra facturas, boletas u otros documentos."}</div>`
+            : `<div class="empty"><strong>No hay comprobantes</strong>Registra facturas, boletas u otros documentos.</div>`
         }
+        ${pagerComprobantesHtml(pagina, totalPaginas)}
         </div>
       </div>
       <div class="modal-backdrop" id="modal-share"></div>`;
@@ -3547,24 +3513,19 @@
         state.filters.zona = $("#f-zona")?.value || "";
         state.filters.fecha_desde = $("#f-desde")?.value || "";
         state.filters.fecha_hasta = $("#f-hasta")?.value || "";
-        state.mesComprobantes = mesDeRango(state.filters.fecha_desde, state.filters.fecha_hasta);
+        state.paginaComprobantes = 1;
         renderApp();
       });
       $("#btn-limpiar-filtros")?.addEventListener("click", () => {
         state.filters = { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" };
-        state.mesComprobantes = null;
+        state.paginaComprobantes = 1;
         renderApp();
       });
-      $$("[data-mes-comp]").forEach((b) =>
+      $$("[data-pagina]").forEach((b) =>
         b.addEventListener("click", () => {
-          const mes = b.dataset.mesComp || "";
-          if (tabMesActiva(mes)) return;
-          state.mesComprobantes = mes;
-          if (mes) aplicarRangoMes();
-          else {
-            state.filters.fecha_desde = "";
-            state.filters.fecha_hasta = "";
-          }
+          const n = Number(b.dataset.pagina);
+          if (!n || n === state.paginaComprobantes || b.disabled) return;
+          state.paginaComprobantes = n;
           renderApp();
         })
       );

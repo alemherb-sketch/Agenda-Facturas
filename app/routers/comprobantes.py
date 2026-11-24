@@ -102,6 +102,7 @@ def listar(
     fecha_hasta: date | None = None,
     q: str | None = None,
     limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
 ):
     query = _filtrar_comprobantes(
         db,
@@ -115,7 +116,7 @@ def listar(
         fecha_hasta=fecha_hasta,
         q=q,
     )
-    docs = query.limit(limit).all()
+    docs = query.offset(offset).limit(limit).all()
     by_id = map_adjuntos_por_entidad(db, ENTIDAD_COMPROBANTE, [d.id for d in docs])
     return [_doc_out(db, d, by_id.get(d.id, [])) for d in docs]
 

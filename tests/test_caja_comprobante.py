@@ -359,3 +359,20 @@ def test_resumen_comprobantes_informa_cantidad_totales_y_excluye_anulados():
     assert solo_anulados.json()["cantidad"] == 1
     assert solo_anulados.json()["cantidad_vigente"] == 0
     assert float(solo_anulados.json()["total"]) == 150
+
+
+def test_lista_comprobantes_respeta_offset_de_pagina():
+    client = _cliente()
+    headers = _auth(client, "pagina@negocio.pe")
+    for numero in ("1", "2", "3"):
+        _doc(client, headers, numero=numero)
+
+    todos = client.get("/api/comprobantes", headers=headers, params={"limit": 10})
+    assert todos.status_code == 200, todos.text
+    assert len(todos.json()) == 3
+
+    pagina = client.get("/api/comprobantes", headers=headers, params={"limit": 1, "offset": 1})
+    assert pagina.status_code == 200, pagina.text
+    cuerpo = pagina.json()
+    assert len(cuerpo) == 1
+    assert cuerpo[0]["id"] == todos.json()[1]["id"]

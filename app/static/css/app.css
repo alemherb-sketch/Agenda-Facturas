@@ -457,14 +457,34 @@ td.actions .btn + .btn { margin-left: 0.25rem; }
   background: rgba(15, 61, 46, 0.08);
   font-size: 0.75rem;
 }
-tr.dia-sep td {
-  background: #f3f7f4;
-  color: var(--brand);
-  font-size: 0.78rem;
-  font-weight: 750;
-  letter-spacing: 0.01em;
-  padding: 0.45rem 0.7rem;
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.75rem 0.85rem;
+  border-top: 1px solid var(--line);
+  background: #f7faf7;
 }
+.pager-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 750;
+  border-radius: 10px;
+  min-width: 2.1rem;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+}
+.pager-btn:hover:not(:disabled) { color: var(--ink); }
+.pager-btn.active {
+  background: #fff;
+  color: var(--brand);
+  box-shadow: 0 2px 8px rgba(11, 31, 23, 0.08);
+}
+.pager-btn:disabled { opacity: 0.4; cursor: default; }
+.pager-gap { color: var(--muted); padding: 0 0.15rem; }
+.pager-meta { margin-left: auto; color: var(--muted); font-size: 0.82rem; }
 .doc-line {
   display: flex;
   flex-wrap: wrap;
