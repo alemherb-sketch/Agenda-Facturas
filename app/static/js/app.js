@@ -37,6 +37,7 @@
     editingProducto: null,
     paginaComprobantes: 1,
     filters: { q: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" },
+    filtersDash: { cliente: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" },
   };
 
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -856,27 +857,73 @@
       </div>`;
   }
 
+  function paramsDashboard() {
+    const f = state.filtersDash;
+    const params = {};
+    if (f.cliente) params.cliente = f.cliente;
+    if (f.estado) params.estado = f.estado;
+    if (f.tipo) params.tipo = f.tipo;
+    if (f.zona) params.zona = f.zona;
+    if (f.fecha_desde) params.fecha_desde = f.fecha_desde;
+    if (f.fecha_hasta) params.fecha_hasta = f.fecha_hasta;
+    return params;
+  }
+
+  function filtrosDashboardHtml() {
+    const f = state.filtersDash;
+    const zonas = ["Salaverry", "Cerro de Pasco", "Chaparril", "El Ingenio", "Otros"];
+    return `
+      <div class="toolbar panel">
+        <input id="f-dash-desde" type="date" title="Desde" value="${escapeHtml(f.fecha_desde)}" />
+        <input id="f-dash-hasta" type="date" title="Hasta" value="${escapeHtml(f.fecha_hasta)}" />
+        <select id="f-dash-estado">
+          <option value="">Todos los estados</option>
+          ${(state.meta?.estados || [])
+            .map((e) => `<option value="${e.value}" ${f.estado === e.value ? "selected" : ""}>${e.label}</option>`)
+            .join("")}
+        </select>
+        <select id="f-dash-tipo">
+          <option value="">Todos los tipos</option>
+          ${(state.meta?.tipos_documento || [])
+            .map((e) => `<option value="${e.value}" ${f.tipo === e.value ? "selected" : ""}>${e.label}</option>`)
+            .join("")}
+        </select>
+        <select id="f-dash-zona">
+          <option value="">Todas las zonas</option>
+          ${zonas.map((z) => `<option value="${z}" ${f.zona === z ? "selected" : ""}>${z}</option>`).join("")}
+        </select>
+        <input id="f-dash-cliente" placeholder="Cliente..." value="${escapeHtml(f.cliente)}" style="flex:1;min-width:140px" />
+        <button class="btn btn-secondary" id="btn-filtrar-dash" type="button">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-dash-mes" type="button">Mes actual</button>
+        <button class="btn btn-ghost" id="btn-limpiar-dash" type="button">Limpiar</button>
+      </div>
+      <p class="chart-note" style="margin-top:-.35rem">Los filtros recortan comprobantes y gráficos. Las fechas también cambian el período de cajas. El saldo acumulado de cada caja sigue siendo el total.</p>`;
+  }
+
   async function viewDashboard() {
-    const d = await API.dashboard();
+    const d = await API.dashboard(paramsDashboard());
     state.dashboard = d;
     const defaults = defaultCajaDates();
+    const cajaParams = { limit: 8 };
+    if (state.filtersDash.fecha_desde || state.filtersDash.fecha_hasta) {
+      if (state.filtersDash.fecha_desde) cajaParams.fecha_desde = state.filtersDash.fecha_desde;
+      if (state.filtersDash.fecha_hasta) cajaParams.fecha_hasta = state.filtersDash.fecha_hasta;
+    } else {
+      cajaParams.fecha_desde = defaults.desde;
+      cajaParams.fecha_hasta = defaults.hasta;
+    }
     let cajas = [];
     let cajaDash = null;
     let cajaError = false;
     try {
       [cajas, cajaDash] = await Promise.all([
         API.listCajas(),
-        API.dashboardCajas({
-          fecha_desde: defaults.desde,
-          fecha_hasta: defaults.hasta,
-          limit: 8,
-        }),
+        API.dashboardCajas(cajaParams),
       ]);
     } catch (_) {
       cajaError = true;
     }
     state.cajas = cajas;
-    state.docs = d.recientes || [];
     state.cajaDashHome = cajaDash;
     const saldoCajas = cajas.reduce((acc, c) => acc + Number(c.saldo || 0), 0);
     const principal = cajas.find((c) => c.es_principal);
@@ -932,11 +979,12 @@
           <button class="btn btn-primary" data-go="nuevo">＋ Registrar comprobante</button>
         </div>
       </div>
+      ${filtrosDashboardHtml()}
       ${hero}
       <div class="dash-block-head">
         <div>
           <h2>Comprobantes</h2>
-          <p>Cobros, clientes, zonas y documentos recientes.</p>
+          <p>Cobros, clientes y zonas del filtro activo.</p>
         </div>
         <button class="btn btn-secondary btn-sm" data-go="comprobantes">Ver comprobantes</button>
       </div>
@@ -948,7 +996,7 @@
         <div class="stat danger"><label>Anulado</label><strong>${money(d.total_anulado)}</strong></div>
         <div class="stat ${vencidos ? "danger" : "ok"}"><label>Vencidos</label><strong>${vencidos}</strong><span class="stat-meta">Sin pago y con fecha vencida</span></div>
       </div>
-      <div class="charts">
+      <div class="charts charts-tres">
         <div class="panel chart-box">
           <h3>Facturación mensual</h3>
           <p class="chart-note">Cada barra indica su parte del total del período.</p>
@@ -959,36 +1007,10 @@
           <p class="chart-note">Porcentaje sobre la cantidad de comprobantes.</p>
           <div class="chart-pie-wrap"><canvas id="chart-estado"></canvas></div>
         </div>
-      </div>
-      <div class="charts">
         <div class="panel chart-box chart-box-pie">
           <h3>Por tipo de documento</h3>
           <p class="chart-note">Porcentaje sobre la cantidad de comprobantes.</p>
           <div class="chart-pie-wrap"><canvas id="chart-tipo"></canvas></div>
-        </div>
-        <div class="panel">
-          <h3>Últimos comprobantes</h3>
-          ${
-            d.recientes.length
-              ? `<div class="table-wrap"><table>
-                  <thead><tr><th>Fecha</th><th>Documento</th><th>Cliente</th><th>Zona</th><th>Vence</th><th>Total</th><th>Estado</th></tr></thead>
-                  <tbody>
-                  ${d.recientes
-                    .map(
-                      (r) => `<tr class="doc-row" data-ver-doc="${r.id}" tabindex="0" title="Ver detalle">
-                      <td class="nowrap">${fmtDate(r.fecha_emision)}</td>
-                      <td>${tipoLabel(r.tipo)} ${escapeHtml(r.serie)}-${escapeHtml(r.numero)}</td>
-                      <td>${escapeHtml(r.cliente_nombre)}</td>
-                      <td>${escapeHtml(r.zona || "—")}</td>
-                      <td class="nowrap">${r.fecha_vencimiento ? fmtDate(r.fecha_vencimiento) : "—"}</td>
-                      <td>${money(r.total)}</td>
-                      <td><span class="badge ${r.estado}">${estadoLabel(r.estado)}</span></td>
-                    </tr>`
-                    )
-                    .join("")}
-                  </tbody></table></div>`
-              : `<div class="empty"><strong>Sin datos aún</strong>Registra tu primer comprobante.</div>`
-          }
         </div>
       </div>
       <div class="charts charts-even">
@@ -3972,15 +3994,36 @@
   function bindView() {
     $$("[data-go]").forEach((b) => b.addEventListener("click", () => navigate(b.dataset.go)));
     if (state.route === "dashboard") {
-      $$("[data-ver-doc]").forEach((row) => {
-        const abrir = () => openDetalleComprobante(row.dataset.verDoc);
-        row.addEventListener("click", abrir);
-        row.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            abrir();
-          }
-        });
+      const aplicarDash = () => {
+        state.filtersDash = {
+          cliente: ($("#f-dash-cliente")?.value || "").trim(),
+          estado: $("#f-dash-estado")?.value || "",
+          tipo: $("#f-dash-tipo")?.value || "",
+          zona: $("#f-dash-zona")?.value || "",
+          fecha_desde: $("#f-dash-desde")?.value || "",
+          fecha_hasta: $("#f-dash-hasta")?.value || "",
+        };
+        renderApp();
+      };
+      $("#btn-filtrar-dash")?.addEventListener("click", aplicarDash);
+      $("#f-dash-cliente")?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") aplicarDash();
+      });
+      $("#btn-limpiar-dash")?.addEventListener("click", () => {
+        state.filtersDash = { cliente: "", estado: "", tipo: "", zona: "", fecha_desde: "", fecha_hasta: "" };
+        renderApp();
+      });
+      $("#btn-dash-mes")?.addEventListener("click", () => {
+        const rango = defaultCajaDates();
+        state.filtersDash = {
+          cliente: ($("#f-dash-cliente")?.value || "").trim(),
+          estado: $("#f-dash-estado")?.value || "",
+          tipo: $("#f-dash-tipo")?.value || "",
+          zona: $("#f-dash-zona")?.value || "",
+          fecha_desde: rango.desde,
+          fecha_hasta: rango.hasta,
+        };
+        renderApp();
       });
     }
 

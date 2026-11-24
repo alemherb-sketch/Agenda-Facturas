@@ -203,6 +203,7 @@ a { color: inherit; }
   margin-bottom: 1rem;
 }
 .charts.charts-even { grid-template-columns: 1fr 1fr; }
+.charts.charts-tres { grid-template-columns: 1.5fr 1fr 1fr; }
 .chart-box { min-height: 280px; }
 .chart-box.chart-box-pie {
   min-height: 0;
@@ -1417,7 +1418,7 @@ select.estado-quick:disabled { opacity: 0.65; cursor: wait; }
   .sidebar { display: none; }
   .mobile-nav { display: grid; }
   .grid-stats, .grid-stats.dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .charts, .charts.charts-even { grid-template-columns: 1fr; }
+  .charts, .charts.charts-even, .charts.charts-tres { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: minmax(0, 1fr); }
   .item-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(3.6rem, auto);

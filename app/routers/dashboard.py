@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -41,17 +41,67 @@ def _grupos_dashboard(mapa: dict[str, dict]) -> list[dict]:
     return grupos
 
 
+def _doc_en_filtro(
+    doc: Comprobante,
+    *,
+    fecha_desde: date | None,
+    fecha_hasta: date | None,
+    estado: str | None,
+    tipo: str | None,
+    zona: str | None,
+    cliente: str | None,
+) -> bool:
+    if fecha_desde and doc.fecha_emision < fecha_desde:
+        return False
+    if fecha_hasta and doc.fecha_emision > fecha_hasta:
+        return False
+    if estado and doc.estado.value != estado:
+        return False
+    if tipo and doc.tipo.value != tipo:
+        return False
+    if zona and (doc.zona or "") != zona:
+        return False
+    if cliente and cliente.casefold() not in (doc.cliente_nombre or "").casefold():
+        return False
+    return True
+
+
 @router.get("", response_model=DashboardOut)
 def resumen(
     user: Annotated[Usuario, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    estado: str | None = None,
+    tipo: str | None = None,
+    zona: str | None = None,
+    cliente: str | None = None,
 ):
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status_code=400, detail="La fecha desde no puede ser mayor a la fecha hasta")
+    cliente = (cliente or "").strip() or None
+    zona = (zona or "").strip() or None
+    estado = (estado or "").strip() or None
+    tipo = (tipo or "").strip() or None
     docs = (
         db.query(Comprobante)
         .options(joinedload(Comprobante.items))
         .filter(Comprobante.usuario_id == user.id)
         .all()
     )
+    docs = [
+        doc
+        for doc in docs
+        if _doc_en_filtro(
+            doc,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            estado=estado,
+            tipo=tipo,
+            zona=zona,
+            cliente=cliente,
+        )
+    ]
 
     total_facturado = Decimal("0")
     total_cobrado = Decimal("0")
@@ -112,17 +162,13 @@ def resumen(
         .scalar()
         or 0
     )
-    documentos_vencidos = (
-        db.query(func.count(Comprobante.id))
-        .filter(
-            Comprobante.usuario_id == user.id,
-            Comprobante.operacion != "compra",
-            Comprobante.estado == EstadoComprobante.NO_PAGADO,
-            Comprobante.fecha_vencimiento.is_not(None),
-            Comprobante.fecha_vencimiento < hoy,
-        )
-        .scalar()
-        or 0
+    documentos_vencidos = sum(
+        1
+        for doc in docs
+        if (doc.operacion or "venta") != "compra"
+        and doc.estado == EstadoComprobante.NO_PAGADO
+        and doc.fecha_vencimiento is not None
+        and doc.fecha_vencimiento < hoy
     )
 
     recientes = sorted(docs, key=lambda d: (d.fecha_emision, d.id), reverse=True)[:8]

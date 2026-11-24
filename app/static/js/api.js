@@ -95,8 +95,9 @@ const API = {
   meta() {
     return this.request("/api/meta");
   },
-  dashboard() {
-    return this.request("/api/dashboard");
+  dashboard(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/dashboard${qs ? `?${qs}` : ""}`);
   },
   listComprobantes(params = {}) {
     const qs = new URLSearchParams(params).toString();
