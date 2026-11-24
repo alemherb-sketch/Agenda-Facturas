@@ -1812,12 +1812,10 @@
       cantidad === vigente
         ? "Sin anulados en este filtro"
         : `${vigente} no anulados · ${money(resumen?.total_vigente || 0)}`;
-    const porEstado = resumen?.por_estado || [];
+    const porEstado = (resumen?.por_estado || []).filter((item) => !["emitido", "pagado"].includes(item.estado));
     return `
       <div class="grid-stats">
         <div class="stat"><label>Cantidad</label><strong>${cantidad}</strong><span class="stat-meta">${corte}</span></div>
-        <div class="stat"><label>Subtotal</label><strong>${money(resumen?.subtotal || 0)}</strong></div>
-        <div class="stat"><label>IGV</label><strong>${money(resumen?.igv || 0)}</strong></div>
         <div class="stat warn"><label>Total</label><strong>${money(resumen?.total || 0)}</strong><span class="stat-meta">${notaTotal}</span></div>
       </div>
       ${
