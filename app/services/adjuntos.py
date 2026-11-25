@@ -53,6 +53,17 @@ ENTIDAD_CLIENTE = "cliente"
 ENTIDAD_PRODUCTO = "producto"
 ENTIDAD_CONTACTO = "contacto"
 
+KIND_POR_ENTIDAD = {
+    ENTIDAD_COMPROBANTE: "comprobantes",
+    ENTIDAD_CAJA: "cajas",
+    ENTIDAD_COMBUSTIBLE: "combustibles",
+    ENTIDAD_GASTO: "gastos",
+    ENTIDAD_AGENDA: "agendas",
+    ENTIDAD_CLIENTE: "clientes",
+    ENTIDAD_PRODUCTO: "productos",
+    ENTIDAD_CONTACTO: "contactos",
+}
+
 
 def uploads_root() -> Path:
     settings = get_settings()
@@ -237,6 +248,26 @@ def eliminar_adjunto(db: Session, user: Usuario, adjunto_id: int) -> None:
     delete_file(row.path)
     db.delete(row)
     db.commit()
+
+
+async def reemplazar_adjunto(db: Session, user: Usuario, adjunto_id: int, archivo: UploadFile) -> Adjunto:
+    """Sustituye el archivo de un adjunto existente, conservando el mismo registro."""
+    row = get_owned_adjunto(db, user, adjunto_id)
+    kind = KIND_POR_ENTIDAD.get(row.entidad_tipo)
+    if not kind:
+        raise HTTPException(status_code=400, detail="No se puede reemplazar este adjunto")
+    rel, nombre, mime = await save_upload(
+        archivo, user_id=user.id, kind=kind, entity_id=row.entidad_id
+    )
+    anterior = row.path
+    row.nombre = nombre
+    row.mime = mime
+    row.path = rel
+    db.commit()
+    db.refresh(row)
+    if anterior != rel:
+        delete_file(anterior)
+    return row
 
 
 def eliminar_adjuntos_entidad(db: Session, entidad_tipo: str, entidad_id: int) -> None:

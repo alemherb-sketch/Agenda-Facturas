@@ -129,8 +129,16 @@ const API = {
     [...files].forEach((f) => fd.append("archivos", f));
     return this.request(`/api/comprobantes/${id}/adjuntos`, { method: "POST", body: fd });
   },
+  listAdjuntosComprobante(id) {
+    return this.request(`/api/comprobantes/${id}/adjuntos`);
+  },
   downloadAdjunto(id) {
     return this.request(`/api/adjuntos/${id}`, { asBlob: true });
+  },
+  replaceAdjunto(id, file) {
+    const fd = new FormData();
+    fd.append("archivo", file);
+    return this.request(`/api/adjuntos/${id}/reemplazar`, { method: "POST", body: fd });
   },
   deleteAdjunto(id) {
     return this.request(`/api/adjuntos/${id}`, { method: "DELETE" });

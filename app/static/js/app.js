@@ -1667,6 +1667,189 @@
     </table></div>`;
   }
 
+  function bindDetalleAdjuntos(modal, doc) {
+    const section = $("#detalle-adjuntos", modal);
+    const grid = $("#detalle-adj-grid", modal);
+    const addInput = $("#detalle-adj-input", modal);
+    const replaceInput = $("#detalle-adj-replace", modal);
+    if (!section || !grid || !addInput || !replaceInput) return () => {};
+
+    const previews = new Map();
+    let previewGen = 0;
+    let busy = false;
+    let replaceId = null;
+
+    const setBusy = (on) => {
+      busy = on;
+      section.classList.toggle("is-busy", on);
+    };
+
+    const etiqueta = () => {
+      const n = (doc.adjuntos || []).length;
+      const label = $("#detalle-adj-label", modal);
+      if (label) label.textContent = n ? `Adjuntos · ${n}` : "Adjuntos";
+    };
+
+    const render = () => {
+      const list = doc.adjuntos || [];
+      etiqueta();
+      grid.innerHTML = list.length
+        ? list
+            .map((a) => {
+              const isImg = a.es_imagen || (a.mime || "").startsWith("image/");
+              const icon = adjuntoTipoIcono(a.mime, a.nombre, a.tipo_icono);
+              const src = previews.get(a.id);
+              return `
+          <div class="adjunto-card" data-saved-id="${a.id}">
+            <button type="button" class="adjunto-preview" data-adj-view="${a.id}" title="Ver archivo" aria-label="Ver ${escapeHtml(a.nombre)}">
+              ${
+                isImg && src
+                  ? `<img src="${src}" alt="" />`
+                  : `<span class="adjunto-icon">${icon}</span>`
+              }
+            </button>
+            <div class="adjunto-meta" title="${escapeHtml(a.nombre)}">${escapeHtml(a.nombre)}</div>
+            <div class="adjunto-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-adj-dl="${a.id}" data-adj-name="${escapeHtml(a.nombre)}">Descargar</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-adj-replace="${a.id}">Cambiar</button>
+              <button type="button" class="btn btn-danger btn-sm" data-adj-del-saved="${a.id}" title="Eliminar" aria-label="Eliminar">×</button>
+            </div>
+          </div>`;
+            })
+            .join("")
+        : `<div class="adjuntos-empty">Sin archivos adjuntos. Puedes agregar PDF, imágenes, Word o Excel.</div>`;
+    };
+
+    const apply = (list) => {
+      doc.adjuntos = list || [];
+      const vivo = (state.docs || []).find((item) => String(item.id) === String(doc.id));
+      if (vivo && vivo !== doc) vivo.adjuntos = doc.adjuntos;
+      render();
+      loadPreviews();
+    };
+
+    const loadPreviews = async () => {
+      const gen = ++previewGen;
+      await Promise.all(
+        (doc.adjuntos || []).map(async (a) => {
+          if (!(a.es_imagen || (a.mime || "").startsWith("image/"))) return;
+          if (previews.has(a.id)) return;
+          try {
+            const blob = await API.downloadAdjunto(a.id);
+            if (gen !== previewGen) return;
+            previews.set(a.id, URL.createObjectURL(blob));
+          } catch (_) {
+            /* la miniatura es opcional */
+          }
+        })
+      );
+      if (gen === previewGen) render();
+    };
+
+    const recargar = async () => {
+      apply(await API.listAdjuntosComprobante(doc.id));
+    };
+
+    addInput.addEventListener("change", async () => {
+      const files = [...(addInput.files || [])];
+      addInput.value = "";
+      if (!files.length || busy) return;
+      setBusy(true);
+      try {
+        const saved = await API.uploadAdjuntosComprobante(doc.id, files);
+        apply(saved.adjuntos || []);
+        toast(files.length === 1 ? "Archivo agregado" : `${files.length} archivos agregados`);
+      } catch (ex) {
+        try {
+          await recargar();
+        } catch (_) {
+          /* el aviso de abajo explica el fallo */
+        }
+        toast(ex.message);
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    replaceInput.addEventListener("change", async () => {
+      const file = replaceInput.files?.[0];
+      const id = replaceId;
+      replaceInput.value = "";
+      replaceId = null;
+      if (!file || !id || busy) return;
+      setBusy(true);
+      try {
+        const updated = await API.replaceAdjunto(id, file);
+        const previa = previews.get(updated.id);
+        if (previa) URL.revokeObjectURL(previa);
+        previews.delete(updated.id);
+        const next = (doc.adjuntos || []).map((a) => (Number(a.id) === Number(updated.id) ? updated : a));
+        apply(next);
+        toast("Archivo actualizado");
+      } catch (ex) {
+        toast(ex.message);
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    grid.addEventListener("click", async (e) => {
+      if (busy) return;
+      const viewBtn = e.target.closest("[data-adj-view]");
+      const dlBtn = e.target.closest("[data-adj-dl]");
+      const delBtn = e.target.closest("[data-adj-del-saved]");
+      const cambiarBtn = e.target.closest("[data-adj-replace]");
+      if (cambiarBtn) {
+        replaceId = Number(cambiarBtn.dataset.adjReplace);
+        replaceInput.click();
+        return;
+      }
+      if (viewBtn) {
+        try {
+          const blob = await API.downloadAdjunto(viewBtn.dataset.adjView);
+          await openAdjunto(blob);
+        } catch (ex) {
+          toast(ex.message);
+        }
+        return;
+      }
+      if (dlBtn) {
+        try {
+          const blob = await API.downloadAdjunto(dlBtn.dataset.adjDl);
+          downloadBlob(blob, dlBtn.dataset.adjName || "adjunto");
+        } catch (ex) {
+          toast(ex.message);
+        }
+        return;
+      }
+      if (delBtn) {
+        const id = Number(delBtn.dataset.adjDelSaved);
+        if (!confirm("¿Eliminar este archivo?")) return;
+        setBusy(true);
+        try {
+          await API.deleteAdjunto(id);
+          const previa = previews.get(id);
+          if (previa) URL.revokeObjectURL(previa);
+          previews.delete(id);
+          apply((doc.adjuntos || []).filter((a) => Number(a.id) !== id));
+          toast("Adjunto eliminado");
+        } catch (ex) {
+          toast(ex.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+    });
+
+    render();
+    loadPreviews();
+    return () => {
+      previewGen += 1;
+      previews.forEach((url) => URL.revokeObjectURL(url));
+      previews.clear();
+    };
+  }
+
   function openDetalleComprobante(id) {
     const d = (state.docs || []).find((item) => String(item.id) === String(id));
     if (!d) return;
@@ -1677,6 +1860,7 @@
       modal.className = "modal-backdrop";
       document.body.appendChild(modal);
     }
+    modal._disposeAdjuntos?.();
     const items = d.items || [];
     const filas = items.length
       ? items
@@ -1702,7 +1886,6 @@
           <button class="btn btn-secondary btn-sm" type="button" id="detalle-pdf">PDF</button>
           <button class="btn btn-secondary btn-sm" type="button" id="detalle-mail">Correo</button>
           <button class="btn btn-accent btn-sm" type="button" id="detalle-wa">WhatsApp</button>
-          ${(d.adjuntos || []).length ? `<button class="btn btn-secondary btn-sm" type="button" id="detalle-adj">Adjuntos (${d.adjuntos.length})</button>` : ""}
           <button class="btn btn-danger btn-sm" type="button" id="detalle-del">Eliminar</button>
         </div>
         <div class="detalle-grid">
@@ -1723,6 +1906,18 @@
           <div><span class="detalle-k">Movimiento</span><span class="badge compra">Egreso</span></div>
           <div class="full"><span class="detalle-k">Observaciones</span>${textoPlanoHtml(d.observaciones)}</div>
         </div>
+        <section class="detalle-adjuntos" id="detalle-adjuntos">
+          <div class="detalle-adjuntos-head">
+            <span class="detalle-k" id="detalle-adj-label">Adjuntos</span>
+            <label class="btn btn-secondary btn-sm adjuntos-pick">
+              ＋ Agregar
+              <input type="file" id="detalle-adj-input" multiple accept="${ADJ_ACCEPT}" hidden />
+            </label>
+          </div>
+          <div class="adjuntos-grid" id="detalle-adj-grid"></div>
+          <input type="file" id="detalle-adj-replace" accept="${ADJ_ACCEPT}" hidden />
+          <small class="field-hint">PDF, imágenes, Word o Excel · máx. 8 MB c/u · hasta 12 archivos</small>
+        </section>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Descripción</th><th>Cantidad</th><th>P. unitario</th><th>Subtotal</th></tr></thead>
@@ -1736,6 +1931,8 @@
         </div>
       </div>`;
     const cerrar = () => {
+      modal._disposeAdjuntos?.();
+      modal._disposeAdjuntos = null;
       modal.classList.remove("open");
       document.removeEventListener("keydown", onKey);
     };
@@ -1772,7 +1969,7 @@
     };
     $("#detalle-mail").onclick = () => openShareModal(d.id, "mail");
     $("#detalle-wa").onclick = () => openShareModal(d.id, "wa");
-    $("#detalle-adj")?.addEventListener("click", () => openAdjuntosViewer(d.adjuntos || []));
+    modal._disposeAdjuntos = bindDetalleAdjuntos(modal, d);
     $("#detalle-del").onclick = async () => {
       if (!confirm("¿Eliminar este comprobante?")) return;
       try {
