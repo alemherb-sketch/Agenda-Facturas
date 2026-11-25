@@ -513,19 +513,38 @@ td.actions .btn + .btn { margin-left: 0.25rem; }
 }
 .table-docs {
   width: 100%;
-  min-width: 960px;
+  min-width: 1120px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   background: #fff;
 }
 .table-docs .col-fecha { width: 108px; }
-.table-docs .col-tipo { width: 108px; }
+.table-docs .col-tipo { width: 96px; }
 .table-docs .col-serie { width: 128px; }
-.table-docs .col-cliente { width: 18%; }
-.table-docs .col-zona { width: 110px; }
-.table-docs .col-motivo { width: 22%; }
-.table-docs .col-desc { width: 30%; }
+.table-docs .col-cliente { width: 16%; }
+.table-docs .col-zona { width: 100px; }
+.table-docs .col-motivo { width: 18%; }
+.table-docs .col-desc { width: 22%; }
+.table-docs .col-act { width: 214px; }
+.table-docs th.col-act,
+.table-docs td.actions-wrap {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  overflow: visible;
+  white-space: nowrap;
+  vertical-align: middle;
+  background: #fff;
+  box-shadow: -10px 0 14px rgba(15, 61, 46, 0.05);
+}
+.table-docs thead th.col-act {
+  z-index: 3;
+  background: #f7faf7;
+}
+.table-docs tbody tr:nth-child(even) td.actions-wrap { background: #f8fbf8; }
+.table-docs tbody tr.doc-row:hover td.actions-wrap { background: #eef6f1; }
+.table-docs td.actions-wrap .btn + .btn { margin-left: 0.2rem; }
 .table-docs th,
 .table-docs td {
   vertical-align: top;

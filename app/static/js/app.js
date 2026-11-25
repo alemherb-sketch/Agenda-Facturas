@@ -1653,15 +1653,16 @@
           <td>${zona ? `<span class="doc-zona">${escapeHtml(zona)}</span>` : `<span class="doc-vacio">—</span>`}</td>
           <td><span class="doc-motivo" title="${escapeHtml(motivo)}">${motivo ? textoPlanoHtml(motivo) : `<span class="doc-vacio">—</span>`}</span></td>
           <td>${itemsListaHtml(d)}</td>
+          ${accionesDocHtml(d)}
         </tr>`;
       })
       .join("");
     return `<div class="table-wrap"><table class="table-docs">
       <colgroup>
-        <col class="col-fecha"><col class="col-tipo"><col class="col-serie"><col class="col-cliente"><col class="col-zona"><col class="col-motivo"><col class="col-desc">
+        <col class="col-fecha"><col class="col-tipo"><col class="col-serie"><col class="col-cliente"><col class="col-zona"><col class="col-motivo"><col class="col-desc"><col class="col-act">
       </colgroup>
       <thead><tr>
-        <th>Fecha</th><th>Tipo</th><th>Serie-N°</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th>
+        <th>Fecha</th><th>Tipo</th><th>Serie-N°</th><th>Cliente</th><th>Zona</th><th>Motivo</th><th>Descripción</th><th class="col-act">Acciones</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -4274,14 +4275,21 @@
       });
       $$("[data-ver-doc]").forEach((row) => {
         const abrir = () => openDetalleComprobante(row.dataset.verDoc);
-        row.addEventListener("click", abrir);
+        row.addEventListener("click", (e) => {
+          if (e.target.closest("button, a, select, input, label")) return;
+          abrir();
+        });
         row.addEventListener("keydown", (e) => {
+          if (e.target !== row) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             abrir();
           }
         });
       });
+      $$("[data-edit]").forEach((b) =>
+        b.addEventListener("click", () => navigate("nuevo", `id=${b.dataset.edit}`))
+      );
       $$("[data-del]").forEach((b) =>
         b.addEventListener("click", async () => {
           if (!confirm("¿Eliminar este comprobante?")) return;
