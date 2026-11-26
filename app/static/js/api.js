@@ -406,6 +406,31 @@ const API = {
     [...files].forEach((f) => fd.append("archivos", f));
     return this.request(`/api/gastos-externos/${id}/adjuntos`, { method: "POST", body: fd });
   },
+  equiposMantenimiento() {
+    return this.request("/api/mantenimientos/equipos");
+  },
+  resumenMantenimientos() {
+    return this.request("/api/mantenimientos/resumen");
+  },
+  listMantenimientos(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/mantenimientos${qs ? `?${qs}` : ""}`);
+  },
+  getMantenimiento(id) {
+    return this.request(`/api/mantenimientos/${id}`);
+  },
+  createMantenimiento(body) {
+    return this.request("/api/mantenimientos", { method: "POST", body: JSON.stringify(body) });
+  },
+  updateMantenimiento(id, body) {
+    return this.request(`/api/mantenimientos/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  deleteMantenimiento(id) {
+    return this.request(`/api/mantenimientos/${id}`, { method: "DELETE" });
+  },
   formatosReportes() {
     return this.request("/api/reportes/formatos");
   },

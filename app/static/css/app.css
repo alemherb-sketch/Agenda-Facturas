@@ -869,6 +869,65 @@ tr.caja-row:hover td { background: rgba(15, 61, 46, 0.08); }
   .rep-papel { text-align: left; }
 }
 
+/* Reporte de mantenimiento (colores de la leyenda PM de las hojas) */
+.pm-pm1 { background: #e2f0d9; color: #3d6b1f; }
+.pm-pm2 { background: #fce4d6; color: #a1461a; }
+.pm-pm3 { background: #dae7f6; color: #1f5a99; }
+.pm-pm4, .pm-pm3000 { background: #fde1e0; color: #b42318; }
+.badge.pm-badge { letter-spacing: .02em; }
+.mant-card small { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
+.mant-card .badge { font-size: .68rem; padding: .08rem .4rem; }
+.mant-serie { display: block; margin-top: .1rem; font-size: .76rem; font-weight: 600; color: var(--muted); }
+.mant-sub { display: block; margin-top: .1rem; font-size: .76rem; font-weight: 500; color: var(--muted); }
+.mant-lista td { vertical-align: middle; }
+.mant-lista .nowrap, .mant-tabla .nowrap, .mant-det-tabla .nowrap { white-space: nowrap; }
+.mant-placa {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; margin-top: .8rem;
+}
+.mant-placa div { min-width: 0; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 10px; background: #f7faf7; }
+.mant-placa span {
+  display: block; font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+}
+.mant-placa strong { font-size: .88rem; overflow-wrap: anywhere; }
+.mant-rep-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.mant-rep-head h3 { margin: 0; display: flex; align-items: center; gap: .4rem; }
+.mant-rep-head h3 small { color: var(--muted); font-weight: 600; font-size: .8rem; }
+.mant-tabla td { font-size: .8rem; }
+.mant-tabla .mant-desc { min-width: 220px; }
+.mant-tabla input[type=number] { width: 5.2rem; text-align: right; border-color: var(--line); background: #fff; }
+.mant-tabla tr.mant-on td { background: #f3faf6; }
+.mant-tabla tr.mant-off td { color: var(--muted); }
+.mant-tabla tr.mant-off input[type=number] { opacity: .55; }
+.mant-tabla .mant-x-cell { width: 3.6rem; text-align: center; }
+.mant-x { display: inline-block; min-width: 1.6rem; padding: .1rem .3rem; border-radius: 6px; font-weight: 800; text-align: center; }
+.mant-tabla .mant-frec { white-space: nowrap; color: var(--muted); }
+.mant-conteo { margin: .45rem 0 0; text-align: right; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.mant-subtitulo { margin: 1rem 0 .5rem; font-size: .9rem; }
+.mant-extra {
+  display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 2.2fr) 6rem auto;
+  gap: .45rem; align-items: center; margin-bottom: .45rem;
+}
+.mant-extra input {
+  width: 100%; min-width: 0; padding: .5rem .6rem; font: inherit; font-size: .88rem;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; outline: none;
+}
+.mant-extra input:focus { border-color: rgba(31, 107, 79, 0.55); box-shadow: 0 0 0 3px rgba(31, 107, 79, 0.12); }
+.mant-pie { display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; margin: .4rem 0 1rem; }
+.btn-link {
+  padding: 0; border: 0; background: none; font: inherit; font-weight: 700;
+  color: var(--brand); text-decoration: underline; cursor: pointer;
+}
+.mant-det-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 720px) {
+  .mant-det-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* En el celular: sin la columna Ítem para que la cantidad se vea sin desplazar la tabla */
+  .mant-tabla thead th:nth-child(2), .mant-tabla tbody td:nth-child(2) { display: none; }
+  .mant-tabla .mant-desc { min-width: 130px; }
+  .mant-tabla input[type=number] { width: 3.8rem; }
+  .mant-extra { grid-template-columns: minmax(0, 1fr) 5.5rem auto; }
+  .mant-extra [data-x=desc] { grid-column: 1 / -1; order: -1; }
+}
+
 .estado-quick-wrap { display: inline-flex; max-width: 100%; }
 select.estado-quick {
   appearance: none;

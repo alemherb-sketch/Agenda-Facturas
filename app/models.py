@@ -402,6 +402,60 @@ class ReporteOperativo(Base):
     )
 
 
+class Mantenimiento(Base):
+    """Mantenimiento preventivo (PM) de un equipo según su plan en app/services/mantenimiento_planes.py.
+
+    Guarda una copia de los datos de placa del equipo para que el registro no cambie si el catálogo cambia.
+    """
+
+    __tablename__ = "mantenimientos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    equipo: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    equipo_tipo: Mapped[str] = mapped_column(String(60), nullable=False)
+    marca: Mapped[str] = mapped_column(String(60), nullable=False)
+    modelo: Mapped[str] = mapped_column(String(30), nullable=False)
+    serie: Mapped[str | None] = mapped_column(String(30))
+    motor_modelo: Mapped[str | None] = mapped_column(String(30))
+    motor_serie: Mapped[str | None] = mapped_column(String(30))
+    anio: Mapped[int | None] = mapped_column(Integer)
+    pm: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    frecuencia_horas: Mapped[int] = mapped_column(Integer, nullable=False)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    horometro: Mapped[Decimal | None] = mapped_column(Numeric(10, 1))
+    responsable: Mapped[str | None] = mapped_column(String(150))
+    observaciones: Mapped[str | None] = mapped_column(Text)
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    repuestos: Mapped[list[MantenimientoRepuesto]] = relationship(
+        back_populates="mantenimiento",
+        cascade="all, delete-orphan",
+        order_by="MantenimientoRepuesto.item",
+    )
+
+
+class MantenimientoRepuesto(Base):
+    """Repuesto cambiado en un mantenimiento; `programado` indica si la hoja lo marca para ese PM."""
+
+    __tablename__ = "mantenimiento_repuestos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mantenimiento_id: Mapped[int] = mapped_column(
+        ForeignKey("mantenimientos.id", ondelete="CASCADE"), index=True
+    )
+    item: Mapped[int] = mapped_column(Integer, nullable=False)
+    numero_parte: Mapped[str | None] = mapped_column(String(30))
+    descripcion: Mapped[str] = mapped_column(String(200), nullable=False)
+    cantidad: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    programado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    mantenimiento: Mapped[Mantenimiento] = relationship(back_populates="repuestos")
+
+
 class PanelEstado(Base):
     """Lo que el panel de ERPGEST (el proveedor) le ordeno a este sistema: una sola fila, id=1. Ver panel_erpgest.py."""
 

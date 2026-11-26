@@ -27,6 +27,11 @@
     reporteFormatos: null,
     reporteEdit: null,
     filtersReporte: { formato: "", q: "", fecha_desde: "", fecha_hasta: "" },
+    mantenimientos: [],
+    mantCatalogo: null,
+    mantResumen: {},
+    mantEdit: null,
+    filtersMant: { equipo: "", pm: "", q: "", fecha_desde: "", fecha_hasta: "" },
     draftFromContact: null,
     dashboard: null,
     cajaDashHome: null,
@@ -624,12 +629,17 @@
       report: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3.5h8V5h2.5A1.5 1.5 0 0 1 20 6.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5v-13A1.5 1.5 0 0 1 5.5 5H8V3.5Zm1.5 1.5v1.5h5V5h-5ZM7 10v1.6h10V10H7Zm0 3.5v1.6h10v-1.6H7Zm0 3.5v1.6h6V17H7Z"/></svg>`,
       expense: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12A1.5 1.5 0 0 1 19.5 5v15.2L16.2 18l-2.2 2.2L12 18l-2.2 2.2L7.6 18 4.5 20.2V5A1.5 1.5 0 0 1 6 3.5Z"/><path d="M8 8.2h8M8 11.6h5.2"/></svg>`,
       phone: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 3.8c.5-.5 1.3-.6 1.9-.2l2 1.3c.6.4.8 1.2.5 1.8l-.9 1.8a1.4 1.4 0 0 0 .3 1.6l2.9 2.9c.4.4 1 .5 1.6.3l1.8-.9c.6-.3 1.4-.1 1.8.5l1.3 2c.4.6.3 1.4-.2 1.9l-1.2 1.2c-.6.6-1.5.9-2.4.7-2.2-.4-4.7-1.9-7.3-4.5S5.4 10.2 5 8c-.2-.9.1-1.8.7-2.4L8.2 3.8Z"/></svg>`,
+      wrench: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 3.2a5.6 5.6 0 0 0-5.5 7.1L3.6 15.9a2.1 2.1 0 0 0 0 3l1.5 1.5a2.1 2.1 0 0 0 3 0l5.6-5.6a5.6 5.6 0 0 0 7.1-5.5c0-.6-.1-1.2-.3-1.7l-3.3 3.3-2.9-.6-.6-2.9 3.3-3.3c-.5-.2-1.1-.3-1.7-.3ZM6.4 18.6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>`,
     };
     return icons[name] || "";
   }
 
+  // Rutas de formulario que pertenecen a un menú (para marcarlo como activo).
+  const RUTAS_HIJAS = { reportes: ["reporte"], mantenimientos: ["mantenimiento"] };
+  const navActiva = (route) => state.route === route || (RUTAS_HIJAS[route] || []).includes(state.route);
+
   function mobileNavHtml() {
-    const moreActive = ["clientes", "productos", "cajas", "combustibles", "gastos", "reportes", "reporte", "contactos", "recordatorios"].includes(state.route);
+    const moreActive = ["clientes", "productos", "cajas", "combustibles", "gastos", "reportes", "reporte", "mantenimientos", "mantenimiento", "contactos", "recordatorios"].includes(state.route);
     const items = [
       ["dashboard", "home", "Inicio"],
       ["comprobantes", "docs", "Docs"],
@@ -655,12 +665,13 @@
       ["combustibles", "fuel", "Combustibles"],
       ["gastos", "expense", "Gasto externo"],
       ["reportes", "report", "Reportes"],
+      ["mantenimientos", "wrench", "Reporte mantenimiento"],
       ["recordatorios", "bell", "Avisos"],
     ];
     return items
       .map(
         ([route, ico, label]) =>
-          `<button type="button" data-route="${route}" class="mobile-more-item ${state.route === route || (route === "reportes" && state.route === "reporte") ? "active" : ""}"><span class="mico">${navIcon(ico)}</span><span>${label}</span></button>`
+          `<button type="button" data-route="${route}" class="mobile-more-item ${navActiva(route) ? "active" : ""}"><span class="mico">${navIcon(ico)}</span><span>${label}</span></button>`
       )
       .join("");
   }
@@ -677,13 +688,14 @@
       ["combustibles", "⛽", "Combustibles"],
       ["gastos", "💸", "Gasto externo"],
       ["reportes", "📋", "Reportes"],
+      ["mantenimientos", "🛠️", "Reporte mantenimiento"],
       ["nuevo", "＋", "Nuevo"],
       ["agenda", "📅", "Agenda"],
       ["recordatorios", "⏰", "Avisos"],
     ];
     return items
       .map(
-        ([route, ico, label]) => `<button class="nav-btn ${state.route === route || (route === "reportes" && state.route === "reporte") ? "active" : ""}" data-route="${route}">
+        ([route, ico, label]) => `<button class="nav-btn ${navActiva(route) ? "active" : ""}" data-route="${route}">
           <span class="nav-ico">${ico}</span>${label}
         </button>`
       )
@@ -4739,6 +4751,8 @@
 
     if (state.route === "reportes") bindReportes();
     if (state.route === "reporte") bindReporteForm();
+    if (state.route === "mantenimientos") bindMantenimientos();
+    if (state.route === "mantenimiento") bindMantenimientoForm();
 
     if (state.route === "gastos") {
       $("#btn-new-gasto")?.addEventListener("click", () => openGastoModal());
@@ -5740,6 +5754,657 @@
     });
   }
 
+  /* ---------- Reporte de mantenimiento ---------- */
+  async function ensureCatalogoMant() {
+    if (!state.mantCatalogo) state.mantCatalogo = await API.equiposMantenimiento();
+    return state.mantCatalogo;
+  }
+
+  const equipoMant = (id) => (state.mantCatalogo?.equipos || []).find((e) => e.id === id);
+  const pmLeyenda = (pm) => state.mantCatalogo?.leyenda?.find((l) => l.pm === pm)?.label || pm;
+  const pmClase = (pm) => `pm-${String(pm || "").toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  const pmBadgeHtml = (pm) => `<span class="badge pm-badge ${pmClase(pm)}">${escapeHtml(pm || "—")}</span>`;
+  const numHoras = (n) => Number(n || 0).toLocaleString("es-PE", { maximumFractionDigits: 1 });
+  const numCantidad = (n) => Number(n || 0).toLocaleString("es-PE", { maximumFractionDigits: 2 });
+  const parteNorm = (v) => String(v || "").replace(/\s+/g, "").toUpperCase();
+
+  function frecuenciaRepuestoTexto(eq, horas) {
+    if (!horas.length) return "Sin X en la hoja";
+    const paso = horas[0];
+    const regular =
+      horas.length === Math.floor(eq.ciclo_horas / paso) && horas.every((h, i) => h === paso * (i + 1));
+    if (regular) return `Cada ${numHoras(paso)} h`;
+    const txt = horas.map(numHoras);
+    return `${txt.slice(0, -1).join(", ")} y ${txt[txt.length - 1]} h`;
+  }
+
+  /* PM del ciclo más cercano al horómetro (el ciclo se repite cada 2000 o 3000 h). */
+  function frecuenciaPorHorometro(eq, horometro) {
+    const h = Number(horometro);
+    if (!eq || !Number.isFinite(h) || h <= 0) return null;
+    const paso = eq.frecuencias[0].horas;
+    const n = Math.round(h / paso);
+    if (n < 1) return null;
+    const pos = (n * paso) % eq.ciclo_horas || eq.ciclo_horas;
+    return eq.frecuencias.find((f) => f.horas === pos) || null;
+  }
+
+  function mantCardHtml(eq, res) {
+    const activo = state.filtersMant.equipo === eq.id;
+    const u = res?.ultimo;
+    const p = res?.proximo;
+    return `
+      <div class="rep-card mant-card ${activo ? "active" : ""}" data-mant-filtro="${escapeHtml(eq.id)}" role="button" tabindex="0" title="Ver solo el ${escapeHtml(eq.modelo)}">
+        <div class="rep-card-top">
+          <span class="rep-code">${escapeHtml(eq.tipo)}</span>
+          <span class="rep-count" title="Mantenimientos registrados">${res?.cantidad || 0}</span>
+        </div>
+        <strong>${escapeHtml(eq.modelo)}<span class="mant-serie">${escapeHtml(eq.marca)} · Serie ${escapeHtml(eq.serie)}</span></strong>
+        ${
+          u
+            ? `<small>Último: ${pmBadgeHtml(u.pm)} ${numHoras(u.frecuencia_horas)} h · ${fmtDate(u.fecha)}</small>`
+            : `<small>Sin mantenimientos registrados</small>`
+        }
+        ${
+          p
+            ? `<small>Sigue: ${pmBadgeHtml(p.pm)} ${numHoras(p.frecuencia_horas)} h${p.horometro != null ? ` · ≈ ${numHoras(p.horometro)} h de horómetro` : ""}</small>`
+            : ""
+        }
+        <button type="button" class="btn btn-secondary btn-sm" data-mant-nuevo="${escapeHtml(eq.id)}">＋ Registrar</button>
+      </div>`;
+  }
+
+  function filaMantenimientoHtml(m) {
+    const adicionales = m.repuestos.filter((r) => !r.programado).length;
+    return `<tr class="doc-row" data-mant-ver="${m.id}" tabindex="0" title="Ver detalle">
+      <td class="nowrap">${fmtDate(m.fecha)}</td>
+      <td><strong>${escapeHtml(m.equipo_tipo)} ${escapeHtml(m.modelo)}</strong><small class="mant-sub">Serie ${escapeHtml(m.serie || "—")}</small></td>
+      <td class="nowrap">${pmBadgeHtml(m.pm)} ${numHoras(m.frecuencia_horas)} h</td>
+      <td class="nowrap">${m.horometro != null ? `${numHoras(m.horometro)} h` : "—"}</td>
+      <td class="nowrap">${m.repuestos.length}${adicionales ? `<small class="mant-sub">${adicionales} adicional${adicionales === 1 ? "" : "es"}</small>` : ""}</td>
+      <td>${escapeHtml(m.responsable || "—")}</td>
+      <td class="actions">
+        ${iconBtn(`data-mant-edit="${m.id}"`, "Editar", "edit")}
+        ${iconBtn(`data-mant-del="${m.id}"`, "Eliminar", "delete", "btn-danger")}
+      </td>
+    </tr>`;
+  }
+
+  async function viewMantenimientos() {
+    const [catalogo, lista, resumen] = await Promise.all([
+      ensureCatalogoMant(),
+      API.listMantenimientos(state.filtersMant),
+      API.resumenMantenimientos(),
+    ]);
+    state.mantenimientos = lista;
+    state.mantResumen = resumen || {};
+    const f = state.filtersMant;
+    return `
+      <div class="page-head">
+        <div>
+          <h1>Reporte mantenimiento</h1>
+          <p>Registra el mantenimiento preventivo de cada equipo con los repuestos que marca su hoja de PM.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-nuevo-mant">＋ Nuevo mantenimiento</button>
+      </div>
+      <div class="rep-cards">${catalogo.equipos.map((eq) => mantCardHtml(eq, state.mantResumen[eq.id])).join("")}</div>
+      <div class="toolbar panel">
+        <select id="f-mant-equipo">
+          <option value="">Todos los equipos</option>
+          ${catalogo.equipos
+            .map((eq) => `<option value="${escapeHtml(eq.id)}" ${f.equipo === eq.id ? "selected" : ""}>${escapeHtml(eq.titulo)}</option>`)
+            .join("")}
+        </select>
+        <select id="f-mant-pm">
+          <option value="">Todos los PM</option>
+          ${catalogo.leyenda
+            .map((l) => `<option value="${escapeHtml(l.pm)}" ${f.pm === l.pm ? "selected" : ""}>${escapeHtml(l.pm)} · ${escapeHtml(l.label)}</option>`)
+            .join("")}
+        </select>
+        <input id="f-mant-desde" type="date" title="Desde" value="${escapeHtml(f.fecha_desde)}" />
+        <input id="f-mant-hasta" type="date" title="Hasta" value="${escapeHtml(f.fecha_hasta)}" />
+        <input id="f-mant-q" placeholder="Responsable, N° de parte, repuesto u observación..." value="${escapeHtml(f.q)}" style="flex:1;min-width:160px" />
+        <button class="btn btn-secondary" id="btn-filtrar-mant">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-limpiar-mant">Limpiar</button>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        ${
+          lista.length
+            ? `<div class="table-wrap"><table class="mant-lista">
+              <thead><tr>
+                <th>Fecha</th><th>Equipo</th><th>PM</th><th>Horómetro</th><th>Repuestos</th><th>Responsable</th><th class="col-actions">Acciones</th>
+              </tr></thead>
+              <tbody>${lista.map(filaMantenimientoHtml).join("")}</tbody>
+            </table></div>`
+            : `<div class="empty"><strong>Sin mantenimientos</strong>Elige un equipo y registra su primer mantenimiento.</div>`
+        }
+      </div>
+      <div class="modal-backdrop" id="modal-mant"></div>`;
+  }
+
+  async function eliminarMantenimiento(m) {
+    if (!m) return false;
+    if (!confirm(`¿Eliminar el ${m.pm} del ${m.modelo} del ${fmtDate(m.fecha)}?`)) return false;
+    try {
+      await API.deleteMantenimiento(m.id);
+      toast("Mantenimiento eliminado");
+      return true;
+    } catch (ex) {
+      toast(ex.message);
+      return false;
+    }
+  }
+
+  function openMantenimientoDetalle(m) {
+    const modal = $("#modal-mant");
+    if (!modal || !m) return;
+    const filas = m.repuestos.length
+      ? m.repuestos
+          .map(
+            (r) => `<tr>
+              <td class="nowrap">${r.item}</td>
+              <td class="nowrap"><strong>${escapeHtml(r.numero_parte || "—")}</strong></td>
+              <td>${escapeHtml(r.descripcion)}</td>
+              <td class="nowrap">${numCantidad(r.cantidad)}</td>
+              <td>${r.programado ? `<span class="badge pagado">Según hoja</span>` : `<span class="badge no_pagado">Adicional</span>`}</td>
+            </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="5">Sin repuestos registrados</td></tr>`;
+    modal.classList.add("open");
+    modal.innerHTML = `
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="mant-det-titulo">
+        <div class="modal-head">
+          <h2 id="mant-det-titulo">${escapeHtml(m.pm)} · ${escapeHtml(m.equipo_tipo)} ${escapeHtml(m.modelo)}</h2>
+          <button class="btn btn-ghost btn-sm" type="button" id="mant-det-cerrar">Cerrar</button>
+        </div>
+        <div class="detalle-acciones">
+          <button class="btn btn-secondary btn-sm" type="button" id="mant-det-editar">Editar</button>
+          <button class="btn btn-danger btn-sm" type="button" id="mant-det-eliminar">Eliminar</button>
+        </div>
+        <div class="detalle-grid mant-det-grid">
+          <div><span class="detalle-k">Fecha</span>${fmtDate(m.fecha)}</div>
+          <div><span class="detalle-k">Frecuencia</span>${pmBadgeHtml(m.pm)} ${numHoras(m.frecuencia_horas)} h</div>
+          <div><span class="detalle-k">Horómetro</span>${m.horometro != null ? `${numHoras(m.horometro)} h` : "—"}</div>
+          <div><span class="detalle-k">Responsable</span>${escapeHtml(m.responsable || "—")}</div>
+          <div class="full"><span class="detalle-k">Tipo de mantenimiento</span>${escapeHtml(m.pm_label || pmLeyenda(m.pm))}</div>
+          <div><span class="detalle-k">Equipo</span>${escapeHtml(m.equipo_tipo)}</div>
+          <div><span class="detalle-k">Marca · modelo</span>${escapeHtml(m.marca)} ${escapeHtml(m.modelo)}</div>
+          <div><span class="detalle-k">Serie</span>${escapeHtml(m.serie || "—")}</div>
+          <div><span class="detalle-k">Año</span>${m.anio || "—"}</div>
+          <div><span class="detalle-k">Mod. motor</span>${escapeHtml(m.motor_modelo || "—")}</div>
+          <div><span class="detalle-k">Serie motor</span>${escapeHtml(m.motor_serie || "—")}</div>
+          <div class="full"><span class="detalle-k">Observaciones</span>${textoPlanoHtml(m.observaciones)}</div>
+        </div>
+        <div class="table-wrap"><table class="mant-det-tabla">
+          <thead><tr><th>Ítem</th><th>N° parte</th><th>Descripción</th><th>Cant.</th><th>Hoja</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table></div>
+      </div>`;
+    const cerrar = () => {
+      modal.classList.remove("open");
+      document.removeEventListener("keydown", onKey);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") cerrar();
+    };
+    document.addEventListener("keydown", onKey);
+    modal.onclick = (e) => {
+      if (e.target === modal) cerrar();
+    };
+    $("#mant-det-cerrar").onclick = cerrar;
+    $("#mant-det-editar").onclick = () => {
+      cerrar();
+      navigate("mantenimiento", `id=${m.id}`);
+    };
+    $("#mant-det-eliminar").onclick = async () => {
+      if (!(await eliminarMantenimiento(m))) return;
+      cerrar();
+      renderApp();
+    };
+  }
+
+  function bindMantenimientos() {
+    $("#btn-nuevo-mant")?.addEventListener("click", () => navigate("mantenimiento", state.filtersMant.equipo ? `equipo=${encodeURIComponent(state.filtersMant.equipo)}` : ""));
+    const filtrarPorEquipo = (id) => {
+      state.filtersMant.equipo = state.filtersMant.equipo === id ? "" : id;
+      renderApp();
+    };
+    $$("[data-mant-filtro]").forEach((card) => {
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("[data-mant-nuevo]")) return;
+        filtrarPorEquipo(card.dataset.mantFiltro);
+      });
+      card.addEventListener("keydown", (e) => {
+        if (e.target !== card || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        filtrarPorEquipo(card.dataset.mantFiltro);
+      });
+    });
+    $$("[data-mant-nuevo]").forEach((b) =>
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigate("mantenimiento", `equipo=${encodeURIComponent(b.dataset.mantNuevo)}`);
+      })
+    );
+    $("#btn-filtrar-mant")?.addEventListener("click", () => {
+      state.filtersMant = {
+        equipo: $("#f-mant-equipo")?.value || "",
+        pm: $("#f-mant-pm")?.value || "",
+        fecha_desde: $("#f-mant-desde")?.value || "",
+        fecha_hasta: $("#f-mant-hasta")?.value || "",
+        q: ($("#f-mant-q")?.value || "").trim(),
+      };
+      renderApp();
+    });
+    $("#f-mant-q")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $("#btn-filtrar-mant")?.click();
+    });
+    $("#btn-limpiar-mant")?.addEventListener("click", () => {
+      state.filtersMant = { equipo: "", pm: "", q: "", fecha_desde: "", fecha_hasta: "" };
+      renderApp();
+    });
+    const buscar = (id) => state.mantenimientos.find((m) => m.id === Number(id));
+    $$("[data-mant-ver]").forEach((row) => {
+      row.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        openMantenimientoDetalle(buscar(row.dataset.mantVer));
+      });
+      row.addEventListener("keydown", (e) => {
+        if (e.target !== row || e.key !== "Enter") return;
+        openMantenimientoDetalle(buscar(row.dataset.mantVer));
+      });
+    });
+    $$("[data-mant-edit]").forEach((b) =>
+      b.addEventListener("click", () => navigate("mantenimiento", `id=${b.dataset.mantEdit}`))
+    );
+    $$("[data-mant-del]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        if (await eliminarMantenimiento(buscar(b.dataset.mantDel))) renderApp();
+      })
+    );
+  }
+
+  async function viewMantenimientoForm(params) {
+    const catalogo = await ensureCatalogoMant();
+    let mant = null;
+    let resumen = state.mantResumen || {};
+    if (params.id) {
+      mant = await API.getMantenimiento(params.id);
+    } else {
+      resumen = (await API.resumenMantenimientos().catch(() => null)) || resumen;
+      state.mantResumen = resumen;
+    }
+    const equipoId = mant?.equipo || (equipoMant(params.equipo) ? params.equipo : "");
+    state.mantEdit = { mant };
+    const volver = `<button class="btn btn-ghost" type="button" data-mant-volver>Volver</button>`;
+    const guardarTxt = mant ? "Guardar cambios" : "Guardar mantenimiento";
+    return `
+      <div class="page-head">
+        <div>
+          <h1>${mant ? "Editar mantenimiento" : "Nuevo mantenimiento"}</h1>
+          <p>Elige el equipo y el PM: los repuestos se marcan según la hoja de mantenimiento del equipo.</p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          ${volver}
+          <button class="btn btn-primary" type="submit" form="form-mant">${guardarTxt}</button>
+        </div>
+      </div>
+      <form id="form-mant" novalidate>
+        <section class="panel rep-section">
+          <h3>Equipo</h3>
+          <div class="field">
+            <label for="mant-equipo">Equipo</label>
+            <select id="mant-equipo" required>
+              <option value="">Selecciona el equipo…</option>
+              ${catalogo.equipos
+                .map(
+                  (eq) =>
+                    `<option value="${escapeHtml(eq.id)}" ${eq.id === equipoId ? "selected" : ""}>${escapeHtml(eq.titulo)} · ${escapeHtml(eq.marca)} · Serie ${escapeHtml(eq.serie)}</option>`
+                )
+                .join("")}
+            </select>
+          </div>
+          <div class="mant-placa" id="mant-placa"></div>
+        </section>
+        <section class="panel rep-section">
+          <h3>Mantenimiento</h3>
+          <div class="form-grid rep-grid">
+            <div class="field">
+              <label for="mant-fecha">Fecha</label>
+              <input type="date" id="mant-fecha" required value="${escapeHtml(mant?.fecha || localIsoDate())}" />
+            </div>
+            <div class="field">
+              <label for="mant-horometro">Horómetro (h)</label>
+              <input type="number" id="mant-horometro" min="0" step="0.1" inputmode="decimal" value="${mant?.horometro != null ? Number(mant.horometro) : ""}" placeholder="Lectura del equipo" />
+              <small class="field-hint" id="mant-sugerencia"></small>
+            </div>
+            <div class="field">
+              <label for="mant-frecuencia">PM · horas del ciclo</label>
+              <select id="mant-frecuencia" required></select>
+              <small class="field-hint" id="mant-pm-label"></small>
+            </div>
+            <div class="field span-2">
+              <label for="mant-responsable">Responsable / técnico</label>
+              <input id="mant-responsable" maxlength="150" value="${escapeHtml(mant?.responsable || "")}" placeholder="Quién hizo el mantenimiento" />
+            </div>
+          </div>
+        </section>
+        <section class="panel rep-section">
+          <div class="mant-rep-head">
+            <h3>Repuestos <span id="mant-rep-pm"></span></h3>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-mant-plan">Volver a marcar según la hoja</button>
+          </div>
+          <p class="rep-nota">Marca los repuestos que se cambiaron. Vienen marcados los que la hoja indica con X para este PM; ajusta la cantidad si fue distinta.</p>
+          <div id="mant-repuestos"></div>
+          <h4 class="mant-subtitulo">Otros repuestos</h4>
+          <div id="mant-extras"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-mant-extra">＋ Agregar otro repuesto</button>
+        </section>
+        <section class="panel rep-section">
+          <h3>Observaciones</h3>
+          <div class="field">
+            <label for="mant-obs" class="sr-only">Observaciones</label>
+            <textarea id="mant-obs" rows="4" maxlength="2000" placeholder="Hallazgos, trabajos adicionales o pendientes">${escapeHtml(mant?.observaciones || "")}</textarea>
+          </div>
+        </section>
+        <div class="mant-pie">
+          ${volver}
+          <button class="btn btn-primary" type="submit">${guardarTxt}</button>
+        </div>
+      </form>`;
+  }
+
+  function filaExtraMantHtml(r = {}) {
+    return `
+      <div class="mant-extra" data-mant-extra>
+        <input data-x="parte" maxlength="30" placeholder="N° parte" value="${escapeHtml(r.numero_parte || "")}" aria-label="N° de parte" />
+        <input data-x="desc" maxlength="200" placeholder="Descripción del repuesto" value="${escapeHtml(r.descripcion || "")}" aria-label="Descripción" />
+        <input data-x="cant" type="number" min="0.01" step="0.01" inputmode="decimal" value="${r.cantidad != null ? Number(r.cantidad) : 1}" aria-label="Cantidad" />
+        <button type="button" class="btn btn-ghost btn-sm" data-x="quitar" title="Quitar" aria-label="Quitar repuesto">✕</button>
+      </div>`;
+  }
+
+  function bindMantenimientoForm() {
+    const form = $("#form-mant");
+    if (!form || !state.mantEdit) return;
+    const { mant } = state.mantEdit;
+    const selEquipo = $("#mant-equipo", form);
+    const selFrec = $("#mant-frecuencia", form);
+    const inpHorometro = $("#mant-horometro", form);
+    const contRep = $("#mant-repuestos", form);
+    const contExtras = $("#mant-extras", form);
+    let eq = null;
+
+    const horasSel = () => Number(selFrec.value) || null;
+    const colSel = () => eq?.frecuencias.find((f) => f.horas === horasSel()) || null;
+
+    function pintarPlaca() {
+      const placa = $("#mant-placa", form);
+      if (!eq) {
+        placa.innerHTML = `<p class="rep-nota" style="margin:0">Los datos de placa y los repuestos salen de la hoja de mantenimiento del equipo.</p>`;
+        return;
+      }
+      const datos = [
+        ["Equipo", eq.tipo],
+        ["Marca", eq.marca],
+        ["Modelo", eq.modelo],
+        ["Serie", eq.serie],
+        ["Mod. motor", eq.motor_modelo],
+        ["Serie motor", eq.motor_serie],
+        ["Año", eq.anio],
+      ];
+      placa.innerHTML = datos
+        .map(([k, v]) => `<div><span>${k}</span><strong>${escapeHtml(v ?? "—")}</strong></div>`)
+        .join("");
+    }
+
+    function pintarFrecuencias(horas) {
+      if (!eq) {
+        selFrec.innerHTML = `<option value="">Primero elige el equipo</option>`;
+        selFrec.disabled = true;
+        return;
+      }
+      selFrec.disabled = false;
+      selFrec.innerHTML = eq.frecuencias
+        .map((f) => `<option value="${f.horas}" ${f.horas === horas ? "selected" : ""}>${f.pm} · ${numHoras(f.horas)} h</option>`)
+        .join("");
+    }
+
+    function pintarRepuestos() {
+      if (!eq) {
+        contRep.innerHTML = `<div class="empty" style="padding:1.2rem">Elige un equipo para ver sus repuestos.</div>`;
+        return;
+      }
+      contRep.innerHTML = `
+        <div class="rep-table-wrap"><table class="rep-table mant-tabla">
+          <thead><tr>
+            <th title="Se cambió">✓</th><th>Ítem</th><th>N° parte</th><th>Descripción</th><th>Cant.</th><th id="mant-col-pm">PM</th><th>Frecuencia en la hoja</th>
+          </tr></thead>
+          <tbody>
+            ${eq.repuestos
+              .map(
+                (r, i) => `<tr data-mant-row="${i}">
+                  <td><input type="checkbox" data-mant-check="${i}" aria-label="Se cambió ${escapeHtml(r.descripcion)}" /></td>
+                  <td class="rep-item">${r.item}</td>
+                  <td class="nowrap"><strong>${escapeHtml(r.numero_parte)}</strong></td>
+                  <td class="mant-desc">${escapeHtml(r.descripcion)}</td>
+                  <td><input type="number" min="0.01" step="0.01" inputmode="decimal" data-mant-cant="${i}" value="${r.cantidad}" aria-label="Cantidad de ${escapeHtml(r.descripcion)}" /></td>
+                  <td class="mant-x-cell" data-mant-x="${i}"></td>
+                  <td class="mant-frec">${escapeHtml(frecuenciaRepuestoTexto(eq, r.horas))}</td>
+                </tr>`
+              )
+              .join("")}
+          </tbody>
+        </table></div>
+        <p id="mant-conteo" class="mant-conteo"></p>`;
+    }
+
+    function actualizarFilas() {
+      if (!eq) return;
+      const col = colSel();
+      let marcados = 0;
+      let enHoja = 0;
+      eq.repuestos.forEach((r, i) => {
+        const check = $(`[data-mant-check="${i}"]`, contRep);
+        const fila = $(`[data-mant-row="${i}"]`, contRep);
+        const programado = col ? r.horas.includes(col.horas) : false;
+        if (programado) enHoja += 1;
+        if (check.checked) marcados += 1;
+        fila.classList.toggle("mant-on", check.checked);
+        fila.classList.toggle("mant-off", !check.checked);
+        $(`[data-mant-x="${i}"]`, contRep).innerHTML = programado ? `<span class="mant-x ${pmClase(col.pm)}">X</span>` : "";
+      });
+      const extras = $$("[data-mant-extra]", contExtras).filter((row) => $("[data-x=desc]", row).value.trim()).length;
+      $("#mant-conteo", contRep).textContent =
+        `${marcados} de ${eq.repuestos.length} repuestos marcados · la hoja indica ${enHoja} para este PM` +
+        (extras ? ` · ${extras} adicional${extras === 1 ? "" : "es"}` : "");
+    }
+
+    function pintarPm() {
+      const col = colSel();
+      $("#mant-pm-label", form).textContent = col ? pmLeyenda(col.pm) : "";
+      $("#mant-rep-pm", form).innerHTML = col ? `${pmBadgeHtml(col.pm)} <small>${numHoras(col.horas)} h</small>` : "";
+      const th = $("#mant-col-pm", contRep);
+      if (th) th.textContent = col ? `${col.pm} ${numHoras(col.horas)}` : "PM";
+      pintarSugerencia();
+    }
+
+    /* Marca los repuestos con X en la columna elegida y repone las cantidades de la hoja. */
+    function marcarSegunHoja() {
+      const col = colSel();
+      if (!eq || !col) return;
+      eq.repuestos.forEach((r, i) => {
+        $(`[data-mant-check="${i}"]`, contRep).checked = r.horas.includes(col.horas);
+        $(`[data-mant-cant="${i}"]`, contRep).value = r.cantidad;
+      });
+      actualizarFilas();
+    }
+
+    /* Al editar: marca los repuestos guardados; los que no están en la hoja van a "Otros repuestos". */
+    function cargarGuardados() {
+      const usados = new Set();
+      const extras = [];
+      (mant.repuestos || []).forEach((g) => {
+        const i = eq.repuestos.findIndex((r, idx) => !usados.has(idx) && parteNorm(r.numero_parte) === parteNorm(g.numero_parte));
+        if (i < 0) {
+          extras.push(g);
+          return;
+        }
+        usados.add(i);
+        $(`[data-mant-check="${i}"]`, contRep).checked = true;
+        $(`[data-mant-cant="${i}"]`, contRep).value = Number(g.cantidad);
+      });
+      contExtras.innerHTML = extras.map((g) => filaExtraMantHtml(g)).join("");
+      actualizarFilas();
+    }
+
+    function pintarSugerencia() {
+      const hint = $("#mant-sugerencia", form);
+      const sug = frecuenciaPorHorometro(eq, inpHorometro.value);
+      if (!sug) {
+        hint.innerHTML = "";
+        return;
+      }
+      if (sug.horas === horasSel()) {
+        hint.className = "field-hint ok";
+        hint.textContent = `✓ El horómetro coincide con el ${sug.pm} · ${numHoras(sug.horas)} h del ciclo`;
+        return;
+      }
+      hint.className = "field-hint";
+      hint.innerHTML = `Por el horómetro toca ${pmBadgeHtml(sug.pm)} ${numHoras(sug.horas)} h del ciclo. <button type="button" class="btn-link" id="btn-mant-usar-sug">Usar este PM</button>`;
+      $("#btn-mant-usar-sug", hint).onclick = () => {
+        selFrec.value = String(sug.horas);
+        pintarPm();
+        marcarSegunHoja();
+      };
+    }
+
+    function elegirEquipo({ inicial = false } = {}) {
+      eq = equipoMant(selEquipo.value) || null;
+      let horas = null;
+      if (eq) {
+        if (inicial && mant && mant.equipo === eq.id) horas = mant.frecuencia_horas;
+        else horas = state.mantResumen?.[eq.id]?.proximo?.frecuencia_horas ?? null;
+        if (!eq.frecuencias.some((f) => f.horas === horas)) {
+          horas = frecuenciaPorHorometro(eq, inpHorometro.value)?.horas ?? eq.frecuencias[0].horas;
+        }
+      }
+      pintarPlaca();
+      pintarFrecuencias(horas);
+      pintarRepuestos();
+      pintarPm();
+      if (!eq) return;
+      if (inicial && mant && mant.equipo === eq.id) cargarGuardados();
+      else marcarSegunHoja();
+    }
+
+    selEquipo.addEventListener("change", () => elegirEquipo());
+    selFrec.addEventListener("change", () => {
+      pintarPm();
+      marcarSegunHoja();
+    });
+    inpHorometro.addEventListener("input", pintarSugerencia);
+    contRep.addEventListener("change", (e) => {
+      if (e.target.matches("[data-mant-check]")) actualizarFilas();
+    });
+    contRep.addEventListener("input", (e) => {
+      if (!e.target.matches("[data-mant-cant]")) return;
+      const i = e.target.dataset.mantCant;
+      const check = $(`[data-mant-check="${i}"]`, contRep);
+      if (Number(e.target.value) > 0 && !check.checked) {
+        check.checked = true;
+        actualizarFilas();
+      }
+    });
+    $("#btn-mant-plan", form).addEventListener("click", () => {
+      if (!eq) return toast("Primero elige el equipo");
+      marcarSegunHoja();
+      toast("Repuestos marcados según la hoja");
+    });
+    $("#btn-mant-extra", form).addEventListener("click", () => {
+      contExtras.insertAdjacentHTML("beforeend", filaExtraMantHtml());
+      contExtras.lastElementChild?.querySelector("[data-x=parte]")?.focus();
+    });
+    contExtras.addEventListener("click", (e) => {
+      if (!e.target.closest("[data-x=quitar]")) return;
+      e.target.closest("[data-mant-extra]")?.remove();
+      actualizarFilas();
+    });
+    contExtras.addEventListener("input", actualizarFilas);
+    $$("[data-mant-volver]").forEach((b) => b.addEventListener("click", () => navigate("mantenimientos")));
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      guardarMantenimiento();
+    });
+
+    async function guardarMantenimiento() {
+      if (!eq) {
+        toast("Elige el equipo");
+        return selEquipo.focus();
+      }
+      const fecha = $("#mant-fecha", form).value;
+      if (!fecha) {
+        toast("Indica la fecha del mantenimiento");
+        return $("#mant-fecha", form).focus();
+      }
+      const horometroTxt = inpHorometro.value.trim();
+      if (horometroTxt && !(Number(horometroTxt) >= 0)) {
+        toast("Revisa el horómetro");
+        return inpHorometro.focus();
+      }
+      const repuestos = [];
+      for (const [i, r] of eq.repuestos.entries()) {
+        if (!$(`[data-mant-check="${i}"]`, contRep).checked) continue;
+        const inp = $(`[data-mant-cant="${i}"]`, contRep);
+        const cantidad = Number(inp.value);
+        if (!(cantidad > 0)) {
+          toast(`Indica la cantidad de ${r.descripcion}`);
+          return inp.focus();
+        }
+        repuestos.push({ numero_parte: r.numero_parte, descripcion: r.descripcion, cantidad });
+      }
+      for (const row of $$("[data-mant-extra]", contExtras)) {
+        const parte = $("[data-x=parte]", row).value.trim();
+        const descripcion = $("[data-x=desc]", row).value.trim();
+        const inpCant = $("[data-x=cant]", row);
+        if (!parte && !descripcion) continue;
+        if (!descripcion) {
+          toast("Escribe la descripción del otro repuesto");
+          return $("[data-x=desc]", row).focus();
+        }
+        const cantidad = Number(inpCant.value);
+        if (!(cantidad > 0)) {
+          toast(`Indica la cantidad de ${descripcion}`);
+          return inpCant.focus();
+        }
+        repuestos.push({ numero_parte: parte || null, descripcion, cantidad });
+      }
+      if (!repuestos.length && !confirm("No marcaste ningún repuesto. ¿Guardar el mantenimiento igual?")) return;
+      const body = {
+        equipo: eq.id,
+        frecuencia_horas: horasSel(),
+        fecha,
+        horometro: horometroTxt ? Number(horometroTxt) : null,
+        responsable: $("#mant-responsable", form).value.trim() || null,
+        observaciones: $("#mant-obs", form).value.trim() || null,
+        repuestos,
+      };
+      const botones = $$('#form-mant button[type="submit"], button[type="submit"][form="form-mant"]');
+      botones.forEach((b) => (b.disabled = true));
+      try {
+        const saved = mant ? await API.updateMantenimiento(mant.id, body) : await API.createMantenimiento(body);
+        toast(mant ? "Mantenimiento actualizado" : `${saved.pm} del ${saved.modelo} registrado`);
+        navigate("mantenimientos");
+      } catch (ex) {
+        toast(ex.message);
+        botones.forEach((b) => (b.disabled = false));
+      }
+    }
+
+    elegirEquipo({ inicial: true });
+  }
+
   /* ---------- Render ---------- */
   let renderSeq = 0;
   async function renderApp() {
@@ -5764,6 +6429,8 @@
       else if (state.route === "gastos") html = await viewGastos();
       else if (state.route === "reportes") html = await viewReportes();
       else if (state.route === "reporte") html = await viewReporteForm(params);
+      else if (state.route === "mantenimientos") html = await viewMantenimientos();
+      else if (state.route === "mantenimiento") html = await viewMantenimientoForm(params);
       else if (state.route === "nuevo") {
         const editId = params.id ? Number(params.id) : null;
         const [clientes, productos, doc] = await Promise.all([

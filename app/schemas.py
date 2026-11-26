@@ -617,6 +617,56 @@ class GastoExternoResumenOut(BaseModel):
     gastos: list[GastoExternoOut] = []
 
 
+class MantenimientoRepuestoIn(BaseModel):
+    numero_parte: str | None = Field(default=None, max_length=30)
+    descripcion: str = Field(min_length=1, max_length=200)
+    cantidad: Decimal = Field(gt=0, le=Decimal("99999.99"))
+
+
+class MantenimientoIn(BaseModel):
+    equipo: str = Field(min_length=1, max_length=20)
+    frecuencia_horas: int = Field(ge=1, le=100_000)
+    fecha: date
+    horometro: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999.9"))
+    responsable: str | None = Field(default=None, max_length=150)
+    observaciones: str | None = Field(default=None, max_length=2000)
+    repuestos: list[MantenimientoRepuestoIn] = Field(default_factory=list, max_length=80)
+
+
+class MantenimientoRepuestoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    item: int
+    numero_parte: str | None = None
+    descripcion: str
+    cantidad: Decimal
+    programado: bool = False
+
+
+class MantenimientoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    equipo: str
+    equipo_tipo: str
+    marca: str
+    modelo: str
+    serie: str | None = None
+    motor_modelo: str | None = None
+    motor_serie: str | None = None
+    anio: int | None = None
+    pm: str
+    pm_label: str = ""
+    frecuencia_horas: int
+    fecha: date
+    horometro: Decimal | None = None
+    responsable: str | None = None
+    observaciones: str | None = None
+    repuestos: list[MantenimientoRepuestoOut] = []
+    creado_en: datetime
+    actualizado_en: datetime | None = None
+
+
 class ReporteIn(BaseModel):
     formato: str = Field(min_length=1, max_length=20)
     numero: int | None = Field(default=None, ge=1, le=999_999_999)
