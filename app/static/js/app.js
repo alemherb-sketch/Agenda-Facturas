@@ -32,6 +32,13 @@
     mantResumen: {},
     mantEdit: null,
     filtersMant: { equipo: "", pm: "", q: "", fecha_desde: "", fecha_hasta: "" },
+    planCatalogo: null,
+    planTab: "convencional",
+    planConv: null,
+    planEq: null,
+    planEdit: null,
+    filtersPlanConv: { fecha_desde: "", fecha_hasta: "", turno: "", guardia: "", labor: "", tarea: "", maestro: "" },
+    filtersPlanEq: { fecha_desde: "", fecha_hasta: "", turno: "", maquina: "" },
     draftFromContact: null,
     dashboard: null,
     cajaDashHome: null,
@@ -630,16 +637,17 @@
       expense: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12A1.5 1.5 0 0 1 19.5 5v15.2L16.2 18l-2.2 2.2L12 18l-2.2 2.2L7.6 18 4.5 20.2V5A1.5 1.5 0 0 1 6 3.5Z"/><path d="M8 8.2h8M8 11.6h5.2"/></svg>`,
       phone: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 3.8c.5-.5 1.3-.6 1.9-.2l2 1.3c.6.4.8 1.2.5 1.8l-.9 1.8a1.4 1.4 0 0 0 .3 1.6l2.9 2.9c.4.4 1 .5 1.6.3l1.8-.9c.6-.3 1.4-.1 1.8.5l1.3 2c.4.6.3 1.4-.2 1.9l-1.2 1.2c-.6.6-1.5.9-2.4.7-2.2-.4-4.7-1.9-7.3-4.5S5.4 10.2 5 8c-.2-.9.1-1.8.7-2.4L8.2 3.8Z"/></svg>`,
       wrench: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 3.2a5.6 5.6 0 0 0-5.5 7.1L3.6 15.9a2.1 2.1 0 0 0 0 3l1.5 1.5a2.1 2.1 0 0 0 3 0l5.6-5.6a5.6 5.6 0 0 0 7.1-5.5c0-.6-.1-1.2-.3-1.7l-3.3 3.3-2.9-.6-.6-2.9 3.3-3.3c-.5-.2-1.1-.3-1.7-.3ZM6.4 18.6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>`,
+      helmet: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16.5h18v2H3v-2Zm2-1.2c0-3.6 2.6-6.6 6-7.3V6.5h2V8c3.4.7 6 3.7 6 7.3H5Z"/></svg>`,
     };
     return icons[name] || "";
   }
 
   // Rutas de formulario que pertenecen a un menú (para marcarlo como activo).
-  const RUTAS_HIJAS = { reportes: ["reporte"], mantenimientos: ["mantenimiento"] };
+  const RUTAS_HIJAS = { reportes: ["reporte"], mantenimientos: ["mantenimiento"], plan: ["plan-labor"] };
   const navActiva = (route) => state.route === route || (RUTAS_HIJAS[route] || []).includes(state.route);
 
   function mobileNavHtml() {
-    const moreActive = ["clientes", "productos", "cajas", "combustibles", "gastos", "reportes", "reporte", "mantenimientos", "mantenimiento", "contactos", "recordatorios"].includes(state.route);
+    const moreActive = ["clientes", "productos", "cajas", "combustibles", "gastos", "reportes", "reporte", "mantenimientos", "mantenimiento", "plan", "plan-labor", "contactos", "recordatorios"].includes(state.route);
     const items = [
       ["dashboard", "home", "Inicio"],
       ["comprobantes", "docs", "Docs"],
@@ -666,6 +674,7 @@
       ["gastos", "expense", "Gasto externo"],
       ["reportes", "report", "Reportes"],
       ["mantenimientos", "wrench", "Reporte mantenimiento"],
+      ["plan", "helmet", "Plan trabajo"],
       ["recordatorios", "bell", "Avisos"],
     ];
     return items
@@ -689,6 +698,7 @@
       ["gastos", "💸", "Gasto externo"],
       ["reportes", "📋", "Reportes"],
       ["mantenimientos", "🛠️", "Reporte mantenimiento"],
+      ["plan", "⛏️", "Plan trabajo"],
       ["nuevo", "＋", "Nuevo"],
       ["agenda", "📅", "Agenda"],
       ["recordatorios", "⏰", "Avisos"],
@@ -4753,6 +4763,8 @@
     if (state.route === "reporte") bindReporteForm();
     if (state.route === "mantenimientos") bindMantenimientos();
     if (state.route === "mantenimiento") bindMantenimientoForm();
+    if (state.route === "plan") bindPlan();
+    if (state.route === "plan-labor") bindPlanLabor();
 
     if (state.route === "gastos") {
       $("#btn-new-gasto")?.addEventListener("click", () => openGastoModal());
@@ -6405,6 +6417,787 @@
     elegirEquipo({ inicial: true });
   }
 
+  /* ---------- Plan trabajo ---------- */
+  const FILTROS_PLAN_CONV = { fecha_desde: "", fecha_hasta: "", turno: "", guardia: "", labor: "", tarea: "", maestro: "" };
+  const FILTROS_PLAN_EQ = { fecha_desde: "", fecha_hasta: "", turno: "", maquina: "" };
+
+  async function ensureCatalogoPlan() {
+    if (!state.planCatalogo) state.planCatalogo = await API.catalogoPlan();
+    return state.planCatalogo;
+  }
+
+  const turnoPlan = (v) => state.planCatalogo?.turnos?.find((t) => t.valor === v)?.label || v || "—";
+  const numPlan = (n) => Number(n || 0).toLocaleString("es-PE", { maximumFractionDigits: 2 });
+  const valorPlan = (n, sufijo = "") => (n == null || n === "" ? "—" : `${numPlan(n)}${sufijo}`);
+  const opcionesHtml = (items, actual, valor, texto) =>
+    items
+      .map((it) => {
+        const v = valor(it);
+        return `<option value="${escapeHtml(v)}" ${String(actual ?? "") === String(v) ? "selected" : ""}>${escapeHtml(texto(it))}</option>`;
+      })
+      .join("");
+
+  function diaSemana(iso) {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("es-PE", { weekday: "long" });
+  }
+
+  async function viewPlan(params) {
+    const cat = await ensureCatalogoPlan();
+    if (params.tab === "equipos" || params.tab === "convencional") state.planTab = params.tab;
+    const tab = state.planTab;
+    const [conv, eq] = await Promise.all([
+      API.listPlanConvencional(state.filtersPlanConv),
+      API.listPlanEquipos(state.filtersPlanEq),
+    ]);
+    state.planConv = conv;
+    state.planEq = eq;
+    const pestanas = [
+      ["convencional", "Convencional", conv.cantidad],
+      ["equipos", "Equipos", eq.cantidad],
+    ];
+    return `
+      <div class="page-head">
+        <div>
+          <h1>Plan trabajo</h1>
+          <p>Registra las labores de minería convencional y el uso diario de los equipos con las opciones de la hoja DATOS de cada Excel.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-plan-nuevo">${tab === "equipos" ? "＋ Registro de equipo" : "＋ Nueva labor"}</button>
+      </div>
+      <div class="panel plan-tabs-panel">
+        <div class="doc-tabs" role="tablist" aria-label="Bases de datos">
+          ${pestanas
+            .map(
+              ([id, texto, n]) =>
+                `<button type="button" role="tab" class="doc-tab ${tab === id ? "active" : ""}" aria-selected="${tab === id}" data-plan-tab="${id}">${texto}<span class="doc-tab-count">${n}</span></button>`
+            )
+            .join("")}
+        </div>
+      </div>
+      ${tab === "equipos" ? planEquiposHtml(cat, eq) : planConvencionalHtml(cat, conv)}
+      <div class="modal-backdrop" id="modal-plan"></div>`;
+  }
+
+  function planConvencionalHtml(cat, conv) {
+    const f = state.filtersPlanConv;
+    const filas = conv.registros
+      .map((r) => {
+        const perf =
+          r.taladros_perforados != null || r.pies_perforados != null
+            ? `${valorPlan(r.taladros_perforados)} × ${valorPlan(r.longitud_perforacion)}' = <strong>${valorPlan(r.pies_perforados)}</strong> pies`
+            : "—";
+        return `<tr class="doc-row" data-pc-ver="${r.id}" tabindex="0" title="Ver detalle">
+          <td class="nowrap">${fmtDate(r.fecha)}<small class="plan-sub">${escapeHtml(diaSemana(r.fecha))}</small></td>
+          <td class="nowrap">${escapeHtml(turnoPlan(r.turno))}<small class="plan-sub">${escapeHtml(r.guardia)}</small></td>
+          <td><strong>${escapeHtml(r.labor_codigo)}</strong> ${escapeHtml(r.labor)}<small class="plan-sub">Nv ${escapeHtml(r.nivel ?? "—")} · ${escapeHtml(r.seccion || "—")} · ${escapeHtml(r.fase || "—")}</small></td>
+          <td><span class="badge rep-badge">${escapeHtml(r.tarea_codigo)}</span> ${escapeHtml(r.tarea)}</td>
+          <td>${escapeHtml(r.maestro)}</td>
+          <td class="nowrap">${perf}${r.taladros_disparados != null ? `<small class="plan-sub">${r.taladros_disparados} disparados</small>` : ""}</td>
+          <td class="nowrap">${valorPlan(r.avance_ml, " m")}</td>
+          <td class="actions">
+            ${iconBtn(`data-pc-edit="${r.id}"`, "Editar", "edit")}
+            ${iconBtn(`data-pc-dup="${r.id}"`, "Duplicar en una nueva labor", "copy")}
+            ${iconBtn(`data-pc-del="${r.id}"`, "Eliminar", "delete", "btn-danger")}
+          </td>
+        </tr>`;
+      })
+      .join("");
+    return `
+      <div class="toolbar panel plan-filtros">
+        <input id="f-pc-desde" type="date" title="Desde" value="${escapeHtml(f.fecha_desde)}" />
+        <input id="f-pc-hasta" type="date" title="Hasta" value="${escapeHtml(f.fecha_hasta)}" />
+        <select id="f-pc-turno"><option value="">Todos los turnos</option>${opcionesHtml(cat.turnos, f.turno, (t) => t.valor, (t) => t.label)}</select>
+        <select id="f-pc-guardia"><option value="">Todas las guardias</option>${opcionesHtml(cat.guardias, f.guardia, (g) => g.codigo, (g) => g.codigo)}</select>
+        <select id="f-pc-labor"><option value="">Todas las labores</option>${opcionesHtml(cat.labores, f.labor, (l) => l.codigo, (l) => `${l.codigo} · ${l.labor}`)}</select>
+        <select id="f-pc-tarea"><option value="">Todas las tareas</option>${opcionesHtml(cat.tareas, f.tarea, (t) => t.codigo, (t) => `${t.codigo} · ${t.tarea}`)}</select>
+        <select id="f-pc-maestro"><option value="">Todos los maestros</option>${opcionesHtml(cat.maestros, f.maestro, (m) => m, (m) => m)}</select>
+        <button class="btn btn-secondary" id="btn-pc-filtrar">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-pc-limpiar">Limpiar</button>
+      </div>
+      <div class="grid-stats">
+        <div class="stat"><label>Labores registradas</label><strong>${conv.cantidad}</strong></div>
+        <div class="stat"><label>Pies perforados</label><strong>${numPlan(conv.pies_perforados)}</strong></div>
+        <div class="stat"><label>Taladros disparados</label><strong>${conv.taladros_disparados}</strong></div>
+        <div class="stat ok"><label>Avance</label><strong>${numPlan(conv.avance_ml)} m</strong>${Number(conv.toneladas) ? `<span class="stat-meta">${numPlan(conv.toneladas)} TN producidas</span>` : ""}</div>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        ${
+          conv.registros.length
+            ? `<div class="table-wrap"><table class="plan-tabla">
+              <thead><tr><th>Fecha</th><th>Turno</th><th>Labor</th><th>Tarea</th><th>Maestro perforista</th><th>Perforación</th><th>Avance</th><th class="col-actions">Acciones</th></tr></thead>
+              <tbody>${filas}</tbody>
+            </table></div>`
+            : `<div class="empty"><strong>Sin labores</strong>Registra la primera labor con ＋ Nueva labor.</div>`
+        }
+      </div>`;
+  }
+
+  function planEquiposHtml(cat, eq) {
+    const f = state.filtersPlanEq;
+    const filas = eq.registros
+      .map(
+        (r) => `<tr class="doc-row" data-pe-fila="${r.id}" tabindex="0" title="Editar">
+          <td class="nowrap">${fmtDate(r.fecha)}<small class="plan-sub">${escapeHtml(diaSemana(r.fecha))}</small></td>
+          <td>${escapeHtml(turnoPlan(r.turno))}</td>
+          <td><strong>${escapeHtml(r.maquina_codigo)}</strong><small class="plan-sub">${escapeHtml(r.equipo)} · ${escapeHtml([r.marca, r.modelo].filter(Boolean).join(" "))}</small></td>
+          <td class="nowrap">${valorPlan(r.horometro_inicial)}</td>
+          <td class="nowrap">${valorPlan(r.horometro_final)}</td>
+          <td class="nowrap"><strong>${valorPlan(r.horas_trabajadas, " h")}</strong></td>
+          <td class="nowrap">${valorPlan(r.petroleo_gl, " gal")}</td>
+          <td class="actions">
+            ${iconBtn(`data-pe-edit="${r.id}"`, "Editar", "edit")}
+            ${iconBtn(`data-pe-del="${r.id}"`, "Eliminar", "delete", "btn-danger")}
+          </td>
+        </tr>`
+      )
+      .join("");
+    return `
+      <div class="toolbar panel plan-filtros">
+        <input id="f-pe-desde" type="date" title="Desde" value="${escapeHtml(f.fecha_desde)}" />
+        <input id="f-pe-hasta" type="date" title="Hasta" value="${escapeHtml(f.fecha_hasta)}" />
+        <select id="f-pe-turno"><option value="">Todos los turnos</option>${opcionesHtml(cat.turnos, f.turno, (t) => t.valor, (t) => t.label)}</select>
+        <select id="f-pe-maquina"><option value="">Todas las máquinas</option>${opcionesHtml(cat.maquinas, f.maquina, (m) => m.codigo, (m) => `${m.codigo} · ${m.equipo} ${m.marca}`)}</select>
+        <button class="btn btn-secondary" id="btn-pe-filtrar">Filtrar</button>
+        <button class="btn btn-ghost" id="btn-pe-limpiar">Limpiar</button>
+      </div>
+      <div class="grid-stats">
+        <div class="stat"><label>Registros</label><strong>${eq.cantidad}</strong></div>
+        <div class="stat ok"><label>Horas trabajadas</label><strong>${numPlan(eq.horas_trabajadas)} h</strong></div>
+        <div class="stat warn"><label>Petróleo</label><strong>${numPlan(eq.petroleo_gl)} gal</strong></div>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        ${
+          eq.registros.length
+            ? `<div class="table-wrap"><table class="plan-tabla">
+              <thead><tr><th>Fecha</th><th>Turno</th><th>Máquina</th><th>Horómetro inicial</th><th>Horómetro final</th><th>Horas trabajadas</th><th>Petróleo</th><th class="col-actions">Acciones</th></tr></thead>
+              <tbody>${filas}</tbody>
+            </table></div>`
+            : `<div class="empty"><strong>Sin registros de equipos</strong>Registra el horómetro y el petróleo de cada máquina por turno.</div>`
+        }
+      </div>`;
+  }
+
+  async function eliminarPlanLabor(r) {
+    if (!r) return false;
+    if (!confirm(`¿Eliminar la labor ${r.labor_codigo} del ${fmtDate(r.fecha)} (${turnoPlan(r.turno)})?`)) return false;
+    try {
+      await API.deletePlanConvencional(r.id);
+      toast("Labor eliminada");
+      return true;
+    } catch (ex) {
+      toast(ex.message);
+      return false;
+    }
+  }
+
+  async function eliminarPlanEquipo(r) {
+    if (!r) return false;
+    if (!confirm(`¿Eliminar el registro de ${r.maquina_codigo} del ${fmtDate(r.fecha)} (${turnoPlan(r.turno)})?`)) return false;
+    try {
+      await API.deletePlanEquipo(r.id);
+      toast("Registro eliminado");
+      return true;
+    } catch (ex) {
+      toast(ex.message);
+      return false;
+    }
+  }
+
+  function abrirModalPlan(html) {
+    const modal = $("#modal-plan");
+    if (!modal) return null;
+    modal.classList.add("open");
+    modal.innerHTML = html;
+    const cerrar = () => {
+      modal.classList.remove("open");
+      document.removeEventListener("keydown", onKey);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") cerrar();
+    };
+    document.addEventListener("keydown", onKey);
+    modal.onclick = (e) => {
+      if (e.target === modal) cerrar();
+    };
+    $("[data-plan-cerrar]", modal)?.addEventListener("click", cerrar);
+    return { modal, cerrar };
+  }
+
+  function openPlanLaborDetalle(r) {
+    if (!r) return;
+    const cat = state.planCatalogo;
+    const usados = (cat?.insumos || [])
+      .map((g) => ({ titulo: g.titulo, items: g.items.filter((it) => r.insumos?.[it.id] != null) }))
+      .filter((g) => g.items.length);
+    const filasInsumos = usados.length
+      ? usados
+          .map((g) =>
+            g.items
+              .map(
+                (it, i) => `<tr>
+                  ${i === 0 ? `<td rowspan="${g.items.length}" class="plan-grupo">${escapeHtml(g.titulo)}</td>` : ""}
+                  <td>${escapeHtml(it.label)}</td>
+                  <td class="nowrap"><strong>${numPlan(r.insumos[it.id])}</strong></td>
+                </tr>`
+              )
+              .join("")
+          )
+          .join("")
+      : `<tr><td colspan="3">Sin aceros, voladura ni sostenimiento registrados</td></tr>`;
+    const dato = (k, v) => `<div><span class="detalle-k">${k}</span>${v}</div>`;
+    const abierto = abrirModalPlan(`
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="pc-det-titulo">
+        <div class="modal-head">
+          <h2 id="pc-det-titulo">${escapeHtml(r.labor_codigo)} · ${escapeHtml(r.labor)}</h2>
+          <button class="btn btn-ghost btn-sm" type="button" data-plan-cerrar>Cerrar</button>
+        </div>
+        <div class="detalle-acciones">
+          <button class="btn btn-secondary btn-sm" type="button" id="pc-det-editar">Editar</button>
+          <button class="btn btn-secondary btn-sm" type="button" id="pc-det-duplicar">Duplicar</button>
+          <button class="btn btn-danger btn-sm" type="button" id="pc-det-eliminar">Eliminar</button>
+        </div>
+        <div class="detalle-grid mant-det-grid">
+          ${dato("Fecha", `${fmtDate(r.fecha)} · ${escapeHtml(diaSemana(r.fecha))}`)}
+          ${dato("Turno", escapeHtml(turnoPlan(r.turno)))}
+          ${dato("Guardia", escapeHtml(r.guardia))}
+          ${dato("Jefe de guardia", escapeHtml(r.jefe_guardia || "—"))}
+          ${dato("Sección", escapeHtml(r.seccion || "—"))}
+          ${dato("Fase", escapeHtml(r.fase || "—"))}
+          ${dato("Nivel", escapeHtml(r.nivel ?? "—"))}
+          ${dato("Meta", escapeHtml(r.meta || "—"))}
+          ${dato("Unidad", escapeHtml(r.unidad || "—"))}
+          ${dato("Programa del mes", valorPlan(r.programa_m, " m"))}
+          ${dato("Maestro perforista", escapeHtml(r.maestro))}
+          ${dato("Tarea", `${escapeHtml(r.tarea_codigo)} · ${escapeHtml(r.tarea)}`)}
+          ${dato("Material", escapeHtml(r.material || "—"))}
+          ${dato("Tipo de perforación", escapeHtml(r.tipo_perforacion || "—"))}
+          ${dato("Equipo · N° máquina", escapeHtml([r.equipo_perforacion, r.numero_maquina].filter(Boolean).join(" · ") || "—"))}
+          ${dato("N° tal. perforados", valorPlan(r.taladros_perforados))}
+          ${dato("Long. perf.", valorPlan(r.longitud_perforacion, " pies"))}
+          ${dato("Pies perforados", valorPlan(r.pies_perforados))}
+          ${dato("N° tal. disparados", valorPlan(r.taladros_disparados))}
+          ${dato("Avance", valorPlan(r.avance_ml, " m"))}
+          ${dato("TN de óxidos", valorPlan(r.tn_oxidos))}
+          ${dato("TN de sulfuros", valorPlan(r.tn_sulfuros))}
+        </div>
+        <div class="table-wrap"><table class="plan-tabla">
+          <thead><tr><th>Grupo</th><th>Insumo</th><th>Cantidad</th></tr></thead>
+          <tbody>${filasInsumos}</tbody>
+        </table></div>
+      </div>`);
+    if (!abierto) return;
+    const { modal, cerrar } = abierto;
+    $("#pc-det-editar", modal).onclick = () => {
+      cerrar();
+      navigate("plan-labor", `id=${r.id}`);
+    };
+    $("#pc-det-duplicar", modal).onclick = () => {
+      cerrar();
+      navigate("plan-labor", `copiar=${r.id}`);
+    };
+    $("#pc-det-eliminar", modal).onclick = async () => {
+      if (!(await eliminarPlanLabor(r))) return;
+      cerrar();
+      renderApp();
+    };
+  }
+
+  async function openPlanEquipoModal(reg = null) {
+    const cat = state.planCatalogo;
+    if (!cat || !$("#modal-plan")) return;
+    const ultimos = reg ? {} : await API.ultimosHorometros().catch(() => ({}));
+    const inicial = (v) => (v == null ? "" : Number(v));
+    const abierto = abrirModalPlan(`
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pe-titulo">
+        <div class="modal-head">
+          <h2 id="pe-titulo">${reg ? "Editar registro de equipo" : "Nuevo registro de equipo"}</h2>
+          <button class="btn btn-ghost btn-sm" type="button" data-plan-cerrar>Cerrar</button>
+        </div>
+        <form id="form-plan-eq" class="form-grid" novalidate>
+          <div class="field">
+            <label for="pe-fecha">Fecha</label>
+            <input id="pe-fecha" type="date" required value="${escapeHtml(reg?.fecha || localIsoDate())}" />
+          </div>
+          <div class="field">
+            <label for="pe-turno">Turno</label>
+            <select id="pe-turno" required>${opcionesHtml(cat.turnos, reg?.turno || "Dia", (t) => t.valor, (t) => t.label)}</select>
+          </div>
+          <div class="field full">
+            <label for="pe-maquina">Código de máquina</label>
+            <select id="pe-maquina" required>
+              <option value="">Selecciona la máquina…</option>
+              ${opcionesHtml(cat.maquinas, reg?.maquina_codigo, (m) => m.codigo, (m) => `${m.codigo} · ${m.equipo} ${m.marca} ${m.modelo}`)}
+            </select>
+            <small class="field-hint" id="pe-maquina-info"></small>
+          </div>
+          <div class="field">
+            <label for="pe-inicial">Horómetro inicial</label>
+            <input id="pe-inicial" type="number" min="0" step="0.1" inputmode="decimal" value="${inicial(reg?.horometro_inicial)}" />
+            <small class="field-hint" id="pe-inicial-hint"></small>
+          </div>
+          <div class="field">
+            <label for="pe-final">Horómetro final</label>
+            <input id="pe-final" type="number" min="0" step="0.1" inputmode="decimal" value="${inicial(reg?.horometro_final)}" />
+          </div>
+          <div class="field">
+            <label for="pe-horas">Horas trabajadas</label>
+            <input id="pe-horas" class="plan-calc" readonly tabindex="-1" />
+            <small class="field-hint" id="pe-horas-hint"></small>
+          </div>
+          <div class="field">
+            <label for="pe-petroleo">Petróleo (gal)</label>
+            <input id="pe-petroleo" type="number" min="0" step="0.01" inputmode="decimal" value="${inicial(reg?.petroleo_gl)}" />
+          </div>
+          <div class="field full">
+            <button class="btn btn-primary" type="submit">${reg ? "Guardar" : "Registrar"}</button>
+          </div>
+        </form>
+      </div>`);
+    if (!abierto) return;
+    const { modal, cerrar } = abierto;
+    const form = $("#form-plan-eq", modal);
+    const selMaq = $("#pe-maquina", form);
+    const inpIni = $("#pe-inicial", form);
+    const inpFin = $("#pe-final", form);
+    let iniAuto = false;
+
+    function calcular() {
+      const hint = $("#pe-horas-hint", form);
+      hint.className = "field-hint";
+      hint.textContent = "";
+      if (inpIni.value === "" || inpFin.value === "") {
+        $("#pe-horas", form).value = "";
+        return;
+      }
+      const horas = Math.round((Number(inpFin.value) - Number(inpIni.value)) * 100) / 100;
+      $("#pe-horas", form).value = horas >= 0 ? `${numPlan(horas)} h` : "";
+      if (horas < 0) {
+        hint.className = "field-hint err";
+        hint.textContent = "El horómetro final es menor que el inicial";
+      }
+    }
+
+    /* Como en el Excel: el inicial de un turno es el final del turno anterior de la misma máquina. */
+    function elegirMaquina() {
+      const m = cat.maquinas.find((x) => x.codigo === selMaq.value);
+      $("#pe-maquina-info", form).textContent = m ? `${m.equipo} · ${m.marca} · ${m.modelo}` : "";
+      if (!reg) {
+        const hint = $("#pe-inicial-hint", form);
+        const ultimo = m ? ultimos[m.codigo] : undefined;
+        if (ultimo != null && (inpIni.value === "" || iniAuto)) {
+          inpIni.value = ultimo;
+          iniAuto = true;
+          hint.textContent = "Último horómetro final de esta máquina";
+        } else if (iniAuto) {
+          inpIni.value = "";
+          iniAuto = false;
+          hint.textContent = "";
+        }
+      }
+      calcular();
+    }
+
+    selMaq.addEventListener("change", elegirMaquina);
+    inpIni.addEventListener("input", () => {
+      iniAuto = false;
+      $("#pe-inicial-hint", form).textContent = "";
+      calcular();
+    });
+    inpFin.addEventListener("input", calcular);
+    elegirMaquina();
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const fecha = $("#pe-fecha", form).value;
+      if (!fecha) {
+        toast("Indica la fecha");
+        return $("#pe-fecha", form).focus();
+      }
+      if (!selMaq.value) {
+        toast("Elige la máquina");
+        return selMaq.focus();
+      }
+      const leer = (el) => (el.value === "" ? null : Number(el.value));
+      const body = {
+        fecha,
+        turno: $("#pe-turno", form).value,
+        maquina_codigo: selMaq.value,
+        horometro_inicial: leer(inpIni),
+        horometro_final: leer(inpFin),
+        petroleo_gl: leer($("#pe-petroleo", form)),
+      };
+      if ([body.horometro_inicial, body.horometro_final, body.petroleo_gl].some((n) => n != null && !(n >= 0))) {
+        toast("Los horómetros y el petróleo no pueden ser negativos");
+        return;
+      }
+      if (body.horometro_inicial != null && body.horometro_final != null && body.horometro_final < body.horometro_inicial) {
+        toast("El horómetro final no puede ser menor que el inicial");
+        return inpFin.focus();
+      }
+      const boton = $('button[type="submit"]', form);
+      boton.disabled = true;
+      try {
+        await (reg ? API.updatePlanEquipo(reg.id, body) : API.createPlanEquipo(body));
+        toast(reg ? "Registro actualizado" : `Registro de ${body.maquina_codigo} guardado`);
+        cerrar();
+        renderApp();
+      } catch (ex) {
+        toast(ex.message);
+        boton.disabled = false;
+      }
+    };
+  }
+
+  function bindPlan() {
+    $$("[data-plan-tab]").forEach((b) =>
+      b.addEventListener("click", () => {
+        if (b.dataset.planTab !== state.planTab) navigate("plan", `tab=${b.dataset.planTab}`);
+      })
+    );
+    $("#btn-plan-nuevo")?.addEventListener("click", () => {
+      if (state.planTab === "equipos") openPlanEquipoModal();
+      else navigate("plan-labor");
+    });
+    const filaClick = (clave, abrir) =>
+      $$("tr[data-" + clave.replace(/[A-Z]/g, (l) => `-${l.toLowerCase()}`) + "]").forEach((row) => {
+        const id = row.dataset[clave];
+        row.addEventListener("click", (e) => {
+          if (!e.target.closest("button")) abrir(id);
+        });
+        row.addEventListener("keydown", (e) => {
+          if (e.target === row && e.key === "Enter") abrir(id);
+        });
+      });
+
+    if (state.planTab === "equipos") {
+      const buscarEq = (id) => state.planEq?.registros.find((r) => r.id === Number(id));
+      $("#btn-pe-filtrar")?.addEventListener("click", () => {
+        state.filtersPlanEq = {
+          fecha_desde: $("#f-pe-desde")?.value || "",
+          fecha_hasta: $("#f-pe-hasta")?.value || "",
+          turno: $("#f-pe-turno")?.value || "",
+          maquina: $("#f-pe-maquina")?.value || "",
+        };
+        renderApp();
+      });
+      $("#btn-pe-limpiar")?.addEventListener("click", () => {
+        state.filtersPlanEq = { ...FILTROS_PLAN_EQ };
+        renderApp();
+      });
+      filaClick("peFila", (id) => openPlanEquipoModal(buscarEq(id)));
+      $$("[data-pe-edit]").forEach((b) => b.addEventListener("click", () => openPlanEquipoModal(buscarEq(b.dataset.peEdit))));
+      $$("[data-pe-del]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (await eliminarPlanEquipo(buscarEq(b.dataset.peDel))) renderApp();
+        })
+      );
+      return;
+    }
+
+    const buscar = (id) => state.planConv?.registros.find((r) => r.id === Number(id));
+    $("#btn-pc-filtrar")?.addEventListener("click", () => {
+      state.filtersPlanConv = {
+        fecha_desde: $("#f-pc-desde")?.value || "",
+        fecha_hasta: $("#f-pc-hasta")?.value || "",
+        turno: $("#f-pc-turno")?.value || "",
+        guardia: $("#f-pc-guardia")?.value || "",
+        labor: $("#f-pc-labor")?.value || "",
+        tarea: $("#f-pc-tarea")?.value || "",
+        maestro: $("#f-pc-maestro")?.value || "",
+      };
+      renderApp();
+    });
+    $("#btn-pc-limpiar")?.addEventListener("click", () => {
+      state.filtersPlanConv = { ...FILTROS_PLAN_CONV };
+      renderApp();
+    });
+    filaClick("pcVer", (id) => openPlanLaborDetalle(buscar(id)));
+    $$("[data-pc-edit]").forEach((b) => b.addEventListener("click", () => navigate("plan-labor", `id=${b.dataset.pcEdit}`)));
+    $$("[data-pc-dup]").forEach((b) => b.addEventListener("click", () => navigate("plan-labor", `copiar=${b.dataset.pcDup}`)));
+    $$("[data-pc-del]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        if (await eliminarPlanLabor(buscar(b.dataset.pcDel))) renderApp();
+      })
+    );
+  }
+
+  async function viewPlanLabor(params) {
+    const cat = await ensureCatalogoPlan();
+    let reg = null;
+    let base = {};
+    if (params.id) {
+      reg = await API.getPlanConvencional(params.id);
+      base = reg;
+    } else if (params.copiar) {
+      // Duplicar: la nueva labor parte de los datos de otra fila, como al copiar una fila en el Excel.
+      base = await API.getPlanConvencional(params.copiar).catch(() => ({}));
+    }
+    state.planEdit = { reg };
+    const v = base;
+    const num = (n) => (n == null ? "" : Number(n));
+    const volver = `<button class="btn btn-ghost" type="button" data-plan-volver>Volver</button>`;
+    const guardarTxt = reg ? "Guardar cambios" : "Guardar labor";
+    const insumos = cat.insumos
+      .map(
+        (g, gi) => `
+        <section class="panel rep-section">
+          <h3>${escapeHtml(g.titulo)} <span class="plan-cuenta" data-plan-cuenta="${gi}"></span></h3>
+          <div class="plan-insumos" data-plan-grupo="${gi}">
+            ${g.items
+              .map(
+                (it) => `<div class="field">
+                  <label for="pl-ins-${it.id}">${escapeHtml(it.label)}</label>
+                  <input id="pl-ins-${it.id}" type="number" min="0" step="0.01" inputmode="decimal" data-insumo="${it.id}" value="${num(v.insumos?.[it.id])}" />
+                </div>`
+              )
+              .join("")}
+          </div>
+        </section>`
+      )
+      .join("");
+    return `
+      <div class="page-head">
+        <div>
+          <h1>${reg ? "Editar labor" : "Nueva labor"}</h1>
+          <p>Se llena como una fila de la BASE DE DATOS CONVENCIONAL: al elegir los códigos se completan la labor, la tarea y el tipo de perforación.</p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          ${volver}
+          <button class="btn btn-primary" type="submit" form="form-plan-labor">${guardarTxt}</button>
+        </div>
+      </div>
+      <form id="form-plan-labor" novalidate>
+        <section class="panel rep-section">
+          <h3>Fecha y grupo de trabajo</h3>
+          <div class="form-grid rep-grid">
+            <div class="field">
+              <label for="pl-fecha">Fecha</label>
+              <input id="pl-fecha" type="date" required value="${escapeHtml(v.fecha || localIsoDate())}" />
+              <small class="field-hint" id="pl-dia"></small>
+            </div>
+            <div class="field">
+              <label for="pl-turno">Turno</label>
+              <select id="pl-turno" required><option value="">Selecciona…</option>${opcionesHtml(cat.turnos, v.turno, (t) => t.valor, (t) => t.label)}</select>
+            </div>
+            <div class="field">
+              <label for="pl-guardia">Guardia</label>
+              <select id="pl-guardia" required><option value="">Selecciona…</option>${opcionesHtml(cat.guardias, v.guardia, (g) => g.codigo, (g) => g.codigo)}</select>
+              <small class="field-hint" id="pl-jefe"></small>
+            </div>
+          </div>
+        </section>
+        <section class="panel rep-section">
+          <h3>Ubicación</h3>
+          <div class="field">
+            <label for="pl-labor">Código de labor</label>
+            <select id="pl-labor" required>
+              <option value="">Selecciona la labor…</option>
+              ${opcionesHtml(cat.labores, v.labor_codigo, (l) => l.codigo, (l) => `${l.codigo} · ${l.labor}`)}
+            </select>
+          </div>
+          <div class="mant-placa plan-info" id="pl-labor-info"></div>
+        </section>
+        <section class="panel rep-section">
+          <h3>Maestro y tarea</h3>
+          <div class="form-grid">
+            <div class="field">
+              <label for="pl-maestro">Maestro perforista</label>
+              <select id="pl-maestro" required><option value="">Selecciona…</option>${opcionesHtml(cat.maestros, v.maestro, (m) => m, (m) => m)}</select>
+            </div>
+            <div class="field">
+              <label for="pl-tarea">Tarea</label>
+              <select id="pl-tarea" required><option value="">Selecciona…</option>${opcionesHtml(cat.tareas, v.tarea_codigo, (t) => t.codigo, (t) => `${t.codigo} · ${t.tarea}`)}</select>
+            </div>
+          </div>
+        </section>
+        <section class="panel rep-section">
+          <h3>Perforación</h3>
+          <div class="form-grid plan-grid-4">
+            <div class="field">
+              <label for="pl-material">Cód. mat</label>
+              <select id="pl-material"><option value="">—</option>${opcionesHtml(cat.materiales, v.material_codigo, (m) => m.codigo, (m) => `${m.codigo} · ${m.material}`)}</select>
+            </div>
+            <div class="field">
+              <label for="pl-tipo">Tipo</label>
+              <select id="pl-tipo"><option value="">—</option>${opcionesHtml(cat.tipos_perforacion, v.tipo_codigo, (t) => t.codigo, (t) => `${t.codigo} · ${t.tipo}`)}</select>
+            </div>
+            <div class="field">
+              <label for="pl-equipo">Equipo</label>
+              <input id="pl-equipo" list="dl-plan-equipos" maxlength="60" value="${escapeHtml(v.equipo_perforacion || "")}" placeholder="Ej. RNP" style="text-transform:uppercase" />
+            </div>
+            <div class="field">
+              <label for="pl-maquina">N° máquina</label>
+              <input id="pl-maquina" maxlength="20" value="${escapeHtml(v.numero_maquina || "")}" placeholder="Ej. 05" />
+            </div>
+            <div class="field">
+              <label for="pl-tal-perf">N° tal. perf.</label>
+              <input id="pl-tal-perf" type="number" min="0" step="1" inputmode="numeric" value="${num(v.taladros_perforados)}" />
+            </div>
+            <div class="field">
+              <label for="pl-long">Long. perf. (pies)</label>
+              <input id="pl-long" type="number" min="0" step="0.1" inputmode="decimal" value="${num(v.longitud_perforacion)}" />
+            </div>
+            <div class="field">
+              <label for="pl-pies">Pies perforados</label>
+              <input id="pl-pies" class="plan-calc" readonly tabindex="-1" />
+            </div>
+            <div class="field">
+              <label for="pl-tal-disp">N° tal. disp.</label>
+              <input id="pl-tal-disp" type="number" min="0" step="1" inputmode="numeric" value="${num(v.taladros_disparados)}" />
+            </div>
+          </div>
+          <datalist id="dl-plan-equipos">${cat.equipos_perforacion.map((e) => `<option value="${escapeHtml(e)}"></option>`).join("")}</datalist>
+        </section>
+        ${insumos}
+        <section class="panel rep-section">
+          <h3>Producción</h3>
+          <div class="form-grid plan-grid-4">
+            <div class="field">
+              <label for="pl-tn-ox">TN de óxidos</label>
+              <input id="pl-tn-ox" type="number" min="0" step="0.01" inputmode="decimal" value="${num(v.tn_oxidos)}" />
+            </div>
+            <div class="field">
+              <label for="pl-tn-sul">TN de sulfuros</label>
+              <input id="pl-tn-sul" type="number" min="0" step="0.01" inputmode="decimal" value="${num(v.tn_sulfuros)}" />
+            </div>
+            <div class="field">
+              <label for="pl-avance">Avances en ML</label>
+              <input id="pl-avance" type="number" min="0" step="0.01" inputmode="decimal" value="${num(v.avance_ml)}" />
+            </div>
+          </div>
+        </section>
+        <div class="mant-pie">
+          ${volver}
+          <button class="btn btn-primary" type="submit">${guardarTxt}</button>
+        </div>
+      </form>`;
+  }
+
+  function bindPlanLabor() {
+    const form = $("#form-plan-labor");
+    const cat = state.planCatalogo;
+    if (!form || !cat || !state.planEdit) return;
+    const { reg } = state.planEdit;
+    const el = (id) => $(`#${id}`, form);
+
+    const pintarDia = () => {
+      el("pl-dia").textContent = diaSemana(el("pl-fecha").value);
+    };
+    const pintarJefe = () => {
+      const g = cat.guardias.find((x) => x.codigo === el("pl-guardia").value);
+      el("pl-jefe").textContent = g ? `Jefe de guardia: ${g.jefe}` : "";
+    };
+    const pintarLabor = () => {
+      const l = cat.labores.find((x) => x.codigo === el("pl-labor").value);
+      const info = el("pl-labor-info");
+      if (!l) {
+        info.innerHTML = `<p class="rep-nota" style="margin:0">La labor, sección, fase, nivel, meta y unidad salen del programa del mes de la hoja DATOS.</p>`;
+        return;
+      }
+      info.innerHTML = [
+        ["Labor", l.labor],
+        ["Sección", l.seccion],
+        ["Fase", l.fase],
+        ["Nivel", l.nivel],
+        ["Meta", l.meta],
+        ["Unidad", l.unidad],
+        ["Programa del mes", l.programa_m != null ? `${numPlan(l.programa_m)} m` : "—"],
+      ]
+        .map(([k, val]) => `<div><span>${k}</span><strong>${escapeHtml(val ?? "—")}</strong></div>`)
+        .join("");
+    };
+    const pintarPies = () => {
+      const tal = el("pl-tal-perf").value;
+      const largo = el("pl-long").value;
+      el("pl-pies").value = tal !== "" && largo !== "" ? numPlan(Number(tal) * Number(largo)) : "";
+    };
+    const pintarCuentas = () => {
+      cat.insumos.forEach((g, gi) => {
+        const n = $$(`[data-plan-grupo="${gi}"] [data-insumo]`, form).filter((i) => Number(i.value) > 0).length;
+        $(`[data-plan-cuenta="${gi}"]`, form).textContent = n ? `· ${n} con cantidad` : "";
+      });
+    };
+
+    el("pl-fecha").addEventListener("input", pintarDia);
+    el("pl-guardia").addEventListener("change", pintarJefe);
+    el("pl-labor").addEventListener("change", pintarLabor);
+    el("pl-tal-perf").addEventListener("input", pintarPies);
+    el("pl-long").addEventListener("input", pintarPies);
+    form.addEventListener("input", (e) => {
+      if (e.target.matches("[data-insumo]")) pintarCuentas();
+    });
+    $$("[data-plan-volver]").forEach((b) => b.addEventListener("click", () => navigate("plan", "tab=convencional")));
+    pintarDia();
+    pintarJefe();
+    pintarLabor();
+    pintarPies();
+    pintarCuentas();
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const requeridos = [
+        ["pl-fecha", "Indica la fecha"],
+        ["pl-turno", "Elige el turno"],
+        ["pl-guardia", "Elige la guardia"],
+        ["pl-labor", "Elige el código de labor"],
+        ["pl-maestro", "Elige el maestro perforista"],
+        ["pl-tarea", "Elige la tarea"],
+      ];
+      const falta = requeridos.find(([id]) => !el(id).value);
+      if (falta) {
+        toast(falta[1]);
+        return el(falta[0]).focus();
+      }
+      const numeros = [...$$('input[type="number"]', form)];
+      const malo = numeros.find((i) => i.value !== "" && !(Number(i.value) >= 0));
+      if (malo) {
+        toast("Las cantidades no pueden ser negativas");
+        return malo.focus();
+      }
+      const entero = ["pl-tal-perf", "pl-tal-disp"].map(el).find((i) => i.value !== "" && !Number.isInteger(Number(i.value)));
+      if (entero) {
+        toast("El número de taladros debe ser entero");
+        return entero.focus();
+      }
+      const leer = (id) => (el(id).value === "" ? null : Number(el(id).value));
+      const texto = (id) => el(id).value.trim() || null;
+      const insumos = {};
+      $$("[data-insumo]", form).forEach((i) => {
+        if (i.value !== "" && Number(i.value) > 0) insumos[i.dataset.insumo] = Number(i.value);
+      });
+      const body = {
+        fecha: el("pl-fecha").value,
+        turno: el("pl-turno").value,
+        guardia: el("pl-guardia").value,
+        labor_codigo: el("pl-labor").value,
+        maestro: el("pl-maestro").value,
+        tarea_codigo: el("pl-tarea").value,
+        material_codigo: el("pl-material").value || null,
+        tipo_codigo: el("pl-tipo").value || null,
+        equipo_perforacion: texto("pl-equipo"),
+        numero_maquina: texto("pl-maquina"),
+        taladros_perforados: leer("pl-tal-perf"),
+        longitud_perforacion: leer("pl-long"),
+        taladros_disparados: leer("pl-tal-disp"),
+        insumos,
+        tn_oxidos: leer("pl-tn-ox"),
+        tn_sulfuros: leer("pl-tn-sul"),
+        avance_ml: leer("pl-avance"),
+      };
+      const botones = $$('#form-plan-labor button[type="submit"], button[type="submit"][form="form-plan-labor"]');
+      botones.forEach((b) => (b.disabled = true));
+      try {
+        const saved = reg ? await API.updatePlanConvencional(reg.id, body) : await API.createPlanConvencional(body);
+        toast(reg ? "Labor actualizada" : `Labor ${saved.labor_codigo} del ${fmtDate(saved.fecha)} guardada`);
+        navigate("plan", "tab=convencional");
+      } catch (ex) {
+        toast(ex.message);
+        botones.forEach((b) => (b.disabled = false));
+      }
+    });
+  }
+
   /* ---------- Render ---------- */
   let renderSeq = 0;
   async function renderApp() {
@@ -6431,6 +7224,8 @@
       else if (state.route === "reporte") html = await viewReporteForm(params);
       else if (state.route === "mantenimientos") html = await viewMantenimientos();
       else if (state.route === "mantenimiento") html = await viewMantenimientoForm(params);
+      else if (state.route === "plan") html = await viewPlan(params);
+      else if (state.route === "plan-labor") html = await viewPlanLabor(params);
       else if (state.route === "nuevo") {
         const editId = params.id ? Number(params.id) : null;
         const [clientes, productos, doc] = await Promise.all([

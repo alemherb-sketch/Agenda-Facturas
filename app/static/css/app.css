@@ -918,6 +918,24 @@ tr.caja-row:hover td { background: rgba(15, 61, 46, 0.08); }
   color: var(--brand); text-decoration: underline; cursor: pointer;
 }
 .mant-det-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Plan trabajo */
+.plan-tabs-panel { padding: 0; overflow: hidden; margin-bottom: 1rem; }
+.toolbar.plan-filtros { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.plan-sub { display: block; margin-top: .1rem; font-size: .76rem; font-weight: 500; color: var(--muted); }
+.plan-tabla td { vertical-align: middle; }
+.plan-tabla .nowrap { white-space: nowrap; }
+.plan-tabla .plan-grupo { vertical-align: top; font-weight: 700; color: var(--brand); }
+.form-grid.plan-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.plan-insumos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .6rem .7rem; }
+.plan-insumos .field label { font-size: .72rem; }
+.plan-insumos .field input { padding: .55rem .65rem; }
+.field input.plan-calc { background: #f7faf7; color: var(--brand); font-weight: 700; }
+.plan-cuenta { font-family: var(--font-body); font-size: .78rem; font-weight: 600; color: var(--muted); }
+@media (max-width: 720px) {
+  .form-grid.plan-grid-4, .plan-insumos, .toolbar.plan-filtros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .toolbar.plan-filtros select { padding-inline: .6rem; }
+}
 @media (max-width: 720px) {
   .mant-det-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* En el celular: sin la columna Ítem para que la cantidad se vea sin desplazar la tabla */

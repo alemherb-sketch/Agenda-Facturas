@@ -667,6 +667,109 @@ class MantenimientoOut(BaseModel):
     actualizado_en: datetime | None = None
 
 
+_CANTIDAD_MAX = Decimal("9999999.99")
+
+
+class PlanConvencionalIn(BaseModel):
+    fecha: date
+    turno: str = Field(min_length=1, max_length=10)
+    guardia: str = Field(min_length=1, max_length=10)
+    labor_codigo: str = Field(min_length=1, max_length=20)
+    maestro: str = Field(min_length=1, max_length=150)
+    tarea_codigo: str = Field(min_length=1, max_length=10)
+    material_codigo: str | None = Field(default=None, max_length=2)
+    tipo_codigo: str | None = Field(default=None, max_length=4)
+    equipo_perforacion: str | None = Field(default=None, max_length=60)
+    numero_maquina: str | None = Field(default=None, max_length=20)
+    taladros_perforados: int | None = Field(default=None, ge=0, le=100_000)
+    longitud_perforacion: Decimal | None = Field(default=None, ge=0, le=Decimal("10000"))
+    taladros_disparados: int | None = Field(default=None, ge=0, le=100_000)
+    insumos: dict[str, Decimal | None] = Field(default_factory=dict)
+    tn_oxidos: Decimal | None = Field(default=None, ge=0, le=_CANTIDAD_MAX)
+    tn_sulfuros: Decimal | None = Field(default=None, ge=0, le=_CANTIDAD_MAX)
+    avance_ml: Decimal | None = Field(default=None, ge=0, le=_CANTIDAD_MAX)
+
+
+class PlanConvencionalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    fecha: date
+    turno: str
+    guardia: str
+    jefe_guardia: str | None = None
+    labor_codigo: str
+    labor: str
+    fase: str | None = None
+    unidad: str | None = None
+    nivel: int | None = None
+    meta: str | None = None
+    seccion: str | None = None
+    programa_m: Decimal | None = None
+    maestro: str
+    tarea_codigo: str
+    tarea: str
+    material_codigo: str | None = None
+    material: str | None = None
+    tipo_codigo: str | None = None
+    tipo_perforacion: str | None = None
+    equipo_perforacion: str | None = None
+    numero_maquina: str | None = None
+    taladros_perforados: int | None = None
+    longitud_perforacion: Decimal | None = None
+    pies_perforados: Decimal | None = None
+    taladros_disparados: int | None = None
+    insumos: dict[str, Decimal] = {}
+    tn_oxidos: Decimal | None = None
+    tn_sulfuros: Decimal | None = None
+    avance_ml: Decimal | None = None
+    creado_en: datetime
+    actualizado_en: datetime | None = None
+
+
+class PlanConvencionalListaOut(BaseModel):
+    registros: list[PlanConvencionalOut] = []
+    cantidad: int = 0
+    pies_perforados: Decimal = Decimal("0")
+    taladros_disparados: int = 0
+    avance_ml: Decimal = Decimal("0")
+    toneladas: Decimal = Decimal("0")
+
+
+class PlanEquipoIn(BaseModel):
+    fecha: date
+    turno: str = Field(min_length=1, max_length=10)
+    maquina_codigo: str = Field(min_length=1, max_length=20)
+    horometro_inicial: Decimal | None = Field(default=None, ge=0, le=_CANTIDAD_MAX)
+    horometro_final: Decimal | None = Field(default=None, ge=0, le=_CANTIDAD_MAX)
+    petroleo_gl: Decimal | None = Field(default=None, ge=0, le=_CANTIDAD_MAX)
+
+
+class PlanEquipoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    fecha: date
+    turno: str
+    maquina_codigo: str
+    equipo: str
+    marca: str | None = None
+    modelo: str | None = None
+    horometro_inicial: Decimal | None = None
+    horometro_final: Decimal | None = None
+    horas_trabajadas: Decimal | None = None
+    petroleo_gl: Decimal | None = None
+    creado_en: datetime
+    actualizado_en: datetime | None = None
+
+
+class PlanEquipoListaOut(BaseModel):
+    registros: list[PlanEquipoOut] = []
+    cantidad: int = 0
+    horas_trabajadas: Decimal = Decimal("0")
+    petroleo_gl: Decimal = Decimal("0")
+
+
 class ReporteIn(BaseModel):
     formato: str = Field(min_length=1, max_length=20)
     numero: int | None = Field(default=None, ge=1, le=999_999_999)

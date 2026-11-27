@@ -24,6 +24,7 @@ from app.routers import (
     dashboard,
     mantenimientos,
     notificaciones,
+    plan_trabajo,
     productos,
     reportes,
 )
@@ -85,6 +86,7 @@ app.include_router(gastos.router)
 app.include_router(contactos.router)
 app.include_router(reportes.router)
 app.include_router(mantenimientos.router)
+app.include_router(plan_trabajo.router)
 app.include_router(adjuntos.router)
 app.include_router(cron.router)
 

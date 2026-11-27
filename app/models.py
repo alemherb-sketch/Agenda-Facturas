@@ -456,6 +456,76 @@ class MantenimientoRepuesto(Base):
     mantenimiento: Mapped[Mantenimiento] = relationship(back_populates="repuestos")
 
 
+class PlanConvencional(Base):
+    """Labor diaria de minería convencional: una fila de la "BASE DE DATOS CONVENCIONAL".
+
+    Guarda una copia de lo que el Excel trae de la hoja DATOS (labor, tarea, jefe de guardia...)
+    para que el registro no cambie si esas listas cambian. Ver app/services/plan_trabajo_datos.py.
+    """
+
+    __tablename__ = "plan_convencional"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    turno: Mapped[str] = mapped_column(String(10), nullable=False)
+    guardia: Mapped[str] = mapped_column(String(10), nullable=False)
+    jefe_guardia: Mapped[str | None] = mapped_column(String(150))
+    labor_codigo: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    labor: Mapped[str] = mapped_column(String(150), nullable=False)
+    fase: Mapped[str | None] = mapped_column(String(60))
+    unidad: Mapped[str | None] = mapped_column(String(60))
+    nivel: Mapped[int | None] = mapped_column(Integer)
+    meta: Mapped[str | None] = mapped_column(String(60))
+    seccion: Mapped[str | None] = mapped_column(String(30))
+    programa_m: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    maestro: Mapped[str] = mapped_column(String(150), nullable=False)
+    tarea_codigo: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    tarea: Mapped[str] = mapped_column(String(150), nullable=False)
+    material_codigo: Mapped[str | None] = mapped_column(String(2))
+    material: Mapped[str | None] = mapped_column(String(20))
+    tipo_codigo: Mapped[str | None] = mapped_column(String(4))
+    tipo_perforacion: Mapped[str | None] = mapped_column(String(40))
+    equipo_perforacion: Mapped[str | None] = mapped_column(String(60))
+    numero_maquina: Mapped[str | None] = mapped_column(String(20))
+    taladros_perforados: Mapped[int | None] = mapped_column(Integer)
+    longitud_perforacion: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    pies_perforados: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    taladros_disparados: Mapped[int | None] = mapped_column(Integer)
+    # Cantidades de aceros, voladura y sostenimiento: {"emulnor_3000": 18, "anfo": 11, ...}
+    insumos: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    tn_oxidos: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    tn_sulfuros: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    avance_ml: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+class PlanEquipo(Base):
+    """Uso diario de una máquina: una fila de la "BASE DE DATOS DE EQUIPOS"."""
+
+    __tablename__ = "plan_equipos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    turno: Mapped[str] = mapped_column(String(10), nullable=False)
+    maquina_codigo: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    equipo: Mapped[str] = mapped_column(String(80), nullable=False)
+    marca: Mapped[str | None] = mapped_column(String(60))
+    modelo: Mapped[str | None] = mapped_column(String(60))
+    horometro_inicial: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    horometro_final: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    horas_trabajadas: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    petroleo_gl: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    creado_en: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
 class PanelEstado(Base):
     """Lo que el panel de ERPGEST (el proveedor) le ordeno a este sistema: una sola fila, id=1. Ver panel_erpgest.py."""
 

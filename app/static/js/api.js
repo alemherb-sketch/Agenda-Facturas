@@ -431,6 +431,47 @@ const API = {
   deleteMantenimiento(id) {
     return this.request(`/api/mantenimientos/${id}`, { method: "DELETE" });
   },
+  catalogoPlan() {
+    return this.request("/api/plan-trabajo/catalogo");
+  },
+  listPlanConvencional(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/plan-trabajo/convencional${qs ? `?${qs}` : ""}`);
+  },
+  getPlanConvencional(id) {
+    return this.request(`/api/plan-trabajo/convencional/${id}`);
+  },
+  createPlanConvencional(body) {
+    return this.request("/api/plan-trabajo/convencional", { method: "POST", body: JSON.stringify(body) });
+  },
+  updatePlanConvencional(id, body) {
+    return this.request(`/api/plan-trabajo/convencional/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  deletePlanConvencional(id) {
+    return this.request(`/api/plan-trabajo/convencional/${id}`, { method: "DELETE" });
+  },
+  listPlanEquipos(params = {}) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = new URLSearchParams(cleaned).toString();
+    return this.request(`/api/plan-trabajo/equipos${qs ? `?${qs}` : ""}`);
+  },
+  ultimosHorometros() {
+    return this.request("/api/plan-trabajo/equipos/ultimos");
+  },
+  createPlanEquipo(body) {
+    return this.request("/api/plan-trabajo/equipos", { method: "POST", body: JSON.stringify(body) });
+  },
+  updatePlanEquipo(id, body) {
+    return this.request(`/api/plan-trabajo/equipos/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  },
+  deletePlanEquipo(id) {
+    return this.request(`/api/plan-trabajo/equipos/${id}`, { method: "DELETE" });
+  },
   formatosReportes() {
     return this.request("/api/reportes/formatos");
   },
