@@ -884,7 +884,7 @@ tr.caja-row:hover td { background: rgba(15, 61, 46, 0.08); }
 .mant-serie { display: block; margin-top: .1rem; font-size: .76rem; font-weight: 600; color: var(--muted); }
 .mant-sub { display: block; margin-top: .1rem; font-size: .76rem; font-weight: 500; color: var(--muted); }
 .mant-lista td { vertical-align: middle; }
-.mant-lista .nowrap, .mant-tabla .nowrap, .mant-det-tabla .nowrap { white-space: nowrap; }
+.mant-lista .nowrap, .mant-det-tabla .nowrap { white-space: nowrap; }
 .mant-placa {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; margin-top: .8rem;
 }
@@ -896,16 +896,7 @@ tr.caja-row:hover td { background: rgba(15, 61, 46, 0.08); }
 .mant-rep-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .5rem; }
 .mant-rep-head h3 { margin: 0; display: flex; align-items: center; gap: .4rem; }
 .mant-rep-head h3 small { color: var(--muted); font-weight: 600; font-size: .8rem; }
-.mant-tabla td { font-size: .8rem; }
-.mant-tabla .mant-desc { min-width: 220px; }
-.mant-tabla input[type=number] { width: 5.2rem; text-align: right; border-color: var(--line); background: #fff; }
-.mant-tabla tr.mant-on td { background: #f3faf6; }
-.mant-tabla tr.mant-off td { color: var(--muted); }
-.mant-tabla tr.mant-off input[type=number] { opacity: .55; }
-.mant-tabla .mant-x-cell { width: 3.6rem; text-align: center; }
-.mant-x { display: inline-block; min-width: 1.6rem; padding: .1rem .3rem; border-radius: 6px; font-weight: 800; text-align: center; }
-.mant-tabla .mant-frec { white-space: nowrap; color: var(--muted); }
-.mant-conteo { margin: .45rem 0 0; text-align: right; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.mant-conteo { margin: 0; font-size: .8rem; font-weight: 700; color: var(--muted); }
 .mant-subtitulo { margin: 1rem 0 .5rem; font-size: .9rem; }
 .mant-extra {
   display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 2.2fr) 6rem auto;
@@ -922,6 +913,163 @@ tr.caja-row:hover td { background: rgba(15, 61, 46, 0.08); }
   color: var(--brand); text-decoration: underline; cursor: pointer;
 }
 .mant-det-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Hoja de mantenimiento: tabla REPUESTOS × FRECUENCIA DE MANTENIMIENTO como en los PDF (colores tomados de las hojas).
+   Todo relleno lleva al menos 2 clases: así le gana al global `tr:hover td` (0,1,2); el reset `.hoja th, .hoja td`
+   (0,1,1) le gana a los `th`/`td` globales. */
+.hoja, .hoja-clave { --hx-c: #d9d9d9; --hx-suave: #f2f2f2; }            /* PM desconocido: gris */
+.hoja-pm1 { --hx-c: #a9d08e; --hx-suave: #e2efda; }
+.hoja-pm2 { --hx-c: #f4b084; --hx-suave: #fbe5d6; }
+.hoja-pm3 { --hx-c: #2f75b5; --hx-suave: #ddebf7; }
+.hoja-pm4 { --hx-c: #f56565; --hx-suave: #fde2e2; }
+.hoja-pm3000 { --hx-c: #f45a5a; --hx-suave: #fde2e2; }
+.hoja thead .hoja-pm3000 { --hx-c: #f56565; }   /* 950L: cabecera #F56565, cuerpo #F45A5A */
+/* Marco de 2 px: abajo va 1 px en el wrap y 1 px en la última fila, así la fila conserva su línea si aparece la
+   barra horizontal clásica (Windows) entre la tabla y el borde. */
+.hoja-wrap { overflow-x: auto; overscroll-behavior-x: contain; border: 2px solid #000; border-bottom-width: 1px; background: #fff; }
+.hoja-wrap:focus-visible { outline: 2px solid var(--brand-2); outline-offset: 2px; }
+.hoja {
+  --w-item: 3rem; --w-parte: 6.25rem; --w-desc: 13.25rem; --w-cant: 4.5rem; --w-h: 3.1rem;
+  --w-banda: calc(var(--w-item) + var(--w-parte) + var(--w-desc) + var(--w-cant));
+  table-layout: fixed; width: 100%; min-width: calc(var(--w-banda) + var(--hoja-n) * var(--w-h));
+  border-collapse: separate; border-spacing: 0; background: #fff; color: #000;
+  font-size: .78rem; line-height: 1.2; font-variant-numeric: tabular-nums;
+}
+/* DESCRIPCIÓN (hoja-c-desc) no lleva ancho: se queda con lo que sobra y mide justo --w-desc cuando la tabla desborda,
+   que es cuando la banda fija se mueve. No darle ancho ni quitar el min-width de .hoja: los `left` de la banda fija
+   salen de estos anchos. */
+.hoja col.hoja-c-item { width: var(--w-item); }
+.hoja col.hoja-c-parte { width: var(--w-parte); }
+.hoja col.hoja-c-cant { width: var(--w-cant); }
+.hoja col.hoja-c-h { width: var(--w-h); }
+.hoja th, .hoja td {
+  padding: .3rem .35rem; border: 0; border-right: 1px solid #000; border-bottom: 1px solid #000;
+  background: #fff; color: #000; font-size: inherit; font-weight: 400; letter-spacing: 0; text-transform: none;
+  text-align: center; vertical-align: middle;
+}
+.hoja tr > :last-child { border-right: 0; }                       /* el marco de 2px del wrap cierra la tabla */
+/* Banda fija: REPUESTOS, ÍTEM, N° PARTE, DESCRIPCIÓN, CANT (border-collapse: separate para que el borde viaje con la celda) */
+.hoja .hoja-rep, .hoja .hoja-item, .hoja .hoja-parte, .hoja .hoja-desc, .hoja .hoja-cant, .hoja .hoja-sep-txt { position: sticky; z-index: 2; }
+.hoja thead .hoja-rep, .hoja thead .hoja-item, .hoja thead .hoja-parte, .hoja thead .hoja-desc, .hoja thead .hoja-cant { z-index: 3; }
+.hoja .hoja-rep, .hoja .hoja-item, .hoja .hoja-sep-txt { left: 0; }
+.hoja .hoja-parte { left: var(--w-item); overflow-wrap: anywhere; }
+.hoja .hoja-desc { left: calc(var(--w-item) + var(--w-parte)); text-align: left; overflow-wrap: anywhere; }
+.hoja .hoja-cant { left: calc(var(--w-item) + var(--w-parte) + var(--w-desc)); font-weight: 800; overflow-wrap: anywhere; }
+/* Cabecera */
+.hoja thead th { font-weight: 800; }
+.hoja thead .hoja-desc { text-align: center; }
+.hoja thead .hoja-rep { background: #ffc000; font-size: 1.15rem; letter-spacing: .02em; }
+.hoja thead .hoja-frec { background: #ffc000; font-size: .78rem; letter-spacing: .02em; white-space: nowrap; }
+/* Pegado a la banda al desplazar, y con tope derecho para no salirse cuando la hoja desborda (tablet, laptop chica) */
+.hoja-frec-txt { display: inline-block; position: sticky; left: calc(var(--w-banda) + .5rem); right: .5rem; }
+@media (max-width: 760px) { .hoja-frec-txt { white-space: normal; max-width: 9.5rem; } }
+.hoja thead .hoja-k { background: #00cc66; font-size: .74rem; }
+.hoja thead .hoja-pm, .hoja thead .hoja-h { background: var(--hx-c); white-space: nowrap; }
+.hoja thead .hoja-pm3 { color: #fff; }   /* 4,85:1 sobre #2F75B5; el negro (4,33:1) no llega a AA en texto de 12,5 px */
+.hoja thead .hoja-pm { overflow: hidden; }
+.hoja thead .hoja-pm.hoja-pm3000 { font-size: .68rem; padding-inline: 0; }   /* PM3000 cabe en 3.1rem */
+.hoja thead .hoja-h { padding: 0; }
+.hoja-h-txt { display: inline-block; padding: .05rem .3rem; border-radius: 4px; }
+.hoja thead .hoja-h.hoja-sel .hoja-h-txt { background: var(--brand); color: #fff; }
+.hoja thead .hoja-h.hoja-sug .hoja-h-txt { text-decoration: underline dotted 2px; text-underline-offset: 3px; }
+.hoja-col-btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 1.75rem; padding: .2rem .1rem;
+  border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.hoja-col-btn:focus-visible { outline: none; }
+.hoja-col-btn:focus-visible .hoja-h-txt { outline: 2px solid #000; outline-offset: 1px; box-shadow: 0 0 0 3px #fff; }
+.hoja-form thead th[data-mant-col-pm] { cursor: pointer; }
+.hoja-meta { display: none; }
+/* Cuerpo: X como en la hoja. 1.2rem/800 es texto grande: el negro sobre el azul PM3 (4,3:1) cumple AA. */
+.hoja tbody tr { height: 1.9rem; }
+.hoja td.hx { padding: 0; font-size: 1.2rem; font-weight: 800; line-height: 1; }
+.hoja td.hx-x, .hoja td.hx-on, .hoja td.hx-extra { background: var(--hx-c); }
+.hoja td.hx-pend { background: var(--hx-suave); color: rgba(0, 0, 0, .35); }
+/* Columna del PM elegido o registrado: marco oscuro con filete blanco; los rellenos de la hoja no cambian */
+.hoja .hoja-sel { box-shadow: inset 3px 0 0 var(--brand), inset -3px 0 0 var(--brand), inset 5px 0 0 #fff, inset -5px 0 0 #fff; }
+.hoja thead .hoja-pm.hoja-sel {
+  box-shadow: inset 0 3px 0 var(--brand), inset 3px 0 0 var(--brand), inset -3px 0 0 var(--brand),
+    inset 0 5px 0 #fff, inset 5px 0 0 #fff, inset -5px 0 0 #fff;
+}
+.hoja tbody:last-of-type > tr:last-child > .hoja-sel {
+  box-shadow: inset 0 -3px 0 var(--brand), inset 3px 0 0 var(--brand), inset -3px 0 0 var(--brand),
+    inset 0 -5px 0 #fff, inset 5px 0 0 #fff, inset -5px 0 0 #fff;
+}
+.hoja td.hoja-sel { position: relative; }
+.hoja td.hx-extra::after {
+  content: ""; position: absolute; top: 0; right: 5px;
+  border-style: solid; border-width: 0 .55rem .55rem 0; border-color: transparent #000 transparent transparent;
+}
+.hx-toggle {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+}
+.hx-toggle input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.hx-marca { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6rem; min-height: 1.5rem; border-radius: 4px; }
+.hoja td.hoja-sel:not(.hx-on, .hx-pend, .hx-extra) .hx-marca { color: transparent; }
+.hx-toggle input:focus-visible + .hx-marca { outline: 2px solid #000; outline-offset: 1px; box-shadow: 0 0 0 3px #fff; }
+/* CANT */
+.hoja td.hoja-cant { padding: .15rem; }
+.hoja-cant-in {
+  width: 100%; min-width: 0; padding: .2rem .1rem; border: 1px solid #c9d3cd; border-radius: 4px; background: #fff; color: #000;
+  font: inherit; font-weight: 800; text-align: center; appearance: textfield; -moz-appearance: textfield;
+}
+.hoja-cant-in::-webkit-inner-spin-button, .hoja-cant-in::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.hoja-cant-in:focus { outline: 2px solid var(--brand); outline-offset: 0; border-color: var(--brand); }
+.hoja tr.mant-off .hoja-cant-in { color: var(--muted); font-weight: 600; }   /* 5,6:1; se ve atenuada por el 600 frente al 800 */
+.hoja td.hoja-cant.hoja-cant-dif { background: #fff4e5; }
+.hoja td.hoja-cant-dif .hoja-cant-in { border-color: var(--accent); }
+.hoja-cant-ref { display: block; margin-top: .1rem; font-size: .62rem; font-weight: 700; line-height: 1.1; color: var(--warn); }
+.hoja-cant-ref[hidden] { display: none; }          /* sin esto, display:block le gana al atributo hidden */
+.hoja-cant-hoja { color: var(--muted); font-weight: 600; }
+.hoja-guardada { display: block; margin-top: .1rem; font-size: .66rem; font-weight: 700; line-height: 1.15; color: var(--warn); }
+/* Etiquetas de estado junto a la descripción (el estado no depende solo del color) */
+.hoja-tag {
+  display: inline-block; margin: .1rem 0 0 .3rem; padding: 0 .35rem; border-radius: 999px;
+  font-size: .64rem; font-weight: 800; line-height: 1.45; white-space: nowrap; vertical-align: 1px;
+}
+.hoja-tag-pend { border: 1px dashed #98a2b3; background: #f2f4f7; color: #344054; }
+.hoja-tag-extra { background: #fff4e5; color: var(--warn); }
+.hoja-tag-sinx, .hoja-tag-rep { background: #f2f4f2; color: var(--muted); }
+/* Banda OTROS REPUESTOS (detalle) */
+.hoja tr.hoja-sep > * { background: #e7e6e6; border-right-color: #e7e6e6; font-size: .7rem; font-weight: 800; letter-spacing: .03em; }
+.hoja .hoja-sep-txt { text-align: left; }
+@media (hover: hover) {
+  .hoja tbody tr:not(.hoja-sep):hover > :is(td, th):not(.hx-x, .hx-on, .hx-pend, .hx-extra, .hoja-cant-dif) { background-color: #f3f7f4; }
+  .hoja td.hoja-sel:not(.hx-on, .hx-pend, .hx-extra) .hx-toggle:hover .hx-marca { color: rgba(0, 0, 0, .25); }
+  .hoja-form thead th.hoja-pm:not(.hoja-sel):hover, .hoja-form thead th.hoja-h:not(.hoja-sel):hover { box-shadow: inset 0 0 0 999px rgba(0, 0, 0, .08); }
+}
+/* Pie de la hoja, aviso y detalle */
+.hoja-pie { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .45rem 1rem; margin-top: .55rem; }
+.hoja-clave { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: 0; padding: 0; list-style: none; font-size: .76rem; color: var(--muted); }
+.hoja-clave li { display: inline-flex; align-items: center; gap: .4rem; }
+.hx-demo {
+  position: relative; display: inline-grid; place-items: center; width: 1.8rem; height: 1.3rem;
+  border: 1px solid #000; background: #fff; color: #000; font-size: .8rem; font-weight: 800;
+}
+.hoja-clave .hx-on, .hoja-clave .hx-extra { background: var(--hx-c); }
+.hoja-clave .hx-pend { background: var(--hx-suave); color: rgba(0, 0, 0, .35); }
+.hoja-clave .hx-extra::after {
+  content: ""; position: absolute; top: 0; right: 0;
+  border-style: solid; border-width: 0 .45rem .45rem 0; border-color: transparent #000 transparent transparent;
+}
+.hoja-clave .hx-marco { box-shadow: inset 3px 0 0 var(--brand), inset -3px 0 0 var(--brand), inset 5px 0 0 #fff, inset -5px 0 0 #fff; }
+.mant-aviso {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; margin: 0 0 .6rem; padding: .55rem .75rem;
+  border-radius: 10px; background: var(--accent-soft); color: var(--warn); font-size: .84rem; font-weight: 600;
+}
+.mant-aviso:empty { margin: 0; padding: 0; }      /* vacío: alto 0, pero sigue en el árbol de accesibilidad (role=status) */
+.mant-subtitulo small { color: var(--muted); font-weight: 600; font-size: .8rem; }
+.mant-det-hoja h3 { display: flex; align-items: center; gap: .4rem; margin: 0 0 .5rem; font-size: 1rem; }
+.mant-det-hoja h3 small { color: var(--muted); font-weight: 600; font-size: .8rem; }
+.mant-det-obs { margin-top: 1rem; }
+.modal.mant-det-modal { width: min(1180px, 100%); }   /* sin modal-wide: así no pierde contra .modal.modal-wide */
+@media (forced-colors: active) {
+  /* La hoja es un facsímil del PDF: el marco de la columna (box-shadow), el chip de horas, los rellenos PM y la X
+     oculta con color: transparent dependen de colores que este modo anula. Se conservan en la tabla y en las muestras
+     de la leyenda; el texto de la leyenda y el resto de la página siguen los colores del sistema. */
+  .hoja, .hx-demo { forced-color-adjust: none; }
+}
 
 /* Plan trabajo */
 .plan-tabs-panel { padding: 0; overflow: hidden; margin-bottom: 1rem; }
@@ -942,12 +1090,30 @@ tr.caja-row:hover td { background: rgba(15, 61, 46, 0.08); }
 }
 @media (max-width: 720px) {
   .mant-det-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  /* En el celular: sin la columna Ítem para que la cantidad se vea sin desplazar la tabla */
-  .mant-tabla thead th:nth-child(2), .mant-tabla tbody td:nth-child(2) { display: none; }
-  .mant-tabla .mant-desc { min-width: 130px; }
-  .mant-tabla input[type=number] { width: 3.8rem; }
   .mant-extra { grid-template-columns: minmax(0, 1fr) 5.5rem auto; }
   .mant-extra [data-x=desc] { grid-column: 1 / -1; order: -1; }
+  .mant-extra input { font-size: 16px; }   /* 16 px: iOS no hace zoom al enfocar */
+  /* Hoja en el celular: fijas solo DESCRIPCIÓN y CANT. Usar 0px y no 0 en las variables (calc(0 + 7.5rem) no vale). */
+  .hoja { --w-item: 0px; --w-parte: 0px; --w-desc: 7.5rem; --w-cant: 3.75rem; --w-h: 2.5rem; font-size: .7rem; }
+  /* ÍTEM y N° PARTE se pliegan a ancho 0 (no display:none: REPUESTOS sigue siendo colspan=4) y se leen bajo la descripción */
+  .hoja .hoja-item, .hoja .hoja-parte { padding: 0; border-right-width: 0; overflow: hidden; white-space: nowrap; visibility: hidden; }
+  .hoja .hoja-meta { display: block; margin-top: .1rem; font-size: .66rem; font-weight: 700; color: var(--muted); }
+  .hoja thead .hoja-meta { font-size: .58rem; color: #000; }
+  .hoja th, .hoja td { padding: .25rem; }
+  .hoja tbody tr { height: 2.5rem; }
+  .hoja thead .hoja-rep { font-size: .85rem; }
+  .hoja thead .hoja-frec { font-size: .62rem; text-align: left; }
+  .hoja-frec-txt { white-space: normal; max-width: 9.5rem; }
+  .hoja thead .hoja-k { font-size: .62rem; }
+  .hoja thead .hoja-pm, .hoja thead .hoja-h { padding-inline: 0; font-size: .68rem; }
+  .hoja thead .hoja-pm.hoja-pm3000 { font-size: .56rem; letter-spacing: -.02em; }
+  .hoja-h-txt { padding-inline: .15rem; }
+  .hoja-col-btn { min-height: 2.25rem; }
+  .hoja .hoja-sep-txt { white-space: normal; }
+  .hoja-cant-in { font-size: 16px; padding: .15rem 0; min-height: 2rem; }   /* 16 px: iOS no hace zoom; 32 px de alto al tocar */
+  .mant-hoja-panel .hoja-wrap { margin-inline: -1rem; }
+  .mant-det-modal .hoja-wrap { margin-inline: -1.1rem; }
+  .hoja-pie { flex-direction: column; align-items: flex-start; }
 }
 
 .estado-quick-wrap { display: inline-flex; max-width: 100%; }

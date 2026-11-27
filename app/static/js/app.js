@@ -5780,16 +5780,6 @@
   const numCantidad = (n) => Number(n || 0).toLocaleString("es-PE", { maximumFractionDigits: 2 });
   const parteNorm = (v) => String(v || "").replace(/\s+/g, "").toUpperCase();
 
-  function frecuenciaRepuestoTexto(eq, horas) {
-    if (!horas.length) return "Sin X en la hoja";
-    const paso = horas[0];
-    const regular =
-      horas.length === Math.floor(eq.ciclo_horas / paso) && horas.every((h, i) => h === paso * (i + 1));
-    if (regular) return `Cada ${numHoras(paso)} h`;
-    const txt = horas.map(numHoras);
-    return `${txt.slice(0, -1).join(", ")} y ${txt[txt.length - 1]} h`;
-  }
-
   /* PM del ciclo más cercano al horómetro (el ciclo se repite cada 2000 o 3000 h). */
   function frecuenciaPorHorometro(eq, horometro) {
     const h = Number(horometro);
@@ -5800,6 +5790,215 @@
     const pos = (n * paso) % eq.ciclo_horas || eq.ciclo_horas;
     return eq.frecuencias.find((f) => f.horas === pos) || null;
   }
+
+  /* ---- Hoja del equipo: tabla REPUESTOS × FRECUENCIA DE MANTENIMIENTO como en los PDF ---- */
+  const hojaPm = (pm) => pmClase(pm).replace(/^pm-/, "hoja-");
+  /* Estado de una celda de la columna del PM: plan = la hoja tiene X ahí; on = se cambió. */
+  const hxEstado = (plan, on) => (on ? (plan ? "hx-on" : "hx-extra") : plan ? "hx-pend" : "");
+  const HX_TXT = {
+    "hx-on": "Cambiado",
+    "hx-pend": "No se cambió (la hoja lo indica)",
+    "hx-extra": "Adicional: la hoja no lo indica en este PM",
+  };
+  const marcasSegunHoja = (eq, horas) => eq.repuestos.map((r) => ({ on: r.horas.includes(horas), cant: String(r.cantidad) }));
+  /* ¿Marcas y cantidades son justo las de la hoja en esa columna? (no cuenta la cantidad de filas sin marcar) */
+  const coincideConHoja = (eq, horas, marcas) =>
+    eq.repuestos.every(
+      (r, i) => marcas[i].on === r.horas.includes(horas) && (!marcas[i].on || Number(marcas[i].cant) === Number(r.cantidad))
+    );
+
+  const textoNorm = (s) => String(s || "").replace(/\s+/g, " ").trim().toUpperCase();
+
+  /* Pone cada repuesto guardado en la primera fila libre de la hoja con su N° de parte; el resto son "otros".
+     Con mismaDescripcion (formulario al editar) también debe coincidir la descripción: un «otro repuesto» con un N° de
+     la hoja y otra descripción (p. ej. una marca alternativa) vuelve a «Otros repuestos» tal como se escribió. */
+  function emparejarGuardados(eq, guardados, { mismaDescripcion = false } = {}) {
+    const porFila = eq.repuestos.map(() => null);
+    const otros = [];
+    (guardados || []).forEach((g) => {
+      const k = parteNorm(g.numero_parte);
+      const i = k
+        ? eq.repuestos.findIndex(
+            (r, idx) =>
+              !porFila[idx] &&
+              parteNorm(r.numero_parte) === k &&
+              (!mismaDescripcion || textoNorm(r.descripcion) === textoNorm(g.descripcion))
+          )
+        : -1;
+      if (i < 0) otros.push(g);
+      else porFila[i] = g;
+    });
+    return { porFila, otros };
+  }
+  const marcasDeGuardados = (eq, porFila) =>
+    eq.repuestos.map((r, i) =>
+      porFila[i]
+        ? { on: true, cant: String(Number(porFila[i].cantidad)), desc: porFila[i].descripcion || "" }
+        : { on: false, cant: String(r.cantidad) }
+    );
+
+  function hojaTagsHtml(r, est) {
+    if (est === "hx-pend") return `<span class="hoja-tag hoja-tag-pend">No se cambió</span>`;
+    if (est === "hx-extra") return `<span class="hoja-tag hoja-tag-extra">Adicional</span>`;
+    return r.horas.length ? "" : `<span class="hoja-tag hoja-tag-sinx">Sin X en la hoja</span>`;
+  }
+
+  /* Cabecera de 3 filas como en la hoja. Horas sin separador de miles (String), como el PDF: nunca numHoras. */
+  function hojaCabezaHtml(eq, sel, form) {
+    const cols = eq.frecuencias;
+    const sl = (f) => (f.horas === sel ? " hoja-sel" : "");
+    const pm = (f) => escapeHtml(f.pm);
+    return `<colgroup><col class="hoja-c-item"><col class="hoja-c-parte"><col class="hoja-c-desc"><col class="hoja-c-cant"><col class="hoja-c-h" span="${cols.length}"></colgroup>
+      <thead>
+        <tr>
+          <th class="hoja-rep" colspan="4" rowspan="2" scope="colgroup">REPUESTOS</th>
+          <th class="hoja-frec" colspan="${cols.length}" scope="colgroup"><span class="hoja-frec-txt">FRECUENCIA DE MANTENIMIENTO</span></th>
+        </tr>
+        <tr>${cols
+          .map(
+            (f) =>
+              `<th class="hoja-pm ${hojaPm(f.pm)}${sl(f)}" scope="col" data-col="${f.horas}"${form ? ` data-mant-col-pm="${f.horas}" title="Usar ${pm(f)} · ${f.horas} h"` : ""}>${pm(f)}</th>`
+          )
+          .join("")}</tr>
+        <tr>
+          <th class="hoja-item hoja-k" scope="col">ÍTEM</th>
+          <th class="hoja-parte hoja-k" scope="col">N° PARTE</th>
+          <th class="hoja-desc hoja-k" scope="col">DESCRIPCIÓN<small class="hoja-meta">ÍTEM · N° PARTE</small></th>
+          <th class="hoja-cant hoja-k" scope="col">CANT</th>
+          ${cols
+            .map(
+              (f) => `<th class="hoja-h ${hojaPm(f.pm)}${sl(f)}" scope="col" data-col="${f.horas}">${
+                form
+                  ? `<button type="button" class="hoja-col-btn" data-mant-col="${f.horas}" aria-pressed="${f.horas === sel}" tabindex="${f.horas === sel ? 0 : -1}" aria-label="${pm(f)} · ${f.horas} h del ciclo"><span class="hoja-h-txt">${f.horas}</span></button>`
+                  : `<span class="hoja-h-txt">${f.horas}</span>`
+              }</th>`
+            )
+            .join("")}
+        </tr>
+      </thead>`;
+  }
+
+  function hojaCeldaHtml(f, r, i, m, sel, form) {
+    const plan = r.horas.includes(f.horas);
+    const pmc = hojaPm(f.pm);
+    if (f.horas !== sel) return `<td class="hx ${pmc}${plan ? " hx-x" : ""}">${plan ? "X" : ""}</td>`;
+    const est = hxEstado(plan, m.on);
+    const cls = `hx hoja-sel ${pmc}${est ? ` ${est}` : ""}`;
+    if (!form) {
+      return `<td class="${cls}"${est ? ` title="${HX_TXT[est]}"` : ""}>${est ? `<span class="hx-marca" aria-hidden="true">X</span><span class="sr-only">${HX_TXT[est]}</span>` : ""}</td>`;
+    }
+    const ayuda = plan ? "la hoja lo indica en este PM" : "la hoja no lo indica en este PM";
+    return `<td class="${cls}"><label class="hx-toggle"><input type="checkbox" class="hx-chk" data-mant-check="${i}"${m.on ? " checked" : ""} aria-label="Se cambió ${escapeHtml(r.descripcion)} (${escapeHtml(r.numero_parte)}) · ${ayuda}" /><span class="hx-marca" aria-hidden="true">X</span></label></td>`;
+  }
+
+  function hojaFilaHtml(eq, r, i, m, sel, form) {
+    const desc = escapeHtml(r.descripcion);
+    const parte = escapeHtml(r.numero_parte);
+    const est = hxEstado(r.horas.includes(sel), m.on);
+    // Detalle: si se registró con otra descripción (un «otro repuesto» con este N°), se muestra lo que se anotó
+    const guardada =
+      !form && m.desc && textoNorm(m.desc) !== textoNorm(r.descripcion)
+        ? `<small class="hoja-guardada">Registrado: ${escapeHtml(m.desc)}</small>`
+        : "";
+    const dif = m.on && Number(m.cant) !== Number(r.cantidad);
+    const ref = `<small class="hoja-cant-ref" data-mant-ref="${i}"${dif ? "" : " hidden"}>hoja ${numCantidad(r.cantidad)}</small>`;
+    const cant = form
+      ? `<input type="number" class="hoja-cant-in" data-mant-cant="${i}" min="0.01" max="99999.99" step="0.01" inputmode="decimal" value="${escapeHtml(m.cant)}" aria-label="Cantidad de ${desc} (${parte})" />${ref}`
+      : m.on
+        ? `${numCantidad(m.cant)}${dif ? ref : ""}`
+        : `<span class="hoja-cant-hoja" title="Cantidad de la hoja">${numCantidad(r.cantidad)}</span>`;
+    return `<tr data-mant-row="${i}"${m.on ? "" : ` class="mant-off"`}>
+      <td class="hoja-item">${r.item}</td>
+      <td class="hoja-parte">${parte}</td>
+      <th class="hoja-desc" scope="row"><span class="hoja-desc-txt">${desc}</span><span class="hoja-tags" data-mant-tags="${i}">${hojaTagsHtml(r, est)}</span>${guardada}<small class="hoja-meta">${r.item} · ${parte}</small></th>
+      <td class="hoja-cant${dif ? " hoja-cant-dif" : ""}"${dif ? ` title="En la hoja: ${numCantidad(r.cantidad)}"` : ""}>${cant}</td>
+      ${eq.frecuencias.map((f) => hojaCeldaHtml(f, r, i, m, sel, form)).join("")}
+    </tr>`;
+  }
+
+  /* Detalle: repuestos guardados que no son filas de la hoja, en una banda gris al final de la misma tabla. */
+  function hojaOtrosHtml(eq, otros, sel) {
+    const banda = eq.frecuencias.map((f) => `<td${f.horas === sel ? ` class="hoja-sel"` : ""}></td>`).join("");
+    const filas = otros
+      .map((g) => {
+        const k = parteNorm(g.numero_parte);
+        const enHoja = k ? eq.repuestos.find((r) => parteNorm(r.numero_parte) === k) : null;
+        const est = g.programado ? "hx-on" : "hx-extra";
+        const parte = escapeHtml(g.numero_parte || "—");
+        const celdas = eq.frecuencias
+          .map((f) =>
+            f.horas === sel
+              ? `<td class="hx hoja-sel ${hojaPm(f.pm)} ${est}" title="${HX_TXT[est]}"><span class="hx-marca" aria-hidden="true">X</span><span class="sr-only">${HX_TXT[est]}</span></td>`
+              : `<td class="hx"></td>`
+          )
+          .join("");
+        return `<tr class="hoja-otro">
+          <td class="hoja-item">+</td><td class="hoja-parte">${parte}</td>
+          <th class="hoja-desc" scope="row"><span class="hoja-desc-txt">${escapeHtml(g.descripcion)}</span>${enHoja ? `<span class="hoja-tags"><span class="hoja-tag hoja-tag-rep">Repetido · ítem ${enHoja.item}</span></span>` : ""}<small class="hoja-meta">+ · ${parte}</small></th>
+          <td class="hoja-cant">${numCantidad(g.cantidad)}</td>${celdas}
+        </tr>`;
+      })
+      .join("");
+    return `<tbody class="hoja-otros"><tr class="hoja-sep"><th class="hoja-sep-txt" colspan="4" scope="rowgroup">OTROS REPUESTOS (FUERA DE LA HOJA)</th>${banda}</tr>${filas}</tbody>`;
+  }
+
+  function hojaTablaHtml(eq, { sel, marcas, otros = [], form = false, idTitulo = "" }) {
+    const col = eq.frecuencias.find((f) => f.horas === sel);
+    const region = form ? "" : ` tabindex="0" role="region" aria-labelledby="${idTitulo}"`;
+    const caption = `Repuestos y frecuencia de mantenimiento del ${escapeHtml(eq.titulo)}${!form && col ? `. Columna registrada: ${escapeHtml(col.pm)} · ${col.horas} h` : ""}`;
+    return `<div class="hoja-wrap" data-hoja-wrap${region}>
+      <table class="hoja${form ? " hoja-form" : ""}" style="--hoja-n:${eq.frecuencias.length}">
+        <caption class="sr-only">${caption}</caption>
+        ${hojaCabezaHtml(eq, sel, form)}
+        <tbody class="hoja-plan">${eq.repuestos.map((r, i) => hojaFilaHtml(eq, r, i, marcas[i], sel, form)).join("")}</tbody>
+        ${otros.length ? hojaOtrosHtml(eq, otros, sel) : ""}
+      </table>
+    </div>`;
+  }
+
+  const hojaClaveHtml = (pm, form) => `<ul class="hoja-clave ${hojaPm(pm)}" data-hoja-clave aria-label="Cómo leer la columna del PM">
+      <li><span class="hx-demo hx-on" aria-hidden="true">X</span>Cambiado (la hoja lo indica)</li>
+      <li><span class="hx-demo hx-pend" aria-hidden="true">X</span>La hoja lo indica y no se cambió</li>
+      <li><span class="hx-demo hx-extra" aria-hidden="true">X</span>Adicional (sin X en la hoja para este PM)</li>
+      <li><span class="hx-demo hx-marco" aria-hidden="true"></span>Columna del PM ${form ? "elegido" : "registrado"}</li>
+    </ul>`;
+
+  function hojaResumenTexto(eq, col, marcas, nOtros) {
+    let plan = 0;
+    let hechos = 0;
+    let adic = 0;
+    eq.repuestos.forEach((r, i) => {
+      const p = r.horas.includes(col.horas);
+      if (p) plan += 1;
+      if (p && marcas[i].on) hechos += 1;
+      if (!p && marcas[i].on) adic += 1;
+    });
+    const partes = [`${col.pm} · ${numHoras(col.horas)} h: ${hechos} de ${plan} repuestos de la hoja cambiados`];
+    if (plan > hechos) partes.push(`${plan - hechos} sin cambiar`);
+    if (adic) partes.push(`${adic} adicional${adic === 1 ? "" : "es"}`);
+    if (nOtros) partes.push(`${nOtros} otro${nOtros === 1 ? "" : "s"} repuesto${nOtros === 1 ? "" : "s"}`);
+    return partes.join(" · ");
+  }
+
+  /* Deja `celda` a la vista junto a la banda fija (REPUESTOS…CANT). Mide con getBoundingClientRect: un th sticky o
+     relative tiene al body como offsetParent y su offsetLeft incluye el corrimiento sticky. */
+  function verEnHoja(wrap, celda, { contexto = false, suave = false } = {}) {
+    if (!wrap || !celda || wrap.scrollWidth <= wrap.clientWidth + 1) return;
+    const x0 = $("table", wrap).getBoundingClientRect().left;
+    const banda = $("thead .hoja-h", wrap).getBoundingClientRect().left - x0;
+    const { left, width } = celda.getBoundingClientRect();
+    const izq = left - x0;
+    const ini = izq - banda; // scrollLeft máximo con la celda a la derecha de la banda
+    const fin = izq + width - wrap.clientWidth; // scrollLeft mínimo con la celda antes del borde derecho
+    wrap.style.scrollPaddingLeft = `${banda}px`;
+    if (wrap.scrollLeft <= ini + 1 && wrap.scrollLeft >= fin - 1) return;
+    const destino = fin > ini ? ini : contexto ? Math.max(fin, ini - width) : wrap.scrollLeft > ini ? ini : fin;
+    const animar = suave && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    wrap.scrollTo({ left: Math.max(0, destino), behavior: animar ? "smooth" : "auto" });
+  }
+  /* La columna del PM queda junto a la banda, con una columna de contexto a su izquierda si cabe. */
+  const verColumnaHoja = (wrap, horas, suave = true) =>
+    wrap && verEnHoja(wrap, $(`thead .hoja-h[data-col="${horas}"]`, wrap), { contexto: true, suave });
 
   function mantCardHtml(eq, res) {
     const activo = state.filtersMant.equipo === eq.id;
@@ -5910,22 +6109,40 @@
   function openMantenimientoDetalle(m) {
     const modal = $("#modal-mant");
     if (!modal || !m) return;
-    const filas = m.repuestos.length
-      ? m.repuestos
-          .map(
-            (r) => `<tr>
-              <td class="nowrap">${r.item}</td>
-              <td class="nowrap"><strong>${escapeHtml(r.numero_parte || "—")}</strong></td>
-              <td>${escapeHtml(r.descripcion)}</td>
-              <td class="nowrap">${numCantidad(r.cantidad)}</td>
-              <td>${r.programado ? `<span class="badge pagado">Según hoja</span>` : `<span class="badge no_pagado">Adicional</span>`}</td>
-            </tr>`
-          )
-          .join("")
-      : `<tr><td colspan="5">Sin repuestos registrados</td></tr>`;
-    modal.classList.add("open");
+    const eq = equipoMant(m.equipo);
+    const col = eq?.frecuencias.find((f) => f.horas === m.frecuencia_horas) || null;
+    let repuestosHtml;
+    if (eq && col) {
+      const { porFila, otros } = emparejarGuardados(eq, m.repuestos);
+      const marcas = marcasDeGuardados(eq, porFila);
+      repuestosHtml = `<section class="mant-det-hoja">
+          <h3 id="mant-det-hoja-t">Repuestos ${pmBadgeHtml(col.pm)} <small>${numHoras(col.horas)} h</small></h3>
+          ${hojaTablaHtml(eq, { sel: col.horas, marcas, otros, form: false, idTitulo: "mant-det-hoja-t" })}
+          <div class="hoja-pie">${hojaClaveHtml(col.pm, false)}<p class="mant-conteo">${escapeHtml(hojaResumenTexto(eq, col, marcas, otros.length))}</p></div>
+        </section>`;
+    } else {
+      // Respaldo: el equipo o la columna ya no están en el catálogo → tabla simple con «Según hoja» / «Adicional».
+      const filas = m.repuestos.length
+        ? m.repuestos
+            .map(
+              (r) => `<tr>
+                <td class="nowrap">${r.item}</td>
+                <td class="nowrap"><strong>${escapeHtml(r.numero_parte || "—")}</strong></td>
+                <td>${escapeHtml(r.descripcion)}</td>
+                <td class="nowrap">${numCantidad(r.cantidad)}</td>
+                <td>${r.programado ? `<span class="badge pagado">Según hoja</span>` : `<span class="badge no_pagado">Adicional</span>`}</td>
+              </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="5">Sin repuestos registrados</td></tr>`;
+      repuestosHtml = `<div class="table-wrap"><table class="mant-det-tabla">
+          <thead><tr><th>Ítem</th><th>N° parte</th><th>Descripción</th><th>Cant.</th><th>Hoja</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table></div>`;
+    }
+    modal.classList.add("open"); // antes del innerHTML: verColumnaHoja mide con el modal ya visible
     modal.innerHTML = `
-      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="mant-det-titulo">
+      <div class="modal mant-det-modal" role="dialog" aria-modal="true" aria-labelledby="mant-det-titulo">
         <div class="modal-head">
           <h2 id="mant-det-titulo">${escapeHtml(m.pm)} · ${escapeHtml(m.equipo_tipo)} ${escapeHtml(m.modelo)}</h2>
           <button class="btn btn-ghost btn-sm" type="button" id="mant-det-cerrar">Cerrar</button>
@@ -5946,12 +6163,9 @@
           <div><span class="detalle-k">Año</span>${m.anio || "—"}</div>
           <div><span class="detalle-k">Mod. motor</span>${escapeHtml(m.motor_modelo || "—")}</div>
           <div><span class="detalle-k">Serie motor</span>${escapeHtml(m.motor_serie || "—")}</div>
-          <div class="full"><span class="detalle-k">Observaciones</span>${textoPlanoHtml(m.observaciones)}</div>
         </div>
-        <div class="table-wrap"><table class="mant-det-tabla">
-          <thead><tr><th>Ítem</th><th>N° parte</th><th>Descripción</th><th>Cant.</th><th>Hoja</th></tr></thead>
-          <tbody>${filas}</tbody>
-        </table></div>
+        ${repuestosHtml}
+        <div class="mant-det-obs"><span class="detalle-k">Observaciones</span>${textoPlanoHtml(m.observaciones)}</div>
       </div>`;
     const cerrar = () => {
       modal.classList.remove("open");
@@ -5974,6 +6188,7 @@
       cerrar();
       renderApp();
     };
+    if (eq && col) verColumnaHoja($("[data-hoja-wrap]", modal), col.horas, false);
   }
 
   function bindMantenimientos() {
@@ -6102,14 +6317,15 @@
             </div>
           </div>
         </section>
-        <section class="panel rep-section">
+        <section class="panel rep-section mant-hoja-panel">
           <div class="mant-rep-head">
             <h3>Repuestos <span id="mant-rep-pm"></span></h3>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-mant-plan">Volver a marcar según la hoja</button>
           </div>
-          <p class="rep-nota">Marca los repuestos que se cambiaron. Vienen marcados los que la hoja indica con X para este PM; ajusta la cantidad si fue distinta.</p>
+          <p class="rep-nota">Toca las horas en la cabecera de la tabla (o elige en «PM · horas del ciclo») para indicar el PM que se hizo. En esa columna, enmarcada, toca cada casilla para poner o quitar la X del repuesto que se cambió y corrige CANT si la cantidad fue distinta.</p>
+          <div id="mant-aviso" class="mant-aviso" role="status"></div>
           <div id="mant-repuestos"></div>
-          <h4 class="mant-subtitulo">Otros repuestos</h4>
+          <h4 class="mant-subtitulo">Otros repuestos <small>(fuera de la hoja)</small></h4>
           <div id="mant-extras"></div>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-mant-extra">＋ Agregar otro repuesto</button>
         </section>
@@ -6132,7 +6348,7 @@
       <div class="mant-extra" data-mant-extra>
         <input data-x="parte" maxlength="30" placeholder="N° parte" value="${escapeHtml(r.numero_parte || "")}" aria-label="N° de parte" />
         <input data-x="desc" maxlength="200" placeholder="Descripción del repuesto" value="${escapeHtml(r.descripcion || "")}" aria-label="Descripción" />
-        <input data-x="cant" type="number" min="0.01" step="0.01" inputmode="decimal" value="${r.cantidad != null ? Number(r.cantidad) : 1}" aria-label="Cantidad" />
+        <input data-x="cant" type="number" min="0.01" max="99999.99" step="0.01" inputmode="decimal" value="${r.cantidad != null ? Number(r.cantidad) : 1}" aria-label="Cantidad" />
         <button type="button" class="btn btn-ghost btn-sm" data-x="quitar" title="Quitar" aria-label="Quitar repuesto">✕</button>
       </div>`;
   }
@@ -6146,10 +6362,22 @@
     const inpHorometro = $("#mant-horometro", form);
     const contRep = $("#mant-repuestos", form);
     const contExtras = $("#mant-extras", form);
+    const aviso = $("#mant-aviso", form);
     let eq = null;
+    let horasCol = null; // columna que muestra la tabla; #mant-frecuencia siempre tiene este valor
+    let avisoActivo = false;
 
     const horasSel = () => Number(selFrec.value) || null;
     const colSel = () => eq?.frecuencias.find((f) => f.horas === horasSel()) || null;
+    const wrapHoja = () => $("[data-hoja-wrap]", contRep);
+    /* El DOM manda: casillas y cantidades se leen al repintar el cuerpo y al guardar. */
+    const leerMarcas = () =>
+      eq.repuestos.map((r, i) => ({
+        on: !!$(`[data-mant-check="${i}"]`, contRep)?.checked,
+        cant: $(`[data-mant-cant="${i}"]`, contRep)?.value ?? String(r.cantidad),
+      }));
+    const otrosConDescripcion = () =>
+      $$("[data-mant-extra]", contExtras).filter((row) => $("[data-x=desc]", row).value.trim()).length;
 
     function pintarPlaca() {
       const placa = $("#mant-placa", form);
@@ -6183,102 +6411,139 @@
         .join("");
     }
 
-    function pintarRepuestos() {
+    function pintarTabla(marcas) {
       if (!eq) {
-        contRep.innerHTML = `<div class="empty" style="padding:1.2rem">Elige un equipo para ver sus repuestos.</div>`;
+        contRep.innerHTML = `<div class="empty" style="padding:1.2rem">Elige un equipo para ver su hoja de repuestos.</div>`;
         return;
       }
-      contRep.innerHTML = `
-        <div class="rep-table-wrap"><table class="rep-table mant-tabla">
-          <thead><tr>
-            <th title="Se cambió">✓</th><th>Ítem</th><th>N° parte</th><th>Descripción</th><th>Cant.</th><th id="mant-col-pm">PM</th><th>Frecuencia en la hoja</th>
-          </tr></thead>
-          <tbody>
-            ${eq.repuestos
-              .map(
-                (r, i) => `<tr data-mant-row="${i}">
-                  <td><input type="checkbox" data-mant-check="${i}" aria-label="Se cambió ${escapeHtml(r.descripcion)}" /></td>
-                  <td class="rep-item">${r.item}</td>
-                  <td class="nowrap"><strong>${escapeHtml(r.numero_parte)}</strong></td>
-                  <td class="mant-desc">${escapeHtml(r.descripcion)}</td>
-                  <td><input type="number" min="0.01" step="0.01" inputmode="decimal" data-mant-cant="${i}" value="${r.cantidad}" aria-label="Cantidad de ${escapeHtml(r.descripcion)}" /></td>
-                  <td class="mant-x-cell" data-mant-x="${i}"></td>
-                  <td class="mant-frec">${escapeHtml(frecuenciaRepuestoTexto(eq, r.horas))}</td>
-                </tr>`
-              )
-              .join("")}
-          </tbody>
-        </table></div>
-        <p id="mant-conteo" class="mant-conteo"></p>`;
+      const col = colSel();
+      contRep.innerHTML = `${hojaTablaHtml(eq, { sel: col.horas, marcas, form: true })}
+        <div class="hoja-pie">${hojaClaveHtml(col.pm, true)}<p id="mant-conteo" class="mant-conteo" aria-live="polite"></p></div>`;
+      actualizarConteo();
     }
 
-    function actualizarFilas() {
-      if (!eq) return;
+    /* Solo el cuerpo: la cabecera (y el foco en sus botones) y el desplazamiento horizontal se conservan. */
+    function pintarCuerpo(marcas) {
+      const h = horasSel();
+      $("tbody.hoja-plan", contRep).innerHTML = eq.repuestos.map((r, i) => hojaFilaHtml(eq, r, i, marcas[i], h, true)).join("");
+    }
+
+    function marcarCabecera() {
       const col = colSel();
-      let marcados = 0;
-      let enHoja = 0;
-      eq.repuestos.forEach((r, i) => {
-        const check = $(`[data-mant-check="${i}"]`, contRep);
-        const fila = $(`[data-mant-row="${i}"]`, contRep);
-        const programado = col ? r.horas.includes(col.horas) : false;
-        if (programado) enHoja += 1;
-        if (check.checked) marcados += 1;
-        fila.classList.toggle("mant-on", check.checked);
-        fila.classList.toggle("mant-off", !check.checked);
-        $(`[data-mant-x="${i}"]`, contRep).innerHTML = programado ? `<span class="mant-x ${pmClase(col.pm)}">X</span>` : "";
+      $$("thead [data-col]", contRep).forEach((th) => th.classList.toggle("hoja-sel", Number(th.dataset.col) === col.horas));
+      $$("[data-mant-col]", contRep).forEach((b) => {
+        const on = Number(b.dataset.mantCol) === col.horas;
+        b.setAttribute("aria-pressed", String(on));
+        b.tabIndex = on ? 0 : -1;
       });
-      const extras = $$("[data-mant-extra]", contExtras).filter((row) => $("[data-x=desc]", row).value.trim()).length;
-      $("#mant-conteo", contRep).textContent =
-        `${marcados} de ${eq.repuestos.length} repuestos marcados · la hoja indica ${enHoja} para este PM` +
-        (extras ? ` · ${extras} adicional${extras === 1 ? "" : "es"}` : "");
+      const clave = $("[data-hoja-clave]", contRep);
+      if (clave) clave.className = `hoja-clave ${hojaPm(col.pm)}`;
+    }
+
+    /* En el sitio, tras marcar/desmarcar o cambiar una cantidad: no repinta, así no se pierde el foco ni el cursor. */
+    function actualizarFila(i) {
+      const r = eq?.repuestos[i];
+      const check = $(`[data-mant-check="${i}"]`, contRep);
+      const inp = $(`[data-mant-cant="${i}"]`, contRep);
+      if (!r || !check || !inp) return;
+      const est = hxEstado(r.horas.includes(horasSel()), check.checked);
+      const celda = check.closest("td");
+      celda.classList.remove("hx-on", "hx-pend", "hx-extra");
+      if (est) celda.classList.add(est);
+      check.closest("tr").classList.toggle("mant-off", !check.checked);
+      $(`[data-mant-tags="${i}"]`, contRep).innerHTML = hojaTagsHtml(r, est);
+      const dif = check.checked && Number(inp.value) !== Number(r.cantidad);
+      const tdCant = inp.closest("td");
+      tdCant.classList.toggle("hoja-cant-dif", dif);
+      if (dif) tdCant.title = `En la hoja: ${numCantidad(r.cantidad)}`;
+      else tdCant.removeAttribute("title");
+      $(`[data-mant-ref="${i}"]`, contRep).hidden = !dif;
+    }
+
+    function actualizarConteo() {
+      const p = $("#mant-conteo", contRep);
+      const col = colSel();
+      if (!eq || !p || !col) return;
+      const marcas = leerMarcas();
+      p.textContent = hojaResumenTexto(eq, col, marcas, otrosConDescripcion());
+      if (avisoActivo && coincideConHoja(eq, col.horas, marcas)) pintarAviso(false);
+    }
+
+    function pintarAviso(mostrar) {
+      const col = colSel();
+      avisoActivo = !!mostrar && !!eq && !!col;
+      if (!avisoActivo) {
+        aviso.innerHTML = "";
+        return;
+      }
+      const n = eq.repuestos.filter((r) => r.horas.includes(col.horas)).length;
+      aviso.innerHTML = `<span>Se mantuvieron los repuestos y cantidades que marcaste. Para el ${pmBadgeHtml(col.pm)} ${numHoras(col.horas)} h la hoja indica ${n} repuesto${n === 1 ? "" : "s"}.</span>
+        <button type="button" class="btn-link" data-mant-remarcar>Marcar según la hoja</button>`;
     }
 
     function pintarPm() {
       const col = colSel();
       $("#mant-pm-label", form).textContent = col ? pmLeyenda(col.pm) : "";
       $("#mant-rep-pm", form).innerHTML = col ? `${pmBadgeHtml(col.pm)} <small>${numHoras(col.horas)} h</small>` : "";
-      const th = $("#mant-col-pm", contRep);
-      if (th) th.textContent = col ? `${col.pm} ${numHoras(col.horas)}` : "PM";
       pintarSugerencia();
     }
 
-    /* Marca los repuestos con X en la columna elegida y repone las cantidades de la hoja. */
-    function marcarSegunHoja() {
-      const col = colSel();
-      if (!eq || !col) return;
-      eq.repuestos.forEach((r, i) => {
-        $(`[data-mant-check="${i}"]`, contRep).checked = r.horas.includes(col.horas);
-        $(`[data-mant-cant="${i}"]`, contRep).value = r.cantidad;
-      });
-      actualizarFilas();
+    /* Única entrada para cambiar la columna del PM: cabecera de la hoja, select «PM · horas del ciclo» y «Usar este PM».
+       Si el técnico no tocó nada (coincide con la hoja de la columna anterior) se vuelve a marcar según la hoja;
+       si cambió algo, se conserva lo que marcó y se avisa. */
+    function fijarColumna(horas, { foco = false } = {}) {
+      if (!eq) return;
+      const col = eq.frecuencias.find((f) => f.horas === Number(horas)); // los valores del DOM son texto
+      if (!col) return;
+      selFrec.value = String(col.horas);
+      if (col.horas !== horasCol) {
+        const marcas = leerMarcas();
+        const conservar = horasCol != null && !coincideConHoja(eq, horasCol, marcas);
+        horasCol = col.horas;
+        pintarCuerpo(conservar ? marcas : marcasSegunHoja(eq, col.horas));
+        marcarCabecera();
+        pintarAviso(conservar && !coincideConHoja(eq, col.horas, marcas));
+        pintarPm();
+        actualizarConteo();
+      }
+      if (foco) $(`[data-mant-col="${col.horas}"]`, contRep)?.focus();
+      verColumnaHoja(wrapHoja(), col.horas);
     }
 
-    /* Al editar: marca los repuestos guardados; los que no están en la hoja van a "Otros repuestos". */
-    function cargarGuardados() {
-      const usados = new Set();
-      const extras = [];
-      (mant.repuestos || []).forEach((g) => {
-        const i = eq.repuestos.findIndex((r, idx) => !usados.has(idx) && parteNorm(r.numero_parte) === parteNorm(g.numero_parte));
-        if (i < 0) {
-          extras.push(g);
-          return;
-        }
-        usados.add(i);
-        $(`[data-mant-check="${i}"]`, contRep).checked = true;
-        $(`[data-mant-cant="${i}"]`, contRep).value = Number(g.cantidad);
-      });
-      contExtras.innerHTML = extras.map((g) => filaExtraMantHtml(g)).join("");
-      actualizarFilas();
+    /* Botón «Volver a marcar según la hoja» (pregunta solo si se pierde algo) y enlace del aviso (no pregunta). */
+    function marcarSegunHoja({ preguntar = true } = {}) {
+      const col = colSel();
+      if (!eq || !col) return toast("Primero elige el equipo");
+      if (coincideConHoja(eq, col.horas, leerMarcas())) {
+        pintarAviso(false);
+        return toast("Los repuestos ya están marcados según la hoja");
+      }
+      if (
+        preguntar &&
+        !confirm(`Se quitarán las marcas y cantidades que cambiaste en la tabla. ¿Marcar los repuestos según la hoja para el ${col.pm} · ${numHoras(col.horas)} h?`)
+      )
+        return;
+      pintarCuerpo(marcasSegunHoja(eq, col.horas));
+      pintarAviso(false);
+      actualizarConteo();
+      toast("Repuestos marcados según la hoja");
     }
 
     function pintarSugerencia() {
       const hint = $("#mant-sugerencia", form);
       const sug = frecuenciaPorHorometro(eq, inpHorometro.value);
+      const distinta = !!sug && sug.horas !== horasSel();
+      $$("thead .hoja-h", contRep).forEach((th) => {
+        const es = distinta && Number(th.dataset.col) === sug.horas;
+        th.classList.toggle("hoja-sug", es);
+        if (es) th.title = "Sugerido por el horómetro";
+        else th.removeAttribute("title");
+      });
       if (!sug) {
         hint.innerHTML = "";
         return;
       }
-      if (sug.horas === horasSel()) {
+      if (!distinta) {
         hint.className = "field-hint ok";
         hint.textContent = `✓ El horómetro coincide con el ${sug.pm} · ${numHoras(sug.horas)} h del ciclo`;
         return;
@@ -6286,54 +6551,131 @@
       hint.className = "field-hint";
       hint.innerHTML = `Por el horómetro toca ${pmBadgeHtml(sug.pm)} ${numHoras(sug.horas)} h del ciclo. <button type="button" class="btn-link" id="btn-mant-usar-sug">Usar este PM</button>`;
       $("#btn-mant-usar-sug", hint).onclick = () => {
-        selFrec.value = String(sug.horas);
-        pintarPm();
-        marcarSegunHoja();
+        fijarColumna(sug.horas);
+        selFrec.focus(); // el botón desaparece al repintar la pista: el foco queda junto a ella
       };
     }
 
+    /* Registro que se edita, emparejado con la hoja de este equipo (null si es de otro equipo). */
+    const guardadosEnHoja = () =>
+      eq && mant && mant.equipo === eq.id ? emparejarGuardados(eq, mant.repuestos, { mismaDescripcion: true }) : null;
+    const marcasGuardadas = () => {
+      const g = guardadosEnHoja();
+      return g ? marcasDeGuardados(eq, g.porFila) : null;
+    };
+
     function elegirEquipo({ inicial = false } = {}) {
       eq = equipoMant(selEquipo.value) || null;
+      const guardado = !!eq && !!mant && mant.equipo === eq.id;
       let horas = null;
+      let marcas = null;
       if (eq) {
-        if (inicial && mant && mant.equipo === eq.id) horas = mant.frecuencia_horas;
-        else horas = state.mantResumen?.[eq.id]?.proximo?.frecuencia_horas ?? null;
+        horas = guardado ? mant.frecuencia_horas : state.mantResumen?.[eq.id]?.proximo?.frecuencia_horas ?? null;
         if (!eq.frecuencias.some((f) => f.horas === horas)) {
           horas = frecuenciaPorHorometro(eq, inpHorometro.value)?.horas ?? eq.frecuencias[0].horas;
         }
+        if (guardado) {
+          // Al editar (y al volver al equipo guardado) se restauran sus repuestos y su columna.
+          const { porFila, otros } = guardadosEnHoja();
+          marcas = marcasDeGuardados(eq, porFila);
+          if (inicial) contExtras.innerHTML = otros.map((g) => filaExtraMantHtml(g)).join("");
+        } else {
+          marcas = marcasSegunHoja(eq, horas);
+        }
       }
+      horasCol = eq ? horas : null;
       pintarPlaca();
       pintarFrecuencias(horas);
-      pintarRepuestos();
+      pintarTabla(marcas);
+      pintarAviso(false);
       pintarPm();
-      if (!eq) return;
-      if (inicial && mant && mant.equipo === eq.id) cargarGuardados();
-      else marcarSegunHoja();
+      if (eq) verColumnaHoja(wrapHoja(), horas, false);
     }
 
-    selEquipo.addEventListener("change", () => elegirEquipo());
-    selFrec.addEventListener("change", () => {
-      pintarPm();
-      marcarSegunHoja();
+    function teclaEnHoja(e) {
+      const t = e.target;
+      if (t.matches("[data-mant-col]")) {
+        // Tabindex itinerante: las flechas solo mueven el foco; Enter o Espacio (clic nativo del botón) eligen.
+        const botones = $$("[data-mant-col]", contRep);
+        const k = botones.indexOf(t);
+        const destino = { ArrowRight: k + 1, ArrowLeft: k - 1, Home: 0, End: botones.length - 1 }[e.key];
+        if (destino == null) return;
+        e.preventDefault();
+        botones[Math.max(0, Math.min(botones.length - 1, destino))].focus(); // el focusin mueve la parada de Tab
+      } else if (t.matches("[data-mant-check]")) {
+        if (e.key === "Enter") {
+          e.preventDefault(); // Enter en una casilla enviaba el formulario: ahora marca o desmarca
+          t.click();
+        } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          const checks = $$("[data-mant-check]", contRep);
+          const sig = checks[checks.indexOf(t) + (e.key === "ArrowDown" ? 1 : -1)];
+          if (sig) {
+            e.preventDefault();
+            sig.focus();
+          }
+        }
+      } else if (t.matches("[data-mant-cant]") && e.key === "Enter") {
+        e.preventDefault(); // pasa a la cantidad de la fila siguiente; nunca envía
+        const i = Number(t.dataset.mantCant);
+        // En la última fila va a su casilla (lo siguiente en el orden de Tab): el foco no cae en <body>
+        ($(`[data-mant-cant="${i + 1}"]`, contRep) || $(`[data-mant-check="${i}"]`, contRep))?.focus();
+      }
+    }
+
+    selEquipo.addEventListener("change", () => {
+      if (eq && horasCol != null) {
+        // Solo pregunta si se pierde algo: lo marcado no es la hoja de la columna ni lo guardado del registro.
+        const actuales = leerMarcas();
+        const guardadas = marcasGuardadas();
+        const sinCambios =
+          coincideConHoja(eq, horasCol, actuales) ||
+          (guardadas && guardadas.every((g, i) => g.on === actuales[i].on && (!g.on || Number(g.cant) === Number(actuales[i].cant))));
+        if (
+          !sinCambios &&
+          !confirm(`Cambiaste repuestos o cantidades en la tabla del ${eq.modelo}. Si cambias de equipo se perderán (los «Otros repuestos» se mantienen). ¿Cambiar de equipo?`)
+        ) {
+          selEquipo.value = eq.id;
+          return;
+        }
+      }
+      elegirEquipo();
     });
+    selFrec.addEventListener("change", () => fijarColumna(selFrec.value));
     inpHorometro.addEventListener("input", pintarSugerencia);
+    contRep.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-mant-col], [data-mant-col-pm]");
+      if (b) fijarColumna(b.dataset.mantCol ?? b.dataset.mantColPm, { foco: true });
+    });
     contRep.addEventListener("change", (e) => {
-      if (e.target.matches("[data-mant-check]")) actualizarFilas();
+      if (!e.target.matches("[data-mant-check]")) return;
+      actualizarFila(Number(e.target.dataset.mantCheck));
+      actualizarConteo();
     });
     contRep.addEventListener("input", (e) => {
       if (!e.target.matches("[data-mant-cant]")) return;
-      const i = e.target.dataset.mantCant;
+      const i = Number(e.target.dataset.mantCant);
       const check = $(`[data-mant-check="${i}"]`, contRep);
-      if (Number(e.target.value) > 0 && !check.checked) {
-        check.checked = true;
-        actualizarFilas();
+      if (check && Number(e.target.value) > 0 && !check.checked) check.checked = true; // escribir una cantidad marca la fila
+      actualizarFila(i);
+      actualizarConteo();
+    });
+    contRep.addEventListener("keydown", teclaEnHoja);
+    contRep.addEventListener("focusin", (e) => {
+      // Una sola parada de Tab en la cabecera: el botón que recibe el foco (flechas, clic o foco por código)
+      if (e.target.matches("[data-mant-col]")) {
+        $$("[data-mant-col]", contRep).forEach((b) => (b.tabIndex = b === e.target ? 0 : -1));
       }
+      // Shift+Tab o flechas: que la celda enfocada no quede debajo de la banda fija
+      const celda = e.target.closest("td, th");
+      if (celda && !celda.matches(".hoja-item, .hoja-parte, .hoja-desc, .hoja-cant")) verEnHoja(wrapHoja(), celda);
     });
-    $("#btn-mant-plan", form).addEventListener("click", () => {
-      if (!eq) return toast("Primero elige el equipo");
-      marcarSegunHoja();
-      toast("Repuestos marcados según la hoja");
+    aviso.addEventListener("click", (e) => {
+      if (!e.target.closest("[data-mant-remarcar]")) return;
+      marcarSegunHoja({ preguntar: false });
+      // El enlace desaparece con el aviso: el foco pasa a la columna del PM en la cabecera
+      $(`[data-mant-col="${horasSel()}"]`, contRep)?.focus();
     });
+    $("#btn-mant-plan", form).addEventListener("click", () => marcarSegunHoja());
     $("#btn-mant-extra", form).addEventListener("click", () => {
       contExtras.insertAdjacentHTML("beforeend", filaExtraMantHtml());
       contExtras.lastElementChild?.querySelector("[data-x=parte]")?.focus();
@@ -6341,9 +6683,12 @@
     contExtras.addEventListener("click", (e) => {
       if (!e.target.closest("[data-x=quitar]")) return;
       e.target.closest("[data-mant-extra]")?.remove();
-      actualizarFilas();
+      actualizarConteo();
     });
-    contExtras.addEventListener("input", actualizarFilas);
+    contExtras.addEventListener("input", actualizarConteo);
+    contExtras.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target.matches("input")) e.preventDefault(); // Enter aquí enviaba el reporte
+    });
     $$("[data-mant-volver]").forEach((b) => b.addEventListener("click", () => navigate("mantenimientos")));
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -6366,12 +6711,16 @@
         return inpHorometro.focus();
       }
       const repuestos = [];
+      // Límites de MantenimientoIn: 0 < cantidad ≤ 99999.99 y hasta 80 repuestos
+      const cantidadMala = (cantidad, nombre) =>
+        cantidad > 99999.99 ? `La cantidad de ${nombre} no puede pasar de 99999.99` : cantidad > 0 ? "" : `Indica la cantidad de ${nombre}`;
       for (const [i, r] of eq.repuestos.entries()) {
-        if (!$(`[data-mant-check="${i}"]`, contRep).checked) continue;
+        if (!$(`[data-mant-check="${i}"]`, contRep)?.checked) continue;
         const inp = $(`[data-mant-cant="${i}"]`, contRep);
         const cantidad = Number(inp.value);
-        if (!(cantidad > 0)) {
-          toast(`Indica la cantidad de ${r.descripcion}`);
+        const error = cantidadMala(cantidad, r.descripcion);
+        if (error) {
+          toast(error);
           return inp.focus();
         }
         repuestos.push({ numero_parte: r.numero_parte, descripcion: r.descripcion, cantidad });
@@ -6386,12 +6735,14 @@
           return $("[data-x=desc]", row).focus();
         }
         const cantidad = Number(inpCant.value);
-        if (!(cantidad > 0)) {
-          toast(`Indica la cantidad de ${descripcion}`);
+        const error = cantidadMala(cantidad, descripcion);
+        if (error) {
+          toast(error);
           return inpCant.focus();
         }
         repuestos.push({ numero_parte: parte || null, descripcion, cantidad });
       }
+      if (repuestos.length > 80) return toast("Máximo 80 repuestos por mantenimiento");
       if (!repuestos.length && !confirm("No marcaste ningún repuesto. ¿Guardar el mantenimiento igual?")) return;
       const body = {
         equipo: eq.id,
