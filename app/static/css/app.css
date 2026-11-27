@@ -21,7 +21,9 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; overflow-x: hidden; }
+/* clip recorta lo que sobra a lo ancho igual que hidden, pero sin volver a body un contenedor de
+   desplazamiento: con hidden, la barra superior y el menú lateral (sticky) se iban con la página. */
+html, body { margin: 0; min-height: 100%; overflow-x: hidden; overflow-x: clip; }
 body {
   font-family: var(--font-body);
   color: var(--ink);
@@ -91,6 +93,8 @@ a { color: inherit; }
   border-right: 1px solid var(--line);
   position: sticky; top: var(--nav-h); height: calc(100vh - var(--nav-h));
   overflow: auto;
+  /* Al llegar al final del menú, la rueda no sigue desplazando la página. */
+  overscroll-behavior: contain;
 }
 .nav-label {
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;

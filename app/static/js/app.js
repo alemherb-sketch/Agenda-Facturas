@@ -7200,9 +7200,30 @@
 
   /* ---------- Render ---------- */
   let renderSeq = 0;
+  // Página que está en pantalla (ruta y parámetros). Al pasar a otra se sube al inicio; al volver
+  // a pintar la misma (después de guardar, filtrar, etc.) se respeta dónde estaba el usuario.
+  let paginaPintada = null;
+
+  // Cada pintada vuelve a crear el menú lateral, que nacería desplazado arriba del todo y dejaría
+  // fuera de la vista la opción recién elegida: se le devuelve su desplazamiento y, si la opción
+  // activa aun así no se ve, se mueve solo el menú (no la página) hasta mostrarla.
+  function conservarMenu(desplazamientoPrevio) {
+    const menu = $(".sidebar");
+    if (!menu) return;
+    if (desplazamientoPrevio) menu.scrollTop = desplazamientoPrevio;
+    const activo = $(".nav-btn.active", menu);
+    if (!activo || menu.scrollHeight <= menu.clientHeight) return;
+    const caja = menu.getBoundingClientRect();
+    const item = activo.getBoundingClientRect();
+    const margen = 8;
+    if (item.top < caja.top + margen) menu.scrollTop -= caja.top + margen - item.top;
+    else if (item.bottom > caja.bottom - margen) menu.scrollTop += item.bottom - (caja.bottom - margen);
+  }
+
   async function renderApp() {
     if (!state.user) return renderAuth();
     const seq = ++renderSeq;
+    const pagina = location.hash || "#/dashboard";
     const { route, params } = parseHash();
     state.route = route;
 
@@ -7250,7 +7271,12 @@
     }
 
     if (seq !== renderSeq) return;
+    const menuPrevio = $(".sidebar")?.scrollTop || 0;
+    const cambioDePagina = paginaPintada !== null && paginaPintada !== pagina;
+    paginaPintada = pagina;
     $("#app").innerHTML = shell(html);
+    if (cambioDePagina) window.scrollTo(0, 0);
+    conservarMenu(menuPrevio);
     bindShell();
     bindView();
 
@@ -7375,9 +7401,15 @@
     }
     bindPushMessages();
     window.addEventListener("hashchange", () => renderApp());
-    window.addEventListener("resize", () => {
+    // El Dashboard arma una cabecera distinta en escritorio y en celular: se vuelve a pintar solo al
+    // cruzar ese ancho. Hacerlo en cada "resize" lo repintaba en el celular al ocultarse la barra del
+    // navegador o abrirse el teclado, y se perdía lo que se estaba eligiendo.
+    const anchoEscritorio = window.matchMedia("(min-width: 981px)");
+    const alCruzarAncho = () => {
       if (state.user && state.route === "dashboard") renderApp();
-    });
+    };
+    if (anchoEscritorio.addEventListener) anchoEscritorio.addEventListener("change", alCruzarAncho);
+    else anchoEscritorio.addListener(alCruzarAncho);
 
     const token = API.getToken();
     state.user = API.getUser();
